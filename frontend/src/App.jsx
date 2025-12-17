@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
-const API_URL = 'http://127.0.0.1:8000'
+const API_URL = 'http://192.168.1.108:8000'
 
 function App() {
   const [filters, setFilters] = useState(null)
@@ -18,6 +18,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [marketNotes, setMarketNotes] = useState('')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Fetch filter options (re-fetches when any filter changes for cascading behavior)
   useEffect(() => {
@@ -91,20 +92,40 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-gray-900 font-sans">
-      <header className="bg-teal-700 text-white shadow-lg">
-        <div className="container mx-auto px-6 py-4">
-          <h1 className="text-2xl font-bold tracking-tight">Specialty Crop Dashboard</h1>
-          <p className="text-teal-200 text-sm">USDA Market Pricing Data</p>
+      {/* Header with mobile menu button */}
+      <header className="bg-teal-700 text-white shadow-lg sticky top-0 z-50">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight">Specialty Crop Dashboard</h1>
+            <p className="text-teal-200 text-xs md:text-sm">USDA Market Pricing Data</p>
+          </div>
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="md:hidden p-2 rounded-lg bg-teal-600 hover:bg-teal-500 transition"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {sidebarOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
         </div>
       </header>
 
-      <div className="flex">
-        {/* Left Sidebar - Filters */}
-        <aside className="w-64 bg-white shadow-md p-4 min-h-screen border-r border-gray-200">
+      <div className="flex flex-col md:flex-row">
+        {/* Sidebar - Filters (collapsible on mobile) */}
+        <aside className={`
+          ${sidebarOpen ? 'block' : 'hidden'} md:block
+          w-full md:w-64 bg-white shadow-md p-4 border-b md:border-b-0 md:border-r border-gray-200
+          md:min-h-screen
+        `}>
           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Filters</h2>
 
           {filters ? (
-            <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-1 gap-3 md:gap-4">
               <FilterDropdown
                 label="Date"
                 options={filters.dates}
@@ -161,68 +182,68 @@ function App() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 md:p-6">
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
               {error}
             </div>
           )}
 
           {/* Price Display Area */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="space-y-4 md:grid md:grid-cols-1 lg:grid-cols-3 md:gap-6 md:space-y-0">
             {/* Price Cards */}
             <div className="lg:col-span-2">
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-700 mb-4">
+              <div className="bg-white rounded-xl shadow-lg p-4 md:p-6">
+                <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-4">
                   Terminal Market Price — {selectedFilters.date || 'Select Date'}
                 </h3>
 
                 {loading ? (
-                  <div className="flex justify-center items-center h-48">
+                  <div className="flex justify-center items-center h-32 md:h-48">
                     <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-teal-600"></div>
                   </div>
                 ) : priceData.length > 0 ? (
                   <div className="space-y-4">
                     {/* Price Summary Bar */}
-                    <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg text-white">
-                      <div className="flex-1">
-                        <p className="text-sm opacity-80">Avg. Low Price</p>
-                        <p className="text-3xl font-bold">${avgLowPrice}</p>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 p-4 bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg text-white">
+                      <div className="flex-1 text-center sm:text-left">
+                        <p className="text-xs sm:text-sm opacity-80">Avg. Low</p>
+                        <p className="text-2xl sm:text-3xl font-bold">${avgLowPrice}</p>
                       </div>
-                      <div className="h-12 w-px bg-white/30"></div>
-                      <div className="flex-1">
-                        <p className="text-sm opacity-80">Avg. High Price</p>
-                        <p className="text-3xl font-bold">${avgHighPrice}</p>
+                      <div className="hidden sm:block h-12 w-px bg-white/30"></div>
+                      <div className="flex-1 text-center sm:text-left">
+                        <p className="text-xs sm:text-sm opacity-80">Avg. High</p>
+                        <p className="text-2xl sm:text-3xl font-bold">${avgHighPrice}</p>
                       </div>
-                      <div className="h-12 w-px bg-white/30"></div>
-                      <div className="flex-1">
-                        <p className="text-sm opacity-80">Records</p>
-                        <p className="text-3xl font-bold">{priceData.length}</p>
+                      <div className="hidden sm:block h-12 w-px bg-white/30"></div>
+                      <div className="flex-1 text-center sm:text-left">
+                        <p className="text-xs sm:text-sm opacity-80">Records</p>
+                        <p className="text-2xl sm:text-3xl font-bold">{priceData.length}</p>
                       </div>
                     </div>
 
-                    {/* Data Table */}
-                    <div className="overflow-x-auto max-h-96">
-                      <table className="min-w-full text-sm">
+                    {/* Data Table - scrollable on mobile */}
+                    <div className="overflow-x-auto max-h-72 md:max-h-96 -mx-4 md:mx-0">
+                      <table className="min-w-full text-xs md:text-sm">
                         <thead className="bg-gray-50 sticky top-0">
                           <tr>
-                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Commodity</th>
-                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Variety</th>
-                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Package</th>
-                            <th className="px-3 py-2 text-right font-semibold text-gray-600">Low</th>
-                            <th className="px-3 py-2 text-right font-semibold text-gray-600">High</th>
+                            <th className="px-2 md:px-3 py-2 text-left font-semibold text-gray-600">Commodity</th>
+                            <th className="px-2 md:px-3 py-2 text-left font-semibold text-gray-600 hidden sm:table-cell">Variety</th>
+                            <th className="px-2 md:px-3 py-2 text-left font-semibold text-gray-600 hidden md:table-cell">Package</th>
+                            <th className="px-2 md:px-3 py-2 text-right font-semibold text-gray-600">Low</th>
+                            <th className="px-2 md:px-3 py-2 text-right font-semibold text-gray-600">High</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                           {priceData.map((item) => (
                             <tr key={item.id} className="hover:bg-gray-50">
-                              <td className="px-3 py-2 font-medium text-gray-900">{item.commodity}</td>
-                              <td className="px-3 py-2 text-gray-600">{item.variety || '—'}</td>
-                              <td className="px-3 py-2 text-gray-600">{item.package || '—'}</td>
-                              <td className="px-3 py-2 text-right text-green-600 font-semibold">
+                              <td className="px-2 md:px-3 py-2 font-medium text-gray-900">{item.commodity}</td>
+                              <td className="px-2 md:px-3 py-2 text-gray-600 hidden sm:table-cell">{item.variety || '—'}</td>
+                              <td className="px-2 md:px-3 py-2 text-gray-600 hidden md:table-cell">{item.package || '—'}</td>
+                              <td className="px-2 md:px-3 py-2 text-right text-green-600 font-semibold">
                                 {item.low_price ? `$${item.low_price.toFixed(2)}` : '—'}
                               </td>
-                              <td className="px-3 py-2 text-right text-green-600 font-semibold">
+                              <td className="px-2 md:px-3 py-2 text-right text-green-600 font-semibold">
                                 {item.high_price ? `$${item.high_price.toFixed(2)}` : '—'}
                               </td>
                             </tr>
@@ -232,7 +253,7 @@ function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center text-gray-500 py-12">
+                  <div className="text-center text-gray-500 py-8 md:py-12">
                     No data found for the selected filters.
                   </div>
                 )}
@@ -241,17 +262,17 @@ function App() {
 
             {/* Market Notes Panel */}
             <div className="space-y-4">
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-700 mb-3">Market Notes</h3>
-                <div className="text-sm text-gray-600 whitespace-pre-wrap max-h-48 overflow-y-auto">
+              <div className="bg-white rounded-xl shadow-lg p-4 md:p-6">
+                <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-3">Market Notes</h3>
+                <div className="text-xs md:text-sm text-gray-600 whitespace-pre-wrap max-h-32 md:max-h-48 overflow-y-auto">
                   {marketNotes || 'No market notes available for the current selection.'}
                 </div>
               </div>
 
-              {/* Placeholder for Production Costs CTA */}
-              <div className="bg-yellow-100 border-2 border-yellow-400 rounded-xl p-6 text-center">
-                <p className="text-yellow-800 font-semibold">Click here to compare with your production costs</p>
-                <button className="mt-3 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition">
+              {/* Production Costs CTA */}
+              <div className="bg-yellow-100 border-2 border-yellow-400 rounded-xl p-4 md:p-6 text-center">
+                <p className="text-yellow-800 font-semibold text-sm md:text-base">Compare with your production costs</p>
+                <button className="mt-2 md:mt-3 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition text-sm">
                   Compare Costs
                 </button>
               </div>

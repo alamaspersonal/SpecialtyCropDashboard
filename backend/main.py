@@ -51,24 +51,26 @@ def get_filters(
     date: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """Return unique values for each filterable field, filtered by current selections."""
+    """Return unique values for each filterable field.
+    Each filter shows ALL options available given OTHER filters (not itself).
+    """
     
-    def build_base_query():
-        """Build a query with all current filters applied."""
+    def build_query_excluding(exclude_field: str):
+        """Build a query with all filters EXCEPT the specified field."""
         query = db.query(database.CropPrice)
-        if commodity:
+        if commodity and exclude_field != 'commodity':
             query = query.filter(database.CropPrice.commodity == commodity)
-        if variety:
+        if variety and exclude_field != 'variety':
             query = query.filter(database.CropPrice.variety == variety)
-        if category:
+        if category and exclude_field != 'category':
             query = query.filter(database.CropPrice.category == category)
-        if package:
+        if package and exclude_field != 'package':
             query = query.filter(database.CropPrice.package == package)
-        if district:
+        if district and exclude_field != 'district':
             query = query.filter(database.CropPrice.district == district)
-        if organic:
+        if organic and exclude_field != 'organic':
             query = query.filter(database.CropPrice.organic == organic)
-        if date:
+        if date and exclude_field != 'date':
             try:
                 parsed_date = datetime.strptime(date, "%m/%d/%Y")
                 query = query.filter(database.CropPrice.report_date == parsed_date)
@@ -76,28 +78,28 @@ def get_filters(
                 pass
         return query
     
-    def get_distinct_filtered(field):
-        """Get distinct values for a field from the filtered dataset."""
-        base = build_base_query().with_entities(distinct(field)).filter(
+    def get_distinct_for_field(field, field_name: str):
+        """Get distinct values for a field, excluding itself from filter criteria."""
+        base = build_query_excluding(field_name).with_entities(distinct(field)).filter(
             field.isnot(None), field != "N/A"
         )
         return sorted([r[0] for r in base.all()])
     
-    # Get unique dates from filtered dataset
-    date_query = build_base_query().with_entities(
+    # Get unique dates (excluding date filter from query)
+    date_query = build_query_excluding('date').with_entities(
         distinct(database.CropPrice.report_date)
     ).filter(
         database.CropPrice.report_date.isnot(None)
     ).order_by(database.CropPrice.report_date.desc()).limit(30)
     
     return FiltersSchema(
-        categories=get_distinct_filtered(database.CropPrice.category),
-        commodities=get_distinct_filtered(database.CropPrice.commodity),
-        varieties=get_distinct_filtered(database.CropPrice.variety),
-        packages=get_distinct_filtered(database.CropPrice.package),
-        item_sizes=get_distinct_filtered(database.CropPrice.item_size),
-        districts=get_distinct_filtered(database.CropPrice.district),
-        organics=get_distinct_filtered(database.CropPrice.organic),
+        categories=get_distinct_for_field(database.CropPrice.category, 'category'),
+        commodities=get_distinct_for_field(database.CropPrice.commodity, 'commodity'),
+        varieties=get_distinct_for_field(database.CropPrice.variety, 'variety'),
+        packages=get_distinct_for_field(database.CropPrice.package, 'package'),
+        item_sizes=get_distinct_for_field(database.CropPrice.item_size, 'item_size'),
+        districts=get_distinct_for_field(database.CropPrice.district, 'district'),
+        organics=get_distinct_for_field(database.CropPrice.organic, 'organic'),
         dates=[d[0].strftime("%m/%d/%Y") for d in date_query.all() if d[0]],
     )
 
