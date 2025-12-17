@@ -64,7 +64,7 @@ export default function FiltersScreen({ navigation }) {
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['bottom']}>
+        <SafeAreaView style={styles.container}>
             <ScrollView style={styles.scrollView}>
                 <Text style={styles.header}>Select Filters</Text>
                 <Text style={styles.subheader}>Choose your criteria to view price data</Text>
