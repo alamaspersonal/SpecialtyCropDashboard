@@ -1,196 +1,271 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
+const API_URL = 'http://127.0.0.1:8000'
+
 function App() {
-  const [crops, setCrops] = useState([])
+  const [filters, setFilters] = useState(null)
+  const [selectedFilters, setSelectedFilters] = useState({
+    commodity: '',
+    variety: '',
+    category: '',
+    district: '',
+    organic: '',
+    date: '',
+  })
+  const [priceData, setPriceData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [marketNotes, setMarketNotes] = useState('')
 
-  // Search State
-  const [searchQuery, setSearchQuery] = useState('')
-  const [suggestions, setSuggestions] = useState([])
-  const [isFocused, setIsFocused] = useState(false)
-
+  // Fetch filter options on mount
   useEffect(() => {
-    const fetchCrops = async () => {
+    const fetchFilters = async () => {
       try {
-        const response = await axios.get('http://127.0.0.1:8000/api/crops')
-        setCrops(response.data)
+        const response = await axios.get(`${API_URL}/api/filters`)
+        setFilters(response.data)
+        // Set default date to most recent
+        if (response.data.dates && response.data.dates.length > 0) {
+          setSelectedFilters(prev => ({ ...prev, date: response.data.dates[0] }))
+        }
+      } catch (err) {
+        console.error("Error fetching filters:", err)
+        setError("Failed to load filters.")
+      }
+    }
+    fetchFilters()
+  }, [])
+
+  // Fetch price data when filters change
+  useEffect(() => {
+    const fetchPrices = async () => {
+      setLoading(true)
+      try {
+        const params = new URLSearchParams()
+        Object.entries(selectedFilters).forEach(([key, value]) => {
+          if (value) params.append(key, value)
+        })
+        params.append('limit', '50')
+
+        const response = await axios.get(`${API_URL}/api/prices?${params}`)
+        setPriceData(response.data)
+
+        // Extract market notes from first result
+        if (response.data.length > 0 && response.data[0].market_tone_comments) {
+          setMarketNotes(response.data[0].market_tone_comments)
+        } else {
+          setMarketNotes('')
+        }
+
         setLoading(false)
       } catch (err) {
-        console.error("Error fetching data:", err)
-        setError("Failed to fetch data from backend. Ensure backend is running.")
+        console.error("Error fetching prices:", err)
+        setError("Failed to load price data.")
         setLoading(false)
       }
     }
 
-    fetchCrops()
-  }, [])
-
-  // Optimized Search Logic
-  useEffect(() => {
-    if (searchQuery.length > 0) {
-      const query = searchQuery.toLowerCase()
-      const matches = new Set()
-
-      crops.forEach(crop => {
-        if (crop.commodity && crop.commodity.toLowerCase().includes(query)) matches.add(crop.commodity)
-        if (crop.variety && crop.variety.toLowerCase().includes(query)) matches.add(crop.variety)
-        if (crop.location && crop.location.toLowerCase().includes(query)) matches.add(crop.location)
-      })
-
-      setSuggestions(Array.from(matches).slice(0, 5)) // Limit to top 5
-    } else {
-      setSuggestions([])
+    if (selectedFilters.date) {
+      fetchPrices()
     }
-  }, [searchQuery, crops])
+  }, [selectedFilters])
 
-  // Filter crops based on search
-  const filteredCrops = crops.filter(crop => {
-    if (!searchQuery) return true
-    const query = searchQuery.toLowerCase()
-    return (
-      (crop.commodity && crop.commodity.toLowerCase().includes(query)) ||
-      (crop.variety && crop.variety.toLowerCase().includes(query)) ||
-      (crop.location && crop.location.toLowerCase().includes(query))
-    )
-  })
+  const handleFilterChange = (filterName, value) => {
+    setSelectedFilters(prev => ({ ...prev, [filterName]: value }))
+  }
+
+  // Calculate average prices for display
+  const avgLowPrice = priceData.length > 0
+    ? (priceData.reduce((sum, p) => sum + (p.low_price || 0), 0) / priceData.filter(p => p.low_price).length).toFixed(2)
+    : '—'
+  const avgHighPrice = priceData.length > 0
+    ? (priceData.reduce((sum, p) => sum + (p.high_price || 0), 0) / priceData.filter(p => p.high_price).length).toFixed(2)
+    : '—'
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
-      <header className="bg-green-600 text-white shadow-lg">
-        <div className="container mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold tracking-tight">Specialty Crop Dashboard</h1>
-          <p className="mt-2 text-green-100 text-sm">Real-time pricing data for specialty crops</p>
+    <div className="min-h-screen bg-slate-100 text-gray-900 font-sans">
+      <header className="bg-teal-700 text-white shadow-lg">
+        <div className="container mx-auto px-6 py-4">
+          <h1 className="text-2xl font-bold tracking-tight">Specialty Crop Dashboard</h1>
+          <p className="text-teal-200 text-sm">USDA Market Pricing Data</p>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <div className="flex">
+        {/* Left Sidebar - Filters */}
+        <aside className="w-64 bg-white shadow-md p-4 min-h-screen border-r border-gray-200">
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Filters</h2>
 
-        {/* Search Bar Section */}
-        <div className="max-w-xl mx-auto mb-8 relative">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search by commodity, variety, or location..."
-              className="w-full px-5 py-3 border-2 border-green-500 rounded-full shadow-sm focus:outline-none focus:ring-4 focus:ring-green-500/30 text-lg transition-all"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setTimeout(() => setIsFocused(false), 200)} // Delay to allow click
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            )}
-          </div>
+          {filters ? (
+            <div className="space-y-4">
+              <FilterDropdown
+                label="Date"
+                options={filters.dates}
+                value={selectedFilters.date}
+                onChange={(v) => handleFilterChange('date', v)}
+                color="bg-blue-600"
+              />
+              <FilterDropdown
+                label="Category"
+                options={filters.categories}
+                value={selectedFilters.category}
+                onChange={(v) => handleFilterChange('category', v)}
+                color="bg-pink-600"
+              />
+              <FilterDropdown
+                label="Commodity"
+                options={filters.commodities}
+                value={selectedFilters.commodity}
+                onChange={(v) => handleFilterChange('commodity', v)}
+                color="bg-teal-600"
+              />
+              <FilterDropdown
+                label="Variety"
+                options={filters.varieties}
+                value={selectedFilters.variety}
+                onChange={(v) => handleFilterChange('variety', v)}
+                color="bg-yellow-500"
+              />
+              <FilterDropdown
+                label="District"
+                options={filters.districts}
+                value={selectedFilters.district}
+                onChange={(v) => handleFilterChange('district', v)}
+                color="bg-teal-600"
+              />
+              <FilterDropdown
+                label="Organic"
+                options={filters.organics}
+                value={selectedFilters.organic}
+                onChange={(v) => handleFilterChange('organic', v)}
+                color="bg-green-600"
+              />
+            </div>
+          ) : (
+            <div className="text-gray-400 text-sm">Loading filters...</div>
+          )}
+        </aside>
 
-          {/* Autocomplete Dropdown */}
-          {isFocused && suggestions.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-              <ul>
-                {suggestions.map((suggestion, index) => (
-                  <li
-                    key={index}
-                    onClick={() => setSearchQuery(suggestion)}
-                    className="px-5 py-3 hover:bg-green-50 cursor-pointer text-gray-700 font-medium border-b border-gray-100 last:border-0 transition-colors"
-                  >
-                    {suggestion}
-                  </li>
-                ))}
-              </ul>
+        {/* Main Content */}
+        <main className="flex-1 p-6">
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+              {error}
             </div>
           )}
-        </div>
 
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
-            <strong className="font-bold">Error: </strong>
-            <span className="block sm:inline">{error}</span>
-          </div>
-        )}
+          {/* Price Display Area */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Price Cards */}
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-700 mb-4">
+                  Terminal Market Price — {selectedFilters.date || 'Select Date'}
+                </h3>
 
-        {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-600"></div>
-          </div>
-        ) : (
-          <div className="overflow-x-auto bg-white shadow-md rounded-lg mx-auto">
-            <table className="min-w-full leading-normal">
-              <thead>
-                <tr>
-                  <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Commodity
-                  </th>
-                  <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Variety
-                  </th>
-                  <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Location
-                  </th>
-                  <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Price (Min)
-                  </th>
-                  <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Price (Max)
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCrops.map((crop) => (
-                  <tr key={crop.id} className="hover:bg-gray-50 transition duration-150 ease-in-out">
-                    <td className="px-5 py-4 border-b border-gray-200 text-sm">
-                      <div className="flex items-center">
-                        <div className="ml-3">
-                          <p className="text-gray-900 whitespace-no-wrap font-medium">
-                            {crop.commodity}
-                          </p>
-                        </div>
+                {loading ? (
+                  <div className="flex justify-center items-center h-48">
+                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-teal-600"></div>
+                  </div>
+                ) : priceData.length > 0 ? (
+                  <div className="space-y-4">
+                    {/* Price Summary Bar */}
+                    <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg text-white">
+                      <div className="flex-1">
+                        <p className="text-sm opacity-80">Avg. Low Price</p>
+                        <p className="text-3xl font-bold">${avgLowPrice}</p>
                       </div>
-                    </td>
-                    <td className="px-5 py-4 border-b border-gray-200 text-sm">
-                      <p className="text-gray-900 whitespace-no-wrap">{crop.variety}</p>
-                    </td>
-                    <td className="px-5 py-4 border-b border-gray-200 text-sm">
-                      <p className="text-gray-900 whitespace-no-wrap">
-                        {crop.location}
-                      </p>
-                    </td>
-                    <td className="px-5 py-4 border-b border-gray-200 text-sm">
-                      <p className="text-gray-900 whitespace-no-wrap">
-                        {new Date(crop.date).toLocaleDateString()}
-                      </p>
-                    </td>
-                    <td className="px-5 py-4 border-b border-gray-200 text-sm text-right">
-                      <p className="text-gray-900 whitespace-no-wrap font-bold text-green-600">
-                        ${crop.price_min?.toFixed(2)}
-                      </p>
-                    </td>
-                    <td className="px-5 py-4 border-b border-gray-200 text-sm text-right">
-                      <p className="text-gray-900 whitespace-no-wrap font-bold text-green-600">
-                        ${crop.price_max?.toFixed(2)}
-                      </p>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {filteredCrops.length === 0 && !loading && !error && (
-              <div className="p-12 text-center text-gray-500 bg-gray-50">
-                <p className="text-lg font-medium">No results found for "{searchQuery}"</p>
-                <p className="text-sm mt-2">Try searching for a different commodity, variety, or location.</p>
+                      <div className="h-12 w-px bg-white/30"></div>
+                      <div className="flex-1">
+                        <p className="text-sm opacity-80">Avg. High Price</p>
+                        <p className="text-3xl font-bold">${avgHighPrice}</p>
+                      </div>
+                      <div className="h-12 w-px bg-white/30"></div>
+                      <div className="flex-1">
+                        <p className="text-sm opacity-80">Records</p>
+                        <p className="text-3xl font-bold">{priceData.length}</p>
+                      </div>
+                    </div>
+
+                    {/* Data Table */}
+                    <div className="overflow-x-auto max-h-96">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Commodity</th>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Variety</th>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Package</th>
+                            <th className="px-3 py-2 text-right font-semibold text-gray-600">Low</th>
+                            <th className="px-3 py-2 text-right font-semibold text-gray-600">High</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {priceData.map((item) => (
+                            <tr key={item.id} className="hover:bg-gray-50">
+                              <td className="px-3 py-2 font-medium text-gray-900">{item.commodity}</td>
+                              <td className="px-3 py-2 text-gray-600">{item.variety || '—'}</td>
+                              <td className="px-3 py-2 text-gray-600">{item.package || '—'}</td>
+                              <td className="px-3 py-2 text-right text-green-600 font-semibold">
+                                {item.low_price ? `$${item.low_price.toFixed(2)}` : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-right text-green-600 font-semibold">
+                                {item.high_price ? `$${item.high_price.toFixed(2)}` : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-500 py-12">
+                    No data found for the selected filters.
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Market Notes Panel */}
+            <div className="space-y-4">
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-700 mb-3">Market Notes</h3>
+                <div className="text-sm text-gray-600 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                  {marketNotes || 'No market notes available for the current selection.'}
+                </div>
+              </div>
+
+              {/* Placeholder for Production Costs CTA */}
+              <div className="bg-yellow-100 border-2 border-yellow-400 rounded-xl p-6 text-center">
+                <p className="text-yellow-800 font-semibold">Click here to compare with your production costs</p>
+                <button className="mt-3 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition">
+                  Compare Costs
+                </button>
+              </div>
+            </div>
           </div>
-        )}
-      </main>
+        </main>
+      </div>
+    </div>
+  )
+}
+
+// Filter Dropdown Component
+function FilterDropdown({ label, options, value, onChange, color }) {
+  return (
+    <div>
+      <label className={`block text-xs font-semibold text-white px-2 py-1 rounded-t ${color}`}>
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full border border-gray-300 rounded-b px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+      >
+        <option value="">All</option>
+        {options && options.map((opt) => (
+          <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
     </div>
   )
 }
