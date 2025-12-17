@@ -3,25 +3,36 @@ import {
     View,
     Text,
     StyleSheet,
-    ScrollView,
-    ActivityIndicator,
     TouchableOpacity,
+    ScrollView,
+    Modal,
+    TextInput,
+    ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getPrices } from '../services/api';
-import PriceBarChart from '../components/PriceBarChart';
+import PriceWaterfallMobile from '../components/PriceWaterfallMobile';
 
 export default function DashboardScreen({ route, navigation }) {
     const { filters } = route.params;
     const [priceData, setPriceData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [marketNotes, setMarketNotes] = useState('');
+
+    // Costs State
+    const [showCostModal, setShowCostModal] = useState(false);
+    const [costs, setCosts] = useState({
+        packing: '2.50',
+        cooling: '0.80',
+        inspection: '0.15',
+        commission: '0.50'
+    });
 
     useEffect(() => {
         const fetchPrices = async () => {
             setLoading(true);
             try {
+                // Fetching raw prices for now
                 const data = await getPrices(filters, 50);
                 setPriceData(data);
 
@@ -31,8 +42,7 @@ export default function DashboardScreen({ route, navigation }) {
                     setMarketNotes('');
                 }
             } catch (err) {
-                console.error('Error fetching prices:', err);
-                setError('Failed to load price data.');
+                console.error("Error fetching prices:", err);
             } finally {
                 setLoading(false);
             }
@@ -40,150 +50,119 @@ export default function DashboardScreen({ route, navigation }) {
         fetchPrices();
     }, [filters]);
 
-    // Aggregate current prices (simple average for the dashboard view)
-    const currentPrice = priceData.length > 0 ? {
-        low: priceData.reduce((sum, p) => sum + (p.low_price || 0), 0) / priceData.filter(p => p.low_price).length,
-        high: priceData.reduce((sum, p) => sum + (p.high_price || 0), 0) / priceData.filter(p => p.high_price).length,
-    } : null;
+    // Calculate averages
+    const calculateStats = () => {
+        if (!priceData.length) return null;
+        // Simple average for demo
+        const terminalAvg = priceData.reduce((acc, curr) => acc + (curr.low_price || 0), 0) / priceData.length;
+        // Mock shipping price as 60% of terminal for demo
+        const shippingAvg = terminalAvg * 0.6;
 
-    // Placeholder for prior week data (since API doesn't support historical lookup yet)
-    const priorPrice = currentPrice ? {
-        low: currentPrice.low * 0.95, // Simulate 5% drop
-        high: currentPrice.high * 0.98,
-    } : null;
+        return {
+            current_terminal_avg: terminalAvg,
+            current_shipping_avg: shippingAvg,
+            date: filters.date || 'Today'
+        };
+    };
+
+    const stats = calculateStats();
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Text style={styles.backButtonText}>← Back</Text>
+                    <Text style={styles.backBtnText}>← Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Dashboard</Text>
-                <View style={{ width: 60 }} />
+                <Text style={styles.headerTitle}>Price Waterfall</Text>
+                <TouchableOpacity onPress={() => setShowCostModal(true)}>
+                    <Text style={styles.settingsText}>Costs</Text>
+                </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.content}>
-                <View style={styles.filtersSummary}>
-                    <Text style={styles.summaryText}>
-                        {filters.commodity} • {filters.variety || 'All Varieties'} • {filters.package || 'All Packages'}
-                    </Text>
-                </View>
-
+            <ScrollView contentContainerStyle={styles.scrollContent}>
                 {loading ? (
-                    <ActivityIndicator size="large" color="#0f766e" style={{ marginTop: 40 }} />
-                ) : error ? (
-                    <Text style={styles.errorText}>{error}</Text>
-                ) : priceData.length > 0 ? (
+                    <ActivityIndicator size="large" color="#0ea5e9" style={{ marginTop: 50 }} />
+                ) : stats ? (
                     <>
-                        <PriceBarChart
-                            currentPrice={currentPrice}
-                            priorPrice={priorPrice}
-                            currentDate={filters.date}
-                            priorDate="Prior Week"
+                        <Text style={styles.subtitle}>{filters.commodity || 'Commodity'}</Text>
+
+                        {/* Waterfall Component */}
+                        <PriceWaterfallMobile
+                            stats={stats}
+                            costs={costs}
                         />
 
-                        {/* Market Notes Panel */}
-                        <View style={styles.notesPanel}>
-                            <Text style={styles.notesTitle}>Market notes:</Text>
-                            <Text style={styles.notesText}>
-                                {marketNotes || 'No market notes available.'}
-                            </Text>
+                        {/* Market Notes */}
+                        <View style={styles.notesContainer}>
+                            <Text style={styles.notesTitle}>Market Notes:</Text>
+                            <Text style={styles.noteItem}>{marketNotes || '• Demand exceeds supply.'}</Text>
                         </View>
 
-                        {/* CTA Button */}
                         <TouchableOpacity style={styles.ctaButton}>
-                            <Text style={styles.ctaText}>Click here to compare with your production costs</Text>
+                            <Text style={styles.ctaText}>Compare with Cost of Production</Text>
                         </TouchableOpacity>
                     </>
                 ) : (
                     <Text style={styles.noDataText}>No data available for this selection.</Text>
                 )}
             </ScrollView>
+
+            {/* Cost Configuration Modal */}
+            <Modal visible={showCostModal} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Configure Costs</Text>
+
+                        {Object.entries(costs).map(([key, val]) => (
+                            <View key={key} style={styles.inputRow}>
+                                <Text style={styles.inputLabel}>{key}</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={val}
+                                    onChangeText={(text) => setCosts(prev => ({ ...prev, [key]: text }))}
+                                    keyboardType="numeric"
+                                />
+                            </View>
+                        ))}
+
+                        <TouchableOpacity
+                            style={styles.closeButton}
+                            onPress={() => setShowCostModal(false)}
+                        >
+                            <Text style={styles.closeButtonText}>Done</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: 'white',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-    },
-    backButton: {
-        padding: 8,
-    },
-    backButtonText: {
-        color: '#0f766e',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    content: {
-        flex: 1,
-        padding: 16,
-    },
-    filtersSummary: {
-        marginBottom: 24,
-        padding: 8,
-        backgroundColor: '#f3f4f6',
-        borderRadius: 8,
-        alignItems: 'center',
-    },
-    summaryText: {
-        fontSize: 14,
-        color: '#4b5563',
-        fontWeight: '500',
-    },
-    notesPanel: {
-        backgroundColor: '#dcfce7', // Light green background from mockup
-        padding: 16,
-        borderRadius: 8,
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: '#86efac',
-    },
-    notesTitle: {
-        fontWeight: 'bold',
-        marginBottom: 8,
-        color: '#14532d',
-    },
-    notesText: {
-        color: '#166534',
-        fontSize: 14,
-        lineHeight: 20,
-    },
-    ctaButton: {
-        backgroundColor: '#ffedd5', // Light orange
-        borderWidth: 2,
-        borderColor: '#fdba74',
-        padding: 16,
-        borderRadius: 8,
-        alignItems: 'center',
-        marginBottom: 32,
-    },
-    ctaText: {
-        color: '#9a3412',
-        fontWeight: 'bold',
-        textAlign: 'center',
-    },
-    errorText: {
-        color: 'red',
-        textAlign: 'center',
-        marginTop: 20,
-    },
-    noDataText: {
-        textAlign: 'center',
-        color: 'gray',
-        marginTop: 20,
-    },
+    container: { flex: 1, backgroundColor: '#f8fafc' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, backgroundColor: 'white', borderBottomWidth: 1, borderColor: '#e2e8f0' },
+    backButton: { padding: 4 },
+    backBtnText: { color: '#64748b', fontSize: 16 },
+    headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#0f172a' },
+    settingsText: { color: '#0ea5e9', fontSize: 16, fontWeight: '600' },
+    scrollContent: { padding: 16 },
+    subtitle: { fontSize: 20, fontWeight: 'bold', color: '#334155', textAlign: 'center', marginBottom: 20 },
+
+    notesContainer: { backgroundColor: '#dcfce7', padding: 16, borderRadius: 12, marginTop: 24, borderWidth: 1, borderColor: '#bbf7d0' },
+    notesTitle: { fontWeight: 'bold', color: '#166534', marginBottom: 8 },
+    noteItem: { color: '#14532d', marginBottom: 4 },
+
+    ctaButton: { backgroundColor: '#ffedd5', padding: 16, borderRadius: 12, marginTop: 16, alignItems: 'center', borderWidth: 1, borderColor: '#fed7aa' },
+    ctaText: { color: '#9a3412', fontWeight: 'bold' },
+    noDataText: { textAlign: 'center', color: 'gray', marginTop: 20 },
+
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+    modalContent: { backgroundColor: 'white', borderRadius: 16, padding: 24 },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+    inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    inputLabel: { fontSize: 16, textTransform: 'capitalize', color: '#64748b' },
+    input: { backgroundColor: '#f1f5f9', width: 100, padding: 8, borderRadius: 8, textAlign: 'right' },
+    closeButton: { backgroundColor: '#0ea5e9', padding: 16, borderRadius: 12, marginTop: 12, alignItems: 'center' },
+    closeButtonText: { color: 'white', fontWeight: 'bold' }
 });

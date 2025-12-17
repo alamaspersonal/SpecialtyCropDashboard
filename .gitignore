@@ -1,0 +1,4 @@
+specialty_crop_data
+specialty_crop.dbbackend/.venv/
+backend/__pycache__/
+*.pyc
