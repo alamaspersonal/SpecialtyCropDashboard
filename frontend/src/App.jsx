@@ -9,6 +9,7 @@ function App() {
     commodity: '',
     variety: '',
     category: '',
+    package: '',
     district: '',
     organic: '',
     date: '',
@@ -131,6 +132,13 @@ function App() {
                 value={selectedFilters.variety}
                 onChange={(v) => handleFilterChange('variety', v)}
                 color="bg-yellow-500"
+              />
+              <FilterDropdown
+                label="Package"
+                options={filters.packages}
+                value={selectedFilters.package}
+                onChange={(v) => handleFilterChange('package', v)}
+                color="bg-purple-600"
               />
               <FilterDropdown
                 label="District"

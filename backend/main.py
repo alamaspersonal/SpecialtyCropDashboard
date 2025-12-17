@@ -45,6 +45,7 @@ def get_filters(
     commodity: Optional[str] = Query(None),
     variety: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    package: Optional[str] = Query(None),
     district: Optional[str] = Query(None),
     organic: Optional[str] = Query(None),
     date: Optional[str] = Query(None),
@@ -61,6 +62,8 @@ def get_filters(
             query = query.filter(database.CropPrice.variety == variety)
         if category:
             query = query.filter(database.CropPrice.category == category)
+        if package:
+            query = query.filter(database.CropPrice.package == package)
         if district:
             query = query.filter(database.CropPrice.district == district)
         if organic:
@@ -103,6 +106,7 @@ def get_prices(
     commodity: Optional[str] = Query(None),
     variety: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    package: Optional[str] = Query(None),
     district: Optional[str] = Query(None),
     organic: Optional[str] = Query(None),
     date: Optional[str] = Query(None),
@@ -118,6 +122,8 @@ def get_prices(
         query = query.filter(database.CropPrice.variety == variety)
     if category:
         query = query.filter(database.CropPrice.category == category)
+    if package:
+        query = query.filter(database.CropPrice.package == package)
     if district:
         query = query.filter(database.CropPrice.district == district)
     if organic:
