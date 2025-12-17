@@ -18,14 +18,20 @@ function App() {
   const [error, setError] = useState(null)
   const [marketNotes, setMarketNotes] = useState('')
 
-  // Fetch filter options on mount
+  // Fetch filter options (re-fetches when any filter changes for cascading behavior)
   useEffect(() => {
     const fetchFilters = async () => {
       try {
-        const response = await axios.get(`${API_URL}/api/filters`)
+        const params = new URLSearchParams()
+        Object.entries(selectedFilters).forEach(([key, value]) => {
+          if (value) params.append(key, value)
+        })
+
+        const response = await axios.get(`${API_URL}/api/filters?${params}`)
         setFilters(response.data)
-        // Set default date to most recent
-        if (response.data.dates && response.data.dates.length > 0) {
+
+        // On initial load, set default date to most recent
+        if (!selectedFilters.date && response.data.dates && response.data.dates.length > 0) {
           setSelectedFilters(prev => ({ ...prev, date: response.data.dates[0] }))
         }
       } catch (err) {
@@ -34,7 +40,7 @@ function App() {
       }
     }
     fetchFilters()
-  }, [])
+  }, [selectedFilters])
 
   // Fetch price data when filters change
   useEffect(() => {

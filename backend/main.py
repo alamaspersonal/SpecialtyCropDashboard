@@ -41,25 +41,61 @@ def read_root():
     return {"message": "Welcome to the Specialty Crop Dashboard API"}
 
 @app.get("/api/filters", response_model=FiltersSchema)
-def get_filters(db: Session = Depends(get_db)):
-    """Return unique values for each filterable field."""
-    def get_distinct(field):
-        return sorted([r[0] for r in db.query(distinct(field)).filter(field.isnot(None), field != "N/A").all()])
+def get_filters(
+    commodity: Optional[str] = Query(None),
+    variety: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    district: Optional[str] = Query(None),
+    organic: Optional[str] = Query(None),
+    date: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Return unique values for each filterable field, filtered by current selections."""
     
-    # Get unique dates formatted as strings
-    dates = db.query(distinct(database.CropPrice.report_date)).filter(
+    def build_base_query():
+        """Build a query with all current filters applied."""
+        query = db.query(database.CropPrice)
+        if commodity:
+            query = query.filter(database.CropPrice.commodity == commodity)
+        if variety:
+            query = query.filter(database.CropPrice.variety == variety)
+        if category:
+            query = query.filter(database.CropPrice.category == category)
+        if district:
+            query = query.filter(database.CropPrice.district == district)
+        if organic:
+            query = query.filter(database.CropPrice.organic == organic)
+        if date:
+            try:
+                parsed_date = datetime.strptime(date, "%m/%d/%Y")
+                query = query.filter(database.CropPrice.report_date == parsed_date)
+            except ValueError:
+                pass
+        return query
+    
+    def get_distinct_filtered(field):
+        """Get distinct values for a field from the filtered dataset."""
+        base = build_base_query().with_entities(distinct(field)).filter(
+            field.isnot(None), field != "N/A"
+        )
+        return sorted([r[0] for r in base.all()])
+    
+    # Get unique dates from filtered dataset
+    date_query = build_base_query().with_entities(
+        distinct(database.CropPrice.report_date)
+    ).filter(
         database.CropPrice.report_date.isnot(None)
-    ).order_by(database.CropPrice.report_date.desc()).limit(30).all()
+    ).order_by(database.CropPrice.report_date.desc()).limit(30)
     
     return FiltersSchema(
-        categories=get_distinct(database.CropPrice.category),
-        commodities=get_distinct(database.CropPrice.commodity),
-        varieties=get_distinct(database.CropPrice.variety),
-        packages=get_distinct(database.CropPrice.package),
-        item_sizes=get_distinct(database.CropPrice.item_size),
-        districts=get_distinct(database.CropPrice.district),
-        organics=get_distinct(database.CropPrice.organic),
-        dates=[d[0].strftime("%m/%d/%Y") for d in dates if d[0]],
+        categories=get_distinct_filtered(database.CropPrice.category),
+        commodities=get_distinct_filtered(database.CropPrice.commodity),
+        varieties=get_distinct_filtered(database.CropPrice.variety),
+        packages=get_distinct_filtered(database.CropPrice.package),
+        item_sizes=get_distinct_filtered(database.CropPrice.item_size),
+        districts=get_distinct_filtered(database.CropPrice.district),
+        organics=get_distinct_filtered(database.CropPrice.organic),
+        dates=[d[0].strftime("%m/%d/%Y") for d in date_query.all() if d[0]],
     )
 
 @app.get("/api/prices", response_model=List[CropPriceSchema])
