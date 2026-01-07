@@ -66,7 +66,12 @@ export default function FiltersScreen({ navigation }) {
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView style={styles.scrollView}>
-                <Text style={styles.header}>Select Filters</Text>
+                <View style={styles.headerRow}>
+                    <Text style={styles.header}>Select Filters</Text>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+                        <Text style={styles.closeButtonText}>✕</Text>
+                    </TouchableOpacity>
+                </View>
                 <Text style={styles.subheader}>Choose your criteria to view price data</Text>
 
                 {error && (
@@ -160,11 +165,30 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 16,
     },
+    headerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
     header: {
         fontSize: 24,
         fontWeight: 'bold',
         color: '#1f2937',
-        marginBottom: 4,
+    },
+    closeButton: {
+        padding: 8,
+        backgroundColor: '#e2e8f0',
+        borderRadius: 20,
+        width: 36,
+        height: 36,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    closeButtonText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#64748b',
     },
     subheader: {
         fontSize: 14,
