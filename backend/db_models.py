@@ -43,3 +43,23 @@ class PriceSummary(BaseModel):
     avg_high_price: Optional[float]
     count: int
     market_tone: Optional[str]
+
+class UnifiedPriceSchema(BaseModel):
+    id: int
+    report_date: datetime
+    market_type: str
+    commodity: Optional[str]
+    variety: Optional[str]
+    package: Optional[str]
+    grade: Optional[str]
+    region: Optional[str]
+    price_avg: float
+
+    class Config:
+        from_attributes = True
+
+class KPIScorecard(BaseModel):
+    current_price: float
+    price_change_pct: Optional[float]
+    price_spread: Optional[float] # Terminal - Shipping
+    metric_label: str

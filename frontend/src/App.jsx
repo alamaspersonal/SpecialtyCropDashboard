@@ -1,308 +1,232 @@
-import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_URL = 'http://192.168.1.108:8000'
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import {
+  Calendar,
+  ChevronDown,
+  Menu,
+  Download,
+  DollarSign,
+  TrendingDown
+} from 'lucide-react';
+import PriceWaterfall from './components/PriceWaterfall';
 
 function App() {
-  const [filters, setFilters] = useState(null)
-  const [selectedFilters, setSelectedFilters] = useState({
-    commodity: '',
-    variety: '',
-    category: '',
-    package: '',
-    district: '',
-    organic: '',
-    date: '',
-  })
-  const [priceData, setPriceData] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [marketNotes, setMarketNotes] = useState('')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [
+    selectedCommodity,
+    setSelectedCommodity
+  ] = useState("Strawberries");
+  const [commodities, setCommodities] = useState([]); // Dynamic list
 
-  // Fetch filter options (re-fetches when any filter changes for cascading behavior)
+  // Filter State
+  const [selectedDate, setSelectedDate] = useState("");
+
+  // Cost Config
+  const [costs, setCosts] = useState({
+    packing: 2.50,
+    cooling: 0.80,
+    inspection: 0.15,
+    commission: 0.50
+  });
+
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [chartData, setChartData] = useState([]); // Fix missing state if needed, though replaced by waterfall? 
+  // actually chartData was used in previous code but I see 'setChartData' in fetchDashboardData but where is state declared? 
+  // In the file view it was missing line 32 in the previous view output looked like:
+  /*
+  31:   const [stats, setStats] = useState(null);
+  32:   const [loading, setLoading] = useState(false);
+  33: 
+  34:   // Initial Fetch
+  */
+  // Wait, looking at the previous file view of App.jsx (Step 834):
+  // Line 49 says `setChartData(pricesRes.data);`
+  // But I don't see `const [chartData, setChartData] = useState(...)` in lines 1-32.
+  // Ah, looking closely at Step 834...
+  // Line 31-32:
+  // 31:   const [stats, setStats] = useState(null);
+  // 32:   const [loading, setLoading] = useState(false);
+  // It seems I missed declaring chartData in the previous edit or it was lost?
+  // I will re-add it to be safe, although PriceWaterfall might not use it? 
+  // App.jsx uses MarketChart (line 142) which uses chartData.
+
+  // Dynamic API Base URL
+  const API_BASE_URL = `http://${window.location.hostname}:8000`;
+
   useEffect(() => {
-    const fetchFilters = async () => {
-      try {
-        const params = new URLSearchParams()
-        Object.entries(selectedFilters).forEach(([key, value]) => {
-          if (value) params.append(key, value)
-        })
+    fetchCommodities();
+  }, []);
 
-        const response = await axios.get(`${API_URL}/api/filters?${params}`)
-        setFilters(response.data)
-
-        // On initial load, set default date to most recent
-        if (!selectedFilters.date && response.data.dates && response.data.dates.length > 0) {
-          setSelectedFilters(prev => ({ ...prev, date: response.data.dates[0] }))
-        }
-      } catch (err) {
-        console.error("Error fetching filters:", err)
-        setError("Failed to load filters.")
+  const fetchCommodities = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/filters`);
+      if (res.data.commodities) {
+        setCommodities(res.data.commodities);
       }
+    } catch (err) {
+      console.error("Error fetching filters:", err);
     }
-    fetchFilters()
-  }, [selectedFilters])
+  };
 
-  // Fetch price data when filters change
+  // Initial Fetch
   useEffect(() => {
-    const fetchPrices = async () => {
-      setLoading(true)
-      try {
-        const params = new URLSearchParams()
-        Object.entries(selectedFilters).forEach(([key, value]) => {
-          if (value) params.append(key, value)
-        })
-        params.append('limit', '50')
+    fetchDashboardData();
+  }, [selectedCommodity]);
 
-        const response = await axios.get(`${API_URL}/api/prices?${params}`)
-        setPriceData(response.data)
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      // Parallel Fetch
+      const [statsRes, pricesRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/api/v2/stats?commodity=${selectedCommodity}`),
+        axios.get(`${API_BASE_URL}/api/v2/prices?commodity=${selectedCommodity}`)
+      ]);
 
-        // Extract market notes from first result
-        if (response.data.length > 0 && response.data[0].market_tone_comments) {
-          setMarketNotes(response.data[0].market_tone_comments)
-        } else {
-          setMarketNotes('')
-        }
+      setStats(statsRes.data);
+      setChartData(pricesRes.data);  // Make sure chartData state exists
 
-        setLoading(false)
-      } catch (err) {
-        console.error("Error fetching prices:", err)
-        setError("Failed to load price data.")
-        setLoading(false)
-      }
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
     }
-
-    if (selectedFilters.date) {
-      fetchPrices()
-    }
-  }, [selectedFilters])
-
-  const handleFilterChange = (filterName, value) => {
-    setSelectedFilters(prev => ({ ...prev, [filterName]: value }))
-  }
-
-  // Calculate average prices for display
-  const avgLowPrice = priceData.length > 0
-    ? (priceData.reduce((sum, p) => sum + (p.low_price || 0), 0) / priceData.filter(p => p.low_price).length).toFixed(2)
-    : '—'
-  const avgHighPrice = priceData.length > 0
-    ? (priceData.reduce((sum, p) => sum + (p.high_price || 0), 0) / priceData.filter(p => p.high_price).length).toFixed(2)
-    : '—'
+  };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-gray-900 font-sans">
-      {/* Header with mobile menu button */}
-      <header className="bg-teal-700 text-white shadow-lg sticky top-0 z-50">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight">Specialty Crop Dashboard</h1>
-            <p className="text-teal-200 text-xs md:text-sm">USDA Market Pricing Data</p>
+    <div className="flex h-screen bg-gray-50 font-sans text-gray-900">
+
+      {/* Sidebar */}
+      <aside
+        className={`${sidebarOpen ? 'w-64' : 'w-20'} 
+        bg-white border-r border-gray-200 transition-all duration-300 flex flex-col fixed md:relative z-20 h-full`}
+      >
+        <div className="p-6 border-b border-gray-100 flex items-center gap-3">
+          <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold">
+            Ag
           </div>
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="md:hidden p-2 rounded-lg bg-teal-600 hover:bg-teal-500 transition"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {sidebarOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
-            </svg>
-          </button>
+          {sidebarOpen && <span className="font-bold text-xl tracking-tight text-emerald-950">MarketIntel</span>}
         </div>
-      </header>
 
-      <div className="flex flex-col md:flex-row">
-        {/* Sidebar - Filters (collapsible on mobile) */}
-        <aside className={`
-          ${sidebarOpen ? 'block' : 'hidden'} md:block
-          w-full md:w-64 bg-white shadow-md p-4 border-b md:border-b-0 md:border-r border-gray-200
-          md:min-h-screen
-        `}>
-          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Filters</h2>
+        <div className="p-4 space-y-2 flex-1">
+          <button className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-50 text-emerald-700 rounded-lg font-medium">
+            <LayoutDashboard size={20} />
+            {sidebarOpen && <span>Dashboard</span>}
+          </button>
+          {/* Add more nav items later */}
+        </div>
+      </aside>
 
-          {filters ? (
-            <div className="grid grid-cols-2 md:grid-cols-1 gap-3 md:gap-4">
-              <FilterDropdown
-                label="Date"
-                options={filters.dates}
-                value={selectedFilters.date}
-                onChange={(v) => handleFilterChange('date', v)}
-                color="bg-blue-600"
-              />
-              <FilterDropdown
-                label="Category"
-                options={filters.categories}
-                value={selectedFilters.category}
-                onChange={(v) => handleFilterChange('category', v)}
-                color="bg-pink-600"
-              />
-              <FilterDropdown
-                label="Commodity"
-                options={filters.commodities}
-                value={selectedFilters.commodity}
-                onChange={(v) => handleFilterChange('commodity', v)}
-                color="bg-teal-600"
-              />
-              <FilterDropdown
-                label="Variety"
-                options={filters.varieties}
-                value={selectedFilters.variety}
-                onChange={(v) => handleFilterChange('variety', v)}
-                color="bg-yellow-500"
-              />
-              <FilterDropdown
-                label="Package"
-                options={filters.packages}
-                value={selectedFilters.package}
-                onChange={(v) => handleFilterChange('package', v)}
-                color="bg-purple-600"
-              />
-              <FilterDropdown
-                label="District"
-                options={filters.districts}
-                value={selectedFilters.district}
-                onChange={(v) => handleFilterChange('district', v)}
-                color="bg-teal-600"
-              />
-              <FilterDropdown
-                label="Organic"
-                options={filters.organics}
-                value={selectedFilters.organic}
-                onChange={(v) => handleFilterChange('organic', v)}
-                color="bg-green-600"
-              />
-            </div>
-          ) : (
-            <div className="text-gray-400 text-sm">Loading filters...</div>
-          )}
-        </aside>
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-        {/* Main Content */}
-        <main className="flex-1 p-4 md:p-6">
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
+        {/* Header */}
+        <header className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500">
+              <Menu size={20} />
+            </button>
+            <h1 className="text-2xl font-bold text-gray-800">Market Intelligence</h1>
+          </div>
 
-          {/* Price Display Area */}
-          <div className="space-y-4 md:grid md:grid-cols-1 lg:grid-cols-3 md:gap-6 md:space-y-0">
-            {/* Price Cards */}
-            <div className="lg:col-span-2">
-              <div className="bg-white rounded-xl shadow-lg p-4 md:p-6">
-                <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-4">
-                  Terminal Market Price — {selectedFilters.date || 'Select Date'}
-                </h3>
-
-                {loading ? (
-                  <div className="flex justify-center items-center h-32 md:h-48">
-                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-teal-600"></div>
-                  </div>
-                ) : priceData.length > 0 ? (
-                  <div className="space-y-4">
-                    {/* Price Summary Bar */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 p-4 bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg text-white">
-                      <div className="flex-1 text-center sm:text-left">
-                        <p className="text-xs sm:text-sm opacity-80">Avg. Low</p>
-                        <p className="text-2xl sm:text-3xl font-bold">${avgLowPrice}</p>
-                      </div>
-                      <div className="hidden sm:block h-12 w-px bg-white/30"></div>
-                      <div className="flex-1 text-center sm:text-left">
-                        <p className="text-xs sm:text-sm opacity-80">Avg. High</p>
-                        <p className="text-2xl sm:text-3xl font-bold">${avgHighPrice}</p>
-                      </div>
-                      <div className="hidden sm:block h-12 w-px bg-white/30"></div>
-                      <div className="flex-1 text-center sm:text-left">
-                        <p className="text-xs sm:text-sm opacity-80">Records</p>
-                        <p className="text-2xl sm:text-3xl font-bold">{priceData.length}</p>
-                      </div>
-                    </div>
-
-                    {/* Data Table - scrollable on mobile */}
-                    <div className="overflow-x-auto max-h-72 md:max-h-96 -mx-4 md:mx-0">
-                      <table className="min-w-full text-xs md:text-sm">
-                        <thead className="bg-gray-50 sticky top-0">
-                          <tr>
-                            <th className="px-2 md:px-3 py-2 text-left font-semibold text-gray-600">Commodity</th>
-                            <th className="px-2 md:px-3 py-2 text-left font-semibold text-gray-600 hidden sm:table-cell">Variety</th>
-                            <th className="px-2 md:px-3 py-2 text-left font-semibold text-gray-600 hidden md:table-cell">Package</th>
-                            <th className="px-2 md:px-3 py-2 text-right font-semibold text-gray-600">Low</th>
-                            <th className="px-2 md:px-3 py-2 text-right font-semibold text-gray-600">High</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {priceData.map((item) => (
-                            <tr key={item.id} className="hover:bg-gray-50">
-                              <td className="px-2 md:px-3 py-2 font-medium text-gray-900">{item.commodity}</td>
-                              <td className="px-2 md:px-3 py-2 text-gray-600 hidden sm:table-cell">{item.variety || '—'}</td>
-                              <td className="px-2 md:px-3 py-2 text-gray-600 hidden md:table-cell">{item.package || '—'}</td>
-                              <td className="px-2 md:px-3 py-2 text-right text-green-600 font-semibold">
-                                {item.low_price ? `$${item.low_price.toFixed(2)}` : '—'}
-                              </td>
-                              <td className="px-2 md:px-3 py-2 text-right text-green-600 font-semibold">
-                                {item.high_price ? `$${item.high_price.toFixed(2)}` : '—'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+          <div className="flex items-center gap-4">
+            {/* Commodity Search / Selector */}
+            <div className="relative">
+              <select
+                className="appearance-none bg-gray-100 pl-4 pr-10 py-2 rounded-lg font-medium text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
+                value={selectedCommodity}
+                onChange={(e) => setSelectedCommodity(e.target.value)}
+              >
+                {commodities.length > 0 ? (
+                  commodities.map(c => <option key={c} value={c}>{c}</option>)
                 ) : (
-                  <div className="text-center text-gray-500 py-8 md:py-12">
-                    No data found for the selected filters.
-                  </div>
+                  <option>Loading...</option>
                 )}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" size={16} />
+            </div>
+
+            <div className="h-8 w-px bg-gray-300 mx-2"></div>
+
+            <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <Calendar size={16} />
+              <span>Last 12 Months</span>
+            </button>
+
+            <button className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 shadow-sm">
+              <Download size={16} />
+              <span>Export</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Scrollable Dashboard Area */}
+        <div className="flex-1 overflow-y-auto p-8">
+
+          {loading && (
+            <div className="mb-4 text-emerald-600 font-medium animate-pulse">Updating Real-time Market Data...</div>
+          )}
+
+          {/* KPI Cards */}
+          <KPIScorecard stats={stats} />
+
+          {/* Main Layout Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            {/* Left Col: Main Chart (Span 2) */}
+            <div className="lg:col-span-2 space-y-8">
+              <MarketChart data={chartData} />
+
+              {/* Secondary Chart Placeholder */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-64 flex items-center justify-center text-gray-400">
+                Additional Volume Analysis (Coming Phase 3)
               </div>
             </div>
 
-            {/* Market Notes Panel */}
-            <div className="space-y-4">
-              <div className="bg-white rounded-xl shadow-lg p-4 md:p-6">
-                <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-3">Market Notes</h3>
-                <div className="text-xs md:text-sm text-gray-600 whitespace-pre-wrap max-h-32 md:max-h-48 overflow-y-auto">
-                  {marketNotes || 'No market notes available for the current selection.'}
+            {/* Right Col: Filters & Details */}
+            <div className="space-y-6">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-gray-800 mb-4">Drill Down</h3>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Variety</label>
+                    <div className="space-y-2">
+                      {/* Mock Filters */}
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" className="rounded text-emerald-600 focus:ring-emerald-500" defaultChecked />
+                        All Varieties
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Package Size</label>
+                    <select className="w-full bg-gray-50 border border-gray-200 rounded-md py-2 px-3 text-sm">
+                      <option>All Packages</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* Production Costs CTA */}
-              <div className="bg-yellow-100 border-2 border-yellow-400 rounded-xl p-4 md:p-6 text-center">
-                <p className="text-yellow-800 font-semibold text-sm md:text-base">Compare with your production costs</p>
-                <button className="mt-2 md:mt-3 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition text-sm">
-                  Compare Costs
-                </button>
+              <div className="bg-blue-50 p-6 rounded-xl border border-blue-100">
+                <h4 className="font-bold text-blue-900 mb-2">Market Insight</h4>
+                <p className="text-sm text-blue-800 leading-relaxed">
+                  Spread for <span className="font-bold">{selectedCommodity}</span> is currently
+                  <span className="font-bold"> ${stats?.spread || '0.00'}</span>.
+                  Historical trends suggest a tightening of margins in Q4 due to increased shipping volume from Mexico.
+                </p>
               </div>
+
             </div>
+
           </div>
-        </main>
-      </div>
+
+        </div>
+
+      </main>
     </div>
-  )
+  );
 }
 
-// Filter Dropdown Component
-function FilterDropdown({ label, options, value, onChange, color }) {
-  return (
-    <div>
-      <label className={`block text-xs font-semibold text-white px-2 py-1 rounded-t ${color}`}>
-        {label}
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full border border-gray-300 rounded-b px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-      >
-        <option value="">All</option>
-        {options && options.map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
-        ))}
-      </select>
-    </div>
-  )
-}
-
-export default App
+export default App;

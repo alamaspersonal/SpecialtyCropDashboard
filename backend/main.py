@@ -5,8 +5,8 @@ from sqlalchemy import distinct, func
 from typing import List, Optional
 import database
 from pydantic import BaseModel
-from datetime import datetime
-from db_models import CropPriceSchema, FiltersSchema, PriceSummary
+from datetime import datetime, timedelta
+from db_models import CropPriceSchema, FiltersSchema, PriceSummary, UnifiedPriceSchema
 
 # Initialize Database
 database.init_db()
@@ -17,6 +17,7 @@ app = FastAPI(title="Specialty Crop Dashboard API")
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "*", # Allow all origins for network access
 ]
 
 app.add_middleware(
@@ -186,3 +187,81 @@ def get_price_summary(
 def get_crops(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     crops = db.query(database.CropPrice).offset(skip).limit(limit).all()
     return crops
+
+@app.get("/api/v2/prices", response_model=List[UnifiedPriceSchema])
+def get_unified_prices(
+    commodity: str = Query(..., description="Target commodity"),
+    variety: Optional[str] = Query(None),
+    package: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get unified time-series data for both Terminal and Shipping points.
+    """
+    query = db.query(database.UnifiedCropPrice)
+    query = query.filter(database.UnifiedCropPrice.commodity == commodity)
+    
+    if variety:
+        query = query.filter(database.UnifiedCropPrice.variety == variety)
+    if package:
+        query = query.filter(database.UnifiedCropPrice.package == package)
+        
+    if start_date:
+        try:
+            sd = datetime.strptime(start_date, "%Y-%m-%d")
+            query = query.filter(database.UnifiedCropPrice.report_date >= sd)
+        except ValueError:
+            pass
+            
+    if end_date:
+        try:
+            ed = datetime.strptime(end_date, "%Y-%m-%d")
+            query = query.filter(database.UnifiedCropPrice.report_date <= ed)
+        except ValueError:
+            pass
+            
+    # Return raw records
+    return query.order_by(database.UnifiedCropPrice.report_date).limit(2000).all()
+
+@app.get("/api/v2/stats")
+def get_kpi_stats(
+    commodity: str = Query(...),
+    date: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get Key Performance Indicators: Current Price, % Change, Spread.
+    """
+    # 1. Determine Target Date (latest if not provided)
+    if not date:
+        latest = db.query(database.UnifiedCropPrice.report_date).order_by(database.UnifiedCropPrice.report_date.desc()).first()
+        target_date = latest[0] if latest else datetime.now()
+    else:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d")
+        except:
+            return {"error": "Invalid date format"}
+
+    # 2. Get Current Prices (Terminal vs Shipping)
+    base_query = db.query(database.UnifiedCropPrice).filter(
+        database.UnifiedCropPrice.report_date == target_date,
+        database.UnifiedCropPrice.commodity == commodity
+    )
+    
+    terminal_prices = base_query.filter(database.UnifiedCropPrice.market_type == "Terminal").all()
+    shipping_prices = base_query.filter(database.UnifiedCropPrice.market_type == "Shipping Point").all()
+    
+    t_avg = sum([p.price_avg for p in terminal_prices]) / len(terminal_prices) if terminal_prices else 0
+    s_avg = sum([p.price_avg for p in shipping_prices]) / len(shipping_prices) if shipping_prices else 0
+    
+    # 3. Spread
+    spread = t_avg - s_avg if (t_avg and s_avg) else None
+    
+    return {
+        "current_terminal_avg": round(t_avg, 2),
+        "current_shipping_avg": round(s_avg, 2),
+        "spread": round(spread, 2) if spread else None,
+        "date": target_date.strftime("%Y-%m-%d")
+    }
