@@ -50,9 +50,12 @@ function App() {
   // It seems I missed declaring chartData in the previous edit or it was lost?
   // I will re-add it to be safe, although PriceWaterfall might not use it? 
   // App.jsx uses MarketChart (line 142) which uses chartData.
+<<<<<<< HEAD
 
   // Dynamic API Base URL
   const API_BASE_URL = `http://${window.location.hostname}:8000`;
+=======
+>>>>>>> e214ebed7f2a33f4dd9e163fe43f4173484c57fb
 
   useEffect(() => {
     fetchCommodities();
@@ -60,7 +63,11 @@ function App() {
 
   const fetchCommodities = async () => {
     try {
+<<<<<<< HEAD
       const res = await axios.get(`${API_BASE_URL}/api/filters`);
+=======
+      const res = await axios.get('http://127.0.0.1:8000/api/filters');
+>>>>>>> e214ebed7f2a33f4dd9e163fe43f4173484c57fb
       if (res.data.commodities) {
         setCommodities(res.data.commodities);
       }
@@ -79,8 +86,13 @@ function App() {
     try {
       // Parallel Fetch
       const [statsRes, pricesRes] = await Promise.all([
+<<<<<<< HEAD
         axios.get(`${API_BASE_URL}/api/v2/stats?commodity=${selectedCommodity}`),
         axios.get(`${API_BASE_URL}/api/v2/prices?commodity=${selectedCommodity}`)
+=======
+        axios.get(`http://127.0.0.1:8000/api/v2/stats?commodity=${selectedCommodity}`),
+        axios.get(`http://127.0.0.1:8000/api/v2/prices?commodity=${selectedCommodity}`)
+>>>>>>> e214ebed7f2a33f4dd9e163fe43f4173484c57fb
       ]);
 
       setStats(statsRes.data);

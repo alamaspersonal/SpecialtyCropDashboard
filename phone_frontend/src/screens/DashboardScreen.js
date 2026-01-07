@@ -12,8 +12,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getPrices } from '../services/api';
 import PriceWaterfallMobile from '../components/PriceWaterfallMobile';
+<<<<<<< HEAD
 
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../services/favorites';
+=======
+>>>>>>> e214ebed7f2a33f4dd9e163fe43f4173484c57fb
 
 export default function DashboardScreen({ route, navigation }) {
     const { filters } = route.params;
@@ -21,6 +24,15 @@ export default function DashboardScreen({ route, navigation }) {
     const [loading, setLoading] = useState(true);
     const [marketNotes, setMarketNotes] = useState('');
     const [isFavorite, setIsFavorite] = useState(false);
+
+    // Costs State
+    const [showCostModal, setShowCostModal] = useState(false);
+    const [costs, setCosts] = useState({
+        packing: '2.50',
+        cooling: '0.80',
+        inspection: '0.15',
+        commission: '0.50'
+    });
 
     // Costs State
     const [showCostModal, setShowCostModal] = useState(false);
@@ -54,6 +66,7 @@ export default function DashboardScreen({ route, navigation }) {
         fetchPrices();
     }, [filters]);
 
+<<<<<<< HEAD
     const checkFavStatus = async () => {
         const status = await checkIsFavorite(filters.commodity);
         setIsFavorite(status);
@@ -69,6 +82,8 @@ export default function DashboardScreen({ route, navigation }) {
         }
     };
 
+=======
+>>>>>>> e214ebed7f2a33f4dd9e163fe43f4173484c57fb
     // Calculate averages
     const calculateStats = () => {
         if (!priceData.length) return null;
@@ -76,6 +91,7 @@ export default function DashboardScreen({ route, navigation }) {
         const terminalAvg = priceData.reduce((acc, curr) => acc + (curr.low_price || 0), 0) / priceData.length;
         // Mock shipping price as 60% of terminal for demo
         const shippingAvg = terminalAvg * 0.6;
+<<<<<<< HEAD
 
         return {
             current_terminal_avg: terminalAvg,
@@ -84,6 +100,16 @@ export default function DashboardScreen({ route, navigation }) {
         };
     };
 
+=======
+
+        return {
+            current_terminal_avg: terminalAvg,
+            current_shipping_avg: shippingAvg,
+            date: filters.date || 'Today'
+        };
+    };
+
+>>>>>>> e214ebed7f2a33f4dd9e163fe43f4173484c57fb
     const stats = calculateStats();
 
     return (
@@ -92,6 +118,7 @@ export default function DashboardScreen({ route, navigation }) {
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Text style={styles.backBtnText}>← Back</Text>
+<<<<<<< HEAD
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Price Waterfall</Text>
                 <View style={{ flexDirection: 'row', gap: 16 }}>
@@ -102,6 +129,13 @@ export default function DashboardScreen({ route, navigation }) {
                         <Text style={styles.settingsText}>Costs</Text>
                     </TouchableOpacity>
                 </View>
+=======
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Price Waterfall</Text>
+                <TouchableOpacity onPress={() => setShowCostModal(true)}>
+                    <Text style={styles.settingsText}>Costs</Text>
+                </TouchableOpacity>
+>>>>>>> e214ebed7f2a33f4dd9e163fe43f4173484c57fb
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -123,7 +157,13 @@ export default function DashboardScreen({ route, navigation }) {
                             <Text style={styles.noteItem}>{marketNotes || '• Demand exceeds supply.'}</Text>
                         </View>
 
+<<<<<<< HEAD
 
+=======
+                        <TouchableOpacity style={styles.ctaButton}>
+                            <Text style={styles.ctaText}>Compare with Cost of Production</Text>
+                        </TouchableOpacity>
+>>>>>>> e214ebed7f2a33f4dd9e163fe43f4173484c57fb
                     </>
                 ) : (
                     <Text style={styles.noDataText}>No data available for this selection.</Text>
@@ -175,7 +215,12 @@ const styles = StyleSheet.create({
     notesTitle: { fontWeight: 'bold', color: '#166534', marginBottom: 8 },
     noteItem: { color: '#14532d', marginBottom: 4 },
 
+<<<<<<< HEAD
 
+=======
+    ctaButton: { backgroundColor: '#ffedd5', padding: 16, borderRadius: 12, marginTop: 16, alignItems: 'center', borderWidth: 1, borderColor: '#fed7aa' },
+    ctaText: { color: '#9a3412', fontWeight: 'bold' },
+>>>>>>> e214ebed7f2a33f4dd9e163fe43f4173484c57fb
     noDataText: { textAlign: 'center', color: 'gray', marginTop: 20 },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
