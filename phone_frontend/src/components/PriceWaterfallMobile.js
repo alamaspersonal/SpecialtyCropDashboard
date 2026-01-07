@@ -1,18 +1,107 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList } from 'react-native';
 
-const PriceBlock = ({ label, price, bg, align = 'right' }) => (
-    <View style={styles.blockRow}>
-        <View style={[styles.card, { backgroundColor: bg, alignItems: align === 'right' ? 'center' : 'center' }]}>
-            <Text style={[styles.blockLabel, { color: bg === '#facc15' ? 'black' : 'white' }]}>{label}</Text>
-            <Text style={[styles.blockPrice, { color: bg === '#facc15' ? 'black' : 'white' }]}>${price}</Text>
+const PackageSelector = ({ options, selectedValue, onValueChange, isDark }) => {
+    const [modalVisible, setModalVisible] = useState(false);
+
+    if (!options || options.length === 0) return null;
+
+    const textColor = isDark ? 'black' : 'white';
+    const bgColor = isDark ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)';
+
+    // Truncate long package names
+    const displayValue = selectedValue?.length > 20
+        ? selectedValue.substring(0, 18) + '...'
+        : selectedValue || 'Select';
+
+    return (
+        <>
+            <TouchableOpacity
+                style={[styles.selectorPill, { backgroundColor: bgColor }]}
+                onPress={() => setModalVisible(true)}
+            >
+                <Text style={[styles.selectorText, { color: textColor }]} numberOfLines={1}>
+                    📦 {displayValue}
+                </Text>
+                <Text style={[styles.chevron, { color: textColor }]}>▼</Text>
+            </TouchableOpacity>
+
+            <Modal
+                visible={modalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setModalVisible(false)}
+                >
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Select Package</Text>
+                        <FlatList
+                            data={options}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.optionItem,
+                                        selectedValue === item && styles.optionItemSelected
+                                    ]}
+                                    onPress={() => {
+                                        onValueChange(item);
+                                        setModalVisible(false);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.optionText,
+                                        selectedValue === item && styles.optionTextSelected
+                                    ]}>
+                                        {item}
+                                    </Text>
+                                    {selectedValue === item && (
+                                        <Text style={styles.checkmark}>✓</Text>
+                                    )}
+                                </TouchableOpacity>
+                            )}
+                            style={styles.optionsList}
+                        />
+                        <TouchableOpacity
+                            style={styles.cancelButton}
+                            onPress={() => setModalVisible(false)}
+                        >
+                            <Text style={styles.cancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+        </>
+    );
+};
+
+const PriceBlock = ({ label, price, bg, options, selectedValue, onValueChange }) => {
+    const isDark = bg === '#facc15' || bg === '#fdba74';
+    const textColor = isDark ? 'black' : 'white';
+
+    return (
+        <View style={styles.blockRow}>
+            <View style={[styles.card, { backgroundColor: bg }]}>
+                <Text style={[styles.blockLabel, { color: textColor }]}>{label}</Text>
+                <Text style={[styles.blockPrice, { color: textColor }]}>${price}</Text>
+
+                <PackageSelector
+                    options={options}
+                    selectedValue={selectedValue}
+                    onValueChange={onValueChange}
+                    isDark={isDark}
+                />
+            </View>
+            <View style={styles.connector} />
         </View>
-        {/* Connector Line to show "stack" visually? */}
-        <View style={styles.connector} />
-    </View>
-);
+    );
+};
 
-export default function PriceWaterfallMobile({ stats, costs }) {
+export default function PriceWaterfallMobile({ stats, costs, packageData, actions }) {
     if (!stats) return null;
 
     const terminalPrice = stats.current_terminal_avg;
@@ -25,33 +114,36 @@ export default function PriceWaterfallMobile({ stats, costs }) {
 
     return (
         <View style={styles.container}>
-            {/* Main Blue Bar in background representing the chain? Or just separate Cards. 
-                Mobile is better with vertical stack of Cards.
-            */}
             <View style={styles.timelineLine} />
 
             <PriceBlock
                 label="National Retail"
                 price={retailPrice}
-                bg="#d946ef" // Purple 
+                bg="#d946ef"
             />
 
             <PriceBlock
                 label="Terminal Market"
                 price={terminalPrice.toFixed(2)}
-                bg="#0ea5e9" // Blue 
+                bg="#0ea5e9"
+                options={packageData?.terminal}
+                selectedValue={actions?.selectedPackages?.terminal}
+                onValueChange={(v) => actions?.setPackage('terminal', v)}
             />
 
             <PriceBlock
                 label="Shipping Point"
                 price={shippingPrice.toFixed(2)}
-                bg="#fdba74" // Orange (Darker text handled in component) 
+                bg="#fdba74"
+                options={packageData?.shipping}
+                selectedValue={actions?.selectedPackages?.shipping}
+                onValueChange={(v) => actions?.setPackage('shipping', v)}
             />
 
             <PriceBlock
                 label="Reference Farm"
                 price={farmPrice}
-                bg="#facc15" // Yellow 
+                bg="#facc15"
             />
 
         </View>
@@ -75,29 +167,121 @@ const styles = StyleSheet.create({
     blockRow: {
         width: '100%',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 12,
     },
     card: {
-        width: '60%',
-        paddingVertical: 12,
+        width: '70%',
+        paddingVertical: 14,
         paddingHorizontal: 16,
-        borderRadius: 8,
+        borderRadius: 12,
         elevation: 4,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
         alignItems: 'center'
     },
     blockLabel: {
-        fontWeight: 'bold',
+        fontWeight: '600',
         marginBottom: 4,
-        fontSize: 12,
-        textAlign: 'center'
+        fontSize: 11,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        opacity: 0.9
     },
     blockPrice: {
-        fontSize: 20,
+        fontSize: 24,
         fontWeight: 'bold',
-        textAlign: 'center'
-    }
+    },
+    connector: {
+        width: 2,
+        height: 8,
+        backgroundColor: '#cbd5e1',
+    },
+
+    // Package Selector Pill
+    selectorPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        marginTop: 8,
+        gap: 4,
+    },
+    selectorText: {
+        fontSize: 11,
+        fontWeight: '500',
+    },
+    chevron: {
+        fontSize: 8,
+        marginLeft: 4,
+    },
+
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+    },
+    modalContent: {
+        backgroundColor: 'white',
+        borderRadius: 16,
+        width: '100%',
+        maxHeight: '70%',
+        padding: 0,
+        overflow: 'hidden',
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e5e7eb',
+        color: '#1f2937',
+    },
+    optionsList: {
+        maxHeight: 300,
+    },
+    optionItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+    },
+    optionItemSelected: {
+        backgroundColor: '#f0fdf4',
+    },
+    optionText: {
+        fontSize: 15,
+        color: '#374151',
+        flex: 1,
+    },
+    optionTextSelected: {
+        color: '#059669',
+        fontWeight: '600',
+    },
+    checkmark: {
+        fontSize: 16,
+        color: '#059669',
+        fontWeight: 'bold',
+    },
+    cancelButton: {
+        paddingVertical: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#e5e7eb',
+        alignItems: 'center',
+    },
+    cancelText: {
+        fontSize: 16,
+        color: '#6b7280',
+        fontWeight: '500',
+    },
 });

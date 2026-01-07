@@ -21,6 +21,12 @@ export default function DashboardScreen({ route, navigation }) {
     const [marketNotes, setMarketNotes] = useState('');
     const [isFavorite, setIsFavorite] = useState(false);
 
+    // Data Partitioning
+    const [terminalData, setTerminalData] = useState([]);
+    const [shippingData, setShippingData] = useState([]);
+    const [packageOptions, setPackageOptions] = useState({ terminal: [], shipping: [] });
+    const [selectedPackages, setSelectedPackages] = useState({ terminal: '', shipping: '' });
+
     // Costs State
     const [showCostModal, setShowCostModal] = useState(false);
     const [costs, setCosts] = useState({
@@ -37,9 +43,29 @@ export default function DashboardScreen({ route, navigation }) {
         const fetchPrices = async () => {
             setLoading(true);
             try {
-                // Fetching raw prices for now
-                const data = await getPrices(filters, 50);
-                setPriceData(data);
+                // Fetching raw prices with higher limit to get mix
+                const data = await getPrices(filters, 200);
+                setPriceData(data); // Keep raw fallback
+
+                // Partition Data - Using actual market_type values from CSV
+                const tData = data.filter(d => d.market_type === 'Terminal' || !d.market_type);
+                const sData = data.filter(d => d.market_type === 'Shipping');
+
+                setTerminalData(tData);
+                setShippingData(sData);
+
+                // Extract Packages
+                const getPackages = (arr) => [...new Set(arr.map(d => d.package).filter(Boolean))].sort();
+                const tPackages = getPackages(tData);
+                const sPackages = getPackages(sData);
+
+                setPackageOptions({ terminal: tPackages, shipping: sPackages });
+
+                // Set Defaults (first available)
+                setSelectedPackages({
+                    terminal: tPackages[0] || '',
+                    shipping: sPackages[0] || ''
+                });
 
                 if (data.length > 0 && data[0].market_tone_comments) {
                     setMarketNotes(data[0].market_tone_comments);
@@ -72,10 +98,24 @@ export default function DashboardScreen({ route, navigation }) {
     // Calculate averages
     const calculateStats = () => {
         if (!priceData.length) return null;
-        // Simple average for demo
-        const terminalAvg = priceData.reduce((acc, curr) => acc + (curr.low_price || 0), 0) / priceData.length;
-        // Mock shipping price as 60% of terminal for demo
-        const shippingAvg = terminalAvg * 0.6;
+
+        // Filter by selected package if set
+        const getAvg = (data, userPackage) => {
+            if (!data.length) return 0;
+            const filtered = userPackage ? data.filter(d => d.package === userPackage) : data;
+            if (!filtered.length) return 0; // Or fallback to all?
+            return filtered.reduce((acc, curr) => acc + (curr.low_price || 0), 0) / filtered.length;
+        };
+
+        const terminalAvg = getAvg(terminalData, selectedPackages.terminal);
+
+        // If we have real shipping data, use it. Otherwise derive it from Real Terminal or just use derivation.
+        let shippingAvg = getAvg(shippingData, selectedPackages.shipping);
+
+        // Fallback Mock Logic if no real shipping data found (common in demo data)
+        if (shippingAvg === 0 && terminalAvg > 0) {
+            shippingAvg = terminalAvg * 0.6;
+        }
 
         return {
             current_terminal_avg: terminalAvg,
@@ -114,6 +154,11 @@ export default function DashboardScreen({ route, navigation }) {
                         <PriceWaterfallMobile
                             stats={stats}
                             costs={costs}
+                            packageData={packageOptions}
+                            actions={{
+                                selectedPackages,
+                                setPackage: (type, val) => setSelectedPackages(prev => ({ ...prev, [type]: val }))
+                            }}
                         />
 
                         {/* Market Notes */}
