@@ -79,7 +79,7 @@ const PackageSelector = ({ options, selectedValue, onValueChange, isDark }) => {
     );
 };
 
-const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, onValueChange }) => {
+const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, onValueChange, isEstimated }) => {
     const isDark = bg === '#facc15' || bg === '#fdba74';
     const textColor = isDark ? 'black' : 'white';
     const subTextColor = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
@@ -87,7 +87,9 @@ const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, on
     return (
         <View style={styles.blockRow}>
             <View style={[styles.card, { backgroundColor: bg }]}>
-                <Text style={[styles.blockLabel, { color: textColor }]}>{label}</Text>
+                <Text style={[styles.blockLabel, { color: textColor }]}>
+                    {label} {isEstimated ? '(Est.)' : ''}
+                </Text>
 
                 <View style={styles.priceRow}>
                     <View style={styles.priceColumn}>
@@ -122,11 +124,20 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
     const shippingHigh = stats.shipping_high_avg;
 
     // Derived prices
-    const retailLow = (terminalLow * 1.4).toFixed(2);
-    const retailHigh = (terminalHigh * 1.4).toFixed(2);
+    // Derived prices: Use real retail if available, else calc
+    const retailLow = stats.retail_low_avg > 0
+        ? stats.retail_low_avg.toFixed(2)
+        : (terminalLow * 1.4).toFixed(2);
+
+    const retailHigh = stats.retail_high_avg > 0
+        ? stats.retail_high_avg.toFixed(2)
+        : (terminalHigh * 1.4).toFixed(2);
     const totalCosts = Object.values(costs).reduce((a, b) => a + parseFloat(b), 0);
     const farmLow = (shippingLow - totalCosts).toFixed(2);
     const farmHigh = (shippingHigh - totalCosts).toFixed(2);
+
+    // Determine Retail Estimate
+    const isRetailEstimated = stats.retail_low_avg <= 0;
 
     return (
         <View style={styles.container}>
@@ -137,6 +148,7 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 lowPrice={retailLow}
                 highPrice={retailHigh}
                 bg="#d946ef"
+                isEstimated={isRetailEstimated}
             />
 
             <PriceBlock
@@ -157,6 +169,7 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 options={packageData?.shipping}
                 selectedValue={actions?.selectedPackages?.shipping}
                 onValueChange={(v) => actions?.setPackage('shipping', v)}
+                isEstimated={stats.is_shipping_estimated}
             />
 
             <PriceBlock
@@ -164,6 +177,7 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 lowPrice={farmLow}
                 highPrice={farmHigh}
                 bg="#facc15"
+                isEstimated={true}
             />
 
         </View>

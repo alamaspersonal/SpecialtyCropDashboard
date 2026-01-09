@@ -24,6 +24,7 @@ export default function DashboardScreen({ route, navigation }) {
     // Data Partitioning
     const [terminalData, setTerminalData] = useState([]);
     const [shippingData, setShippingData] = useState([]);
+    const [retailData, setRetailData] = useState([]);
     const [packageOptions, setPackageOptions] = useState({ terminal: [], shipping: [] });
     const [selectedPackages, setSelectedPackages] = useState({ terminal: '', shipping: '' });
 
@@ -60,9 +61,12 @@ export default function DashboardScreen({ route, navigation }) {
 
                 // Partition Data - Using actual market_type values from CSV
                 const tData = data.filter(d => d.market_type === 'Terminal' || !d.market_type);
-                const sData = data.filter(d => d.market_type === 'Shipping');
+                const sData = data.filter(d => d.market_type === 'Shipping' || d.market_type === 'Shipping Point');
+                const rData = data.filter(d => d.market_type === 'Retail' || d.market_type === 'Retail - Specialty Crops');
 
                 setTerminalData(tData);
+                setShippingData(sData);
+                setRetailData(rData);
                 setShippingData(sData);
 
                 // Extract Packages
@@ -129,6 +133,7 @@ export default function DashboardScreen({ route, navigation }) {
 
         const filteredTerminal = filterByTimeRange(terminalData);
         const filteredShipping = filterByTimeRange(shippingData);
+        const filteredRetail = filterByTimeRange(retailData);
 
         // Filter by selected package if set
         const getAvg = (data, userPackage, priceField) => {
@@ -145,10 +150,16 @@ export default function DashboardScreen({ route, navigation }) {
         let shippingLowAvg = getAvg(filteredShipping, selectedPackages.shipping, 'low_price');
         let shippingHighAvg = getAvg(filteredShipping, selectedPackages.shipping, 'high_price');
 
+        // Retail data
+        let retailLowAvg = getAvg(filteredRetail, null, 'low_price'); // Retail usually doesn't have package selection same way, or use default
+        let retailHighAvg = getAvg(filteredRetail, null, 'high_price');
+
         // Fallback Mock Logic if no real shipping data found
+        let isShippingEstimated = false;
         if (shippingLowAvg === 0 && terminalLowAvg > 0) {
             shippingLowAvg = terminalLowAvg * 0.6;
             shippingHighAvg = terminalHighAvg * 0.6;
+            isShippingEstimated = true;
         }
 
         return {
@@ -156,6 +167,9 @@ export default function DashboardScreen({ route, navigation }) {
             terminal_high_avg: terminalHighAvg,
             shipping_low_avg: shippingLowAvg,
             shipping_high_avg: shippingHighAvg,
+            retail_low_avg: retailLowAvg,
+            retail_high_avg: retailHighAvg,
+            is_shipping_estimated: isShippingEstimated,
             date: filters.date || 'Today',
             timeRange: timeRange
         };
