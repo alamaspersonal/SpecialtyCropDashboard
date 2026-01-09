@@ -53,14 +53,12 @@ class UnifiedCropPrice(Base):
     id = Column(Integer, primary_key=True, index=True)
     report_date = Column(DateTime, index=True)
     market_type = Column(String, index=True)  # "Terminal" or "Shipping Point"
+    district = Column(String, index=True)
     commodity = Column(String, index=True)
     variety = Column(String, index=True)
     package = Column(String, index=True)
-    grade = Column(String)
-    region = Column(String, index=True)  # market_location_name or district
     price_min = Column(Float)
     price_max = Column(Float)
-    price_avg = Column(Float)  # Pre-calculated average for easier charting
 
 def init_db():
     Base.metadata.create_all(bind=engine)

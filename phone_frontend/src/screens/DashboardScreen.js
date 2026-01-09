@@ -25,8 +25,8 @@ export default function DashboardScreen({ route, navigation }) {
     const [terminalData, setTerminalData] = useState([]);
     const [shippingData, setShippingData] = useState([]);
     const [retailData, setRetailData] = useState([]);
-    const [packageOptions, setPackageOptions] = useState({ terminal: [], shipping: [] });
-    const [selectedPackages, setSelectedPackages] = useState({ terminal: '', shipping: '' });
+    const [packageOptions, setPackageOptions] = useState({ terminal: [], shipping: [], retail: [] });
+    const [selectedPackages, setSelectedPackages] = useState({ terminal: '', shipping: '', retail: '' });
 
     // Time Range Selection
     const [timeRange, setTimeRange] = useState('daily'); // 'daily' or '7day'
@@ -67,19 +67,24 @@ export default function DashboardScreen({ route, navigation }) {
                 setTerminalData(tData);
                 setShippingData(sData);
                 setRetailData(rData);
-                setShippingData(sData);
 
                 // Extract Packages
                 const getPackages = (arr) => [...new Set(arr.map(d => d.package).filter(Boolean))].sort();
                 const tPackages = getPackages(tData);
                 const sPackages = getPackages(sData);
+                const rPackages = getPackages(rData);
 
-                setPackageOptions({ terminal: tPackages, shipping: sPackages });
+                setPackageOptions({
+                    terminal: tPackages,
+                    shipping: sPackages,
+                    retail: rPackages
+                });
 
                 // Preserve selected packages if still valid, otherwise set defaults
                 setSelectedPackages(prev => ({
                     terminal: tPackages.includes(prev.terminal) ? prev.terminal : (tPackages[0] || ''),
-                    shipping: sPackages.includes(prev.shipping) ? prev.shipping : (sPackages[0] || '')
+                    shipping: sPackages.includes(prev.shipping) ? prev.shipping : (sPackages[0] || ''),
+                    retail: rPackages.includes(prev.retail) ? prev.retail : (rPackages[0] || '')
                 }));
 
                 if (data.length > 0 && data[0].market_tone_comments) {
@@ -151,8 +156,8 @@ export default function DashboardScreen({ route, navigation }) {
         let shippingHighAvg = getAvg(filteredShipping, selectedPackages.shipping, 'high_price');
 
         // Retail data
-        let retailLowAvg = getAvg(filteredRetail, null, 'low_price'); // Retail usually doesn't have package selection same way, or use default
-        let retailHighAvg = getAvg(filteredRetail, null, 'high_price');
+        let retailLowAvg = getAvg(filteredRetail, selectedPackages.retail, 'low_price');
+        let retailHighAvg = getAvg(filteredRetail, selectedPackages.retail, 'high_price');
 
         // Fallback Mock Logic if no real shipping data found
         let isShippingEstimated = false;

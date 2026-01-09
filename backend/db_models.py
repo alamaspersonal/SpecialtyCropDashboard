@@ -30,11 +30,9 @@ class FiltersSchema(BaseModel):
     categories: List[str]
     commodities: List[str]
     varieties: List[str]
-    packages: List[str]
     item_sizes: List[str]
     districts: List[str]
     organics: List[str]
-    dates: List[str]
 
 class PriceSummary(BaseModel):
     commodity: str

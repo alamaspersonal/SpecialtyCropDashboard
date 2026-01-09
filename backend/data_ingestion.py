@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal, UnifiedCropPrice, Base
 
-DATA_DIR = "../specialty_crop_data"
+DATA_DIR = "../APP_CROP_DATA"
 
 def clean_price(price_str):
     if pd.isna(price_str) or price_str == "N/A":
@@ -50,18 +50,14 @@ def process_file(filepath, db: Session):
         # Region
         # Terminal uses 'market_location_name' (e.g. LA Terminal)
         # Shipping uses 'district' (e.g. San Joaquin Valley)
-        region = row.get('market_location_name') if pd.notna(row.get('market_location_name')) else row.get('district')
+        district = row.get('district')
         
         # Prices
         min_p = clean_price(row.get('low_price'))
         max_p = clean_price(row.get('high_price'))
+        avg_p = clean_price(row.get('wtd_avg_price'))
         
-        if min_p is None or max_p is None:
-            continue
-            
-        avg_p = (min_p + max_p) / 2
-        
-        report_dt = parse_date(row.get('report_date'))
+        report_dt = parse_date(row.get('report_date') or row.get('report_end_date'))
         if not report_dt:
             continue
 
@@ -71,11 +67,9 @@ def process_file(filepath, db: Session):
             commodity=row.get('commodity'),
             variety=variety if pd.notna(variety) and variety != "N/A" else None,
             package=package if pd.notna(package) and package != "N/A" else None,
-            grade=row.get('grade') if pd.notna(row.get('grade')) and row.get('grade') != "N/A" else None,
-            region=region if pd.notna(region) and region != "N/A" else None,
-            price_min=min_p,
-            price_max=max_p,
-            price_avg=avg_p
+            district=district if pd.notna(district) and district != "N/A" else None,
+            price_min=min_p or avg_p,
+            price_max=max_p or avg_p,
         )
         records.append(record)
         

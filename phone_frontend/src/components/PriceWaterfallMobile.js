@@ -149,6 +149,9 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 highPrice={retailHigh}
                 bg="#d946ef"
                 isEstimated={isRetailEstimated}
+                options={packageData?.retail}
+                selectedValue={actions?.selectedPackages?.retail}
+                onValueChange={(v) => actions?.setPackage('retail', v)}
             />
 
             <PriceBlock
