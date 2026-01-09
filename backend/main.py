@@ -113,6 +113,7 @@ def get_prices(
     district: Optional[str] = Query(None),
     organic: Optional[str] = Query(None),
     date: Optional[str] = Query(None),
+    days: Optional[int] = Query(None, description="Filter by last N days (e.g., 7 for weekly average)"),
     limit: int = Query(100, le=1000),
     db: Session = Depends(get_db)
 ):
@@ -131,12 +132,21 @@ def get_prices(
         query = query.filter(database.CropPrice.district == district)
     if organic:
         query = query.filter(database.CropPrice.organic == organic)
+    
+    # Date filtering: specific date OR date range
     if date:
         try:
             parsed_date = datetime.strptime(date, "%m/%d/%Y")
             query = query.filter(database.CropPrice.report_date == parsed_date)
         except ValueError:
             pass
+    elif days:
+        # Filter by last N days relative to the most recent data (not today)
+        # First, get the max date in the dataset (with current filters applied)
+        max_date_result = query.with_entities(func.max(database.CropPrice.report_date)).scalar()
+        if max_date_result:
+            cutoff_date = max_date_result - timedelta(days=days)
+            query = query.filter(database.CropPrice.report_date >= cutoff_date)
     
     return query.order_by(database.CropPrice.report_date.desc()).limit(limit).all()
 

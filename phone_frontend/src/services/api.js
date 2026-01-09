@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Replace with your computer's local IP address
-const API_URL = 'http://192.168.1.108:8000';
+const API_URL = 'http://169.233.132.123:8000';
 
 export const api = axios.create({
     baseURL: API_URL,
@@ -17,12 +17,15 @@ export const getFilters = async (currentFilters = {}) => {
     return response.data;
 };
 
-export const getPrices = async (filters = {}, limit = 50) => {
+export const getPrices = async (filters = {}, limit = 50, days = null) => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
         if (value) params.append(key, value);
     });
     params.append('limit', limit.toString());
+    if (days) {
+        params.append('days', days.toString());
+    }
     const response = await api.get(`/api/prices?${params}`);
     return response.data;
 };

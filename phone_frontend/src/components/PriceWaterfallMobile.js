@@ -79,15 +79,27 @@ const PackageSelector = ({ options, selectedValue, onValueChange, isDark }) => {
     );
 };
 
-const PriceBlock = ({ label, price, bg, options, selectedValue, onValueChange }) => {
+const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, onValueChange }) => {
     const isDark = bg === '#facc15' || bg === '#fdba74';
     const textColor = isDark ? 'black' : 'white';
+    const subTextColor = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
 
     return (
         <View style={styles.blockRow}>
             <View style={[styles.card, { backgroundColor: bg }]}>
                 <Text style={[styles.blockLabel, { color: textColor }]}>{label}</Text>
-                <Text style={[styles.blockPrice, { color: textColor }]}>${price}</Text>
+
+                <View style={styles.priceRow}>
+                    <View style={styles.priceColumn}>
+                        <Text style={[styles.priceSubLabel, { color: subTextColor }]}>Low</Text>
+                        <Text style={[styles.blockPrice, { color: textColor }]}>${lowPrice}</Text>
+                    </View>
+                    <Text style={[styles.priceDivider, { color: subTextColor }]}>–</Text>
+                    <View style={styles.priceColumn}>
+                        <Text style={[styles.priceSubLabel, { color: subTextColor }]}>High</Text>
+                        <Text style={[styles.blockPrice, { color: textColor }]}>${highPrice}</Text>
+                    </View>
+                </View>
 
                 <PackageSelector
                     options={options}
@@ -104,13 +116,17 @@ const PriceBlock = ({ label, price, bg, options, selectedValue, onValueChange })
 export default function PriceWaterfallMobile({ stats, costs, packageData, actions }) {
     if (!stats) return null;
 
-    const terminalPrice = stats.current_terminal_avg;
-    const shippingPrice = stats.current_shipping_avg;
+    const terminalLow = stats.terminal_low_avg;
+    const terminalHigh = stats.terminal_high_avg;
+    const shippingLow = stats.shipping_low_avg;
+    const shippingHigh = stats.shipping_high_avg;
 
-    // Derived
-    const retailPrice = (terminalPrice * 1.4).toFixed(2);
+    // Derived prices
+    const retailLow = (terminalLow * 1.4).toFixed(2);
+    const retailHigh = (terminalHigh * 1.4).toFixed(2);
     const totalCosts = Object.values(costs).reduce((a, b) => a + parseFloat(b), 0);
-    const farmPrice = (shippingPrice - totalCosts).toFixed(2);
+    const farmLow = (shippingLow - totalCosts).toFixed(2);
+    const farmHigh = (shippingHigh - totalCosts).toFixed(2);
 
     return (
         <View style={styles.container}>
@@ -118,13 +134,15 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
 
             <PriceBlock
                 label="National Retail"
-                price={retailPrice}
+                lowPrice={retailLow}
+                highPrice={retailHigh}
                 bg="#d946ef"
             />
 
             <PriceBlock
                 label="Terminal Market"
-                price={terminalPrice.toFixed(2)}
+                lowPrice={terminalLow.toFixed(2)}
+                highPrice={terminalHigh.toFixed(2)}
                 bg="#0ea5e9"
                 options={packageData?.terminal}
                 selectedValue={actions?.selectedPackages?.terminal}
@@ -133,7 +151,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
 
             <PriceBlock
                 label="Shipping Point"
-                price={shippingPrice.toFixed(2)}
+                lowPrice={shippingLow.toFixed(2)}
+                highPrice={shippingHigh.toFixed(2)}
                 bg="#fdba74"
                 options={packageData?.shipping}
                 selectedValue={actions?.selectedPackages?.shipping}
@@ -142,7 +161,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
 
             <PriceBlock
                 label="Reference Farm"
-                price={farmPrice}
+                lowPrice={farmLow}
+                highPrice={farmHigh}
                 bg="#facc15"
             />
 
@@ -183,14 +203,33 @@ const styles = StyleSheet.create({
     },
     blockLabel: {
         fontWeight: '600',
-        marginBottom: 4,
+        marginBottom: 8,
         fontSize: 11,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
         opacity: 0.9
     },
+    priceRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    priceColumn: {
+        alignItems: 'center',
+    },
+    priceSubLabel: {
+        fontSize: 10,
+        fontWeight: '500',
+        marginBottom: 2,
+    },
+    priceDivider: {
+        fontSize: 18,
+        fontWeight: '300',
+        marginHorizontal: 4,
+    },
     blockPrice: {
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: 'bold',
     },
     connector: {

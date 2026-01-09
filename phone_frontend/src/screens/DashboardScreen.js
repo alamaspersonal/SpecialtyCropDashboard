@@ -27,6 +27,9 @@ export default function DashboardScreen({ route, navigation }) {
     const [packageOptions, setPackageOptions] = useState({ terminal: [], shipping: [] });
     const [selectedPackages, setSelectedPackages] = useState({ terminal: '', shipping: '' });
 
+    // Time Range Selection
+    const [timeRange, setTimeRange] = useState('daily'); // 'daily' or '7day'
+
     // Costs State
     const [showCostModal, setShowCostModal] = useState(false);
     const [costs, setCosts] = useState({
@@ -43,8 +46,17 @@ export default function DashboardScreen({ route, navigation }) {
         const fetchPrices = async () => {
             setLoading(true);
             try {
+                // Determine days parameter based on timeRange
+                const daysParam = timeRange === '7day' ? 7 : timeRange === '30day' ? 30 : null;
+
+                // Prepare filters: Exclude specific date if we want a range average
+                const apiFilters = { ...filters };
+                if (daysParam) {
+                    delete apiFilters.date;
+                }
+
                 // Fetching raw prices with higher limit to get mix
-                const data = await getPrices(filters, 200);
+                const data = await getPrices(apiFilters, 500, daysParam);
                 setPriceData(data); // Keep raw fallback
 
                 // Partition Data - Using actual market_type values from CSV
@@ -61,11 +73,11 @@ export default function DashboardScreen({ route, navigation }) {
 
                 setPackageOptions({ terminal: tPackages, shipping: sPackages });
 
-                // Set Defaults (first available)
-                setSelectedPackages({
-                    terminal: tPackages[0] || '',
-                    shipping: sPackages[0] || ''
-                });
+                // Preserve selected packages if still valid, otherwise set defaults
+                setSelectedPackages(prev => ({
+                    terminal: tPackages.includes(prev.terminal) ? prev.terminal : (tPackages[0] || ''),
+                    shipping: sPackages.includes(prev.shipping) ? prev.shipping : (sPackages[0] || '')
+                }));
 
                 if (data.length > 0 && data[0].market_tone_comments) {
                     setMarketNotes(data[0].market_tone_comments);
@@ -79,7 +91,7 @@ export default function DashboardScreen({ route, navigation }) {
             }
         };
         fetchPrices();
-    }, [filters]);
+    }, [filters, timeRange]);
 
     const checkFavStatus = async () => {
         const status = await checkIsFavorite(filters.commodity);
@@ -99,28 +111,54 @@ export default function DashboardScreen({ route, navigation }) {
     const calculateStats = () => {
         if (!priceData.length) return null;
 
-        // Filter by selected package if set
-        const getAvg = (data, userPackage) => {
-            if (!data.length) return 0;
-            const filtered = userPackage ? data.filter(d => d.package === userPackage) : data;
-            if (!filtered.length) return 0; // Or fallback to all?
-            return filtered.reduce((acc, curr) => acc + (curr.low_price || 0), 0) / filtered.length;
+        // Filter data by time range
+        const filterByTimeRange = (data) => {
+            if (timeRange === 'daily') {
+                // Get the most recent date in the data
+                const dates = data.map(d => new Date(d.report_date)).filter(d => !isNaN(d));
+                if (dates.length === 0) return data;
+                const maxDate = new Date(Math.max(...dates));
+                return data.filter(d => {
+                    const itemDate = new Date(d.report_date);
+                    return itemDate.toDateString() === maxDate.toDateString();
+                });
+            } else {
+                // 7-day mode: backend already filters by last 7 days, so use all data
+                return data;
+            }
         };
 
-        const terminalAvg = getAvg(terminalData, selectedPackages.terminal);
+        const filteredTerminal = filterByTimeRange(terminalData);
+        const filteredShipping = filterByTimeRange(shippingData);
 
-        // If we have real shipping data, use it. Otherwise derive it from Real Terminal or just use derivation.
-        let shippingAvg = getAvg(shippingData, selectedPackages.shipping);
+        // Filter by selected package if set
+        const getAvg = (data, userPackage, priceField) => {
+            if (!data.length) return 0;
+            const filtered = userPackage ? data.filter(d => d.package === userPackage) : data;
+            if (!filtered.length) return 0;
+            return filtered.reduce((acc, curr) => acc + (curr[priceField] || 0), 0) / filtered.length;
+        };
 
-        // Fallback Mock Logic if no real shipping data found (common in demo data)
-        if (shippingAvg === 0 && terminalAvg > 0) {
-            shippingAvg = terminalAvg * 0.6;
+        const terminalLowAvg = getAvg(filteredTerminal, selectedPackages.terminal, 'low_price');
+        const terminalHighAvg = getAvg(filteredTerminal, selectedPackages.terminal, 'high_price');
+
+        // If we have real shipping data, use it. Otherwise derive it.
+        let shippingLowAvg = getAvg(filteredShipping, selectedPackages.shipping, 'low_price');
+        let shippingHighAvg = getAvg(filteredShipping, selectedPackages.shipping, 'high_price');
+
+        // Fallback Mock Logic if no real shipping data found
+        if (shippingLowAvg === 0 && terminalLowAvg > 0) {
+            shippingLowAvg = terminalLowAvg * 0.6;
+            shippingHighAvg = terminalHighAvg * 0.6;
         }
 
         return {
-            current_terminal_avg: terminalAvg,
-            current_shipping_avg: shippingAvg,
-            date: filters.date || 'Today'
+            terminal_low_avg: terminalLowAvg,
+            terminal_high_avg: terminalHighAvg,
+            shipping_low_avg: shippingLowAvg,
+            shipping_high_avg: shippingHighAvg,
+            date: filters.date || 'Today',
+            timeRange: timeRange
         };
     };
     const stats = calculateStats();
@@ -149,6 +187,28 @@ export default function DashboardScreen({ route, navigation }) {
                 ) : stats ? (
                     <>
                         <Text style={styles.subtitle}>{filters.commodity || 'Commodity'}</Text>
+
+                        {/* Time Range Toggle */}
+                        <View style={styles.timeRangeContainer}>
+                            <TouchableOpacity
+                                style={[styles.timeRangeBtn, timeRange === 'daily' && styles.timeRangeBtnActive]}
+                                onPress={() => setTimeRange('daily')}
+                            >
+                                <Text style={[styles.timeRangeBtnText, timeRange === 'daily' && styles.timeRangeBtnTextActive]}>Daily</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.timeRangeBtn, timeRange === '7day' && styles.timeRangeBtnActive]}
+                                onPress={() => setTimeRange('7day')}
+                            >
+                                <Text style={[styles.timeRangeBtnText, timeRange === '7day' && styles.timeRangeBtnTextActive]}>7-Day</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.timeRangeBtn, timeRange === '30day' && styles.timeRangeBtnActive]}
+                                onPress={() => setTimeRange('30day')}
+                            >
+                                <Text style={[styles.timeRangeBtnText, timeRange === '30day' && styles.timeRangeBtnTextActive]}>30-Day</Text>
+                            </TouchableOpacity>
+                        </View>
 
                         {/* Waterfall Component */}
                         <PriceWaterfallMobile
@@ -229,5 +289,30 @@ const styles = StyleSheet.create({
     inputLabel: { fontSize: 16, textTransform: 'capitalize', color: '#64748b' },
     input: { backgroundColor: '#f1f5f9', width: 100, padding: 8, borderRadius: 8, textAlign: 'right' },
     closeButton: { backgroundColor: '#0ea5e9', padding: 16, borderRadius: 12, marginTop: 12, alignItems: 'center' },
-    closeButtonText: { color: 'white', fontWeight: 'bold' }
+    closeButtonText: { color: 'white', fontWeight: 'bold' },
+
+    // Time Range Toggle
+    timeRangeContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginBottom: 16,
+        gap: 8,
+    },
+    timeRangeBtn: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        backgroundColor: '#e2e8f0',
+    },
+    timeRangeBtnActive: {
+        backgroundColor: '#0ea5e9',
+    },
+    timeRangeBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#64748b',
+    },
+    timeRangeBtnTextActive: {
+        color: 'white',
+    },
 });
