@@ -17,10 +17,8 @@ export default function FiltersScreen({ navigation }) {
         commodity: '',
         variety: '',
         category: '',
-        package: '',
         district: '',
         organic: '',
-        date: '',
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -31,9 +29,6 @@ export default function FiltersScreen({ navigation }) {
                 const data = await getFilters(selectedFilters);
                 setFilters(data);
 
-                if (!selectedFilters.date && data.dates && data.dates.length > 0) {
-                    setSelectedFilters(prev => ({ ...prev, date: data.dates[0] }));
-                }
                 setLoading(false);
             } catch (err) {
                 console.error('Error fetching filters:', err);
@@ -83,13 +78,6 @@ export default function FiltersScreen({ navigation }) {
                 {filters && (
                     <View style={styles.filtersContainer}>
                         <FilterDropdown
-                            label="Date"
-                            options={filters.dates}
-                            value={selectedFilters.date}
-                            onChange={(v) => handleFilterChange('date', v)}
-                            color="#2563eb"
-                        />
-                        <FilterDropdown
                             label="Category"
                             options={filters.categories}
                             value={selectedFilters.category}
@@ -109,13 +97,6 @@ export default function FiltersScreen({ navigation }) {
                             value={selectedFilters.variety}
                             onChange={(v) => handleFilterChange('variety', v)}
                             color="#eab308"
-                        />
-                        <FilterDropdown
-                            label="Package"
-                            options={filters.packages}
-                            value={selectedFilters.package}
-                            onChange={(v) => handleFilterChange('package', v)}
-                            color="#9333ea"
                         />
                         <FilterDropdown
                             label="District"

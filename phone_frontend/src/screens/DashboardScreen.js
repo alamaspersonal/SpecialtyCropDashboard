@@ -49,11 +49,10 @@ export default function DashboardScreen({ route, navigation }) {
                 // Determine days parameter based on timeRange
                 const daysParam = timeRange === '7day' ? 7 : timeRange === '30day' ? 30 : null;
 
-                // Prepare filters: Exclude specific date if we want a range average
+                // Prepare filters: Always exclude specific date to rely on latest data or ranges
                 const apiFilters = { ...filters };
-                if (daysParam) {
-                    delete apiFilters.date;
-                }
+                delete apiFilters.date;
+                delete apiFilters.package;
 
                 // Fetching raw prices with higher limit to get mix
                 const data = await getPrices(apiFilters, 500, daysParam);
