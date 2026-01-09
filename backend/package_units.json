@@ -1,0 +1,366 @@
+[
+  {
+    "crop": "Apples",
+    "package_size": "cartons tray pack",
+    "weight_lbs": 40,
+    "weight_kg": 18.1,
+    "source": "USDA Handbook 697, Table 6: Carton, tray or cell pack"
+  },
+  {
+    "crop": "Apples",
+    "package_size": "bushel cartons",
+    "weight_lbs": 40,
+    "weight_kg": 18.1,
+    "source": "USDA Handbook 697, Table 6: Bushel basket or carton"
+  },
+  {
+    "crop": "Apricots",
+    "package_size": "cartons 2 layer tray pack",
+    "weight_lbs": 24,
+    "weight_kg": 10.9,
+    "source": "USDA Handbook 697, Table 6: Lug, loose (Closest standard for loose/tray pack)"
+  },
+  {
+    "crop": "Asparagus",
+    "package_size": "11 lb cartons bunched",
+    "weight_lbs": 11,
+    "weight_kg": 5.0,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Avocados",
+    "package_size": "cartons 2 layer",
+    "weight_lbs": 26,
+    "weight_kg": 11.8,
+    "source": "USDA Handbook 697, Table 6: Flat or carton, 2 layer"
+  },
+  {
+    "crop": "Avocados",
+    "package_size": "lug",
+    "weight_lbs": 13.5,
+    "weight_kg": 6.1,
+    "source": "USDA Handbook 697, Table 6: Lug (Range 12-15 lbs, avg 13.5)"
+  },
+  {
+    "crop": "Bananas",
+    "package_size": "40 lb cartons",
+    "weight_lbs": 40,
+    "weight_kg": 18.1,
+    "source": "Explicit Report Weight / USDA Standard"
+  },
+  {
+    "crop": "Beans (Snap/Green)",
+    "package_size": "bushel cartons",
+    "weight_lbs": 30,
+    "weight_kg": 13.6,
+    "source": "USDA Handbook 697, Table 6: Bushel (Range 28-32 lbs)"
+  },
+  {
+    "crop": "Blackberries",
+    "package_size": "flats 12 6-oz cups",
+    "weight_lbs": 4.5,
+    "weight_kg": 2.0,
+    "source": "Derived: 12 * 6oz = 72oz = 4.5 lbs"
+  },
+  {
+    "crop": "Blueberries",
+    "package_size": "flats 12 1-pint cups",
+    "weight_lbs": 11,
+    "weight_kg": 5.0,
+    "source": "Derived: 1 pint approx 0.75-1 lb depending on density, standard flat ~11-12 lbs"
+  },
+  {
+    "crop": "Broccoli",
+    "package_size": "cartons",
+    "weight_lbs": 23,
+    "weight_kg": 10.4,
+    "source": "USDA Handbook 697, Table 6: Carton"
+  },
+  {
+    "crop": "Cabbage",
+    "package_size": "50 lb cartons",
+    "weight_lbs": 50,
+    "weight_kg": 22.7,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Cabbage",
+    "package_size": "1 3/4 bushel crates",
+    "weight_lbs": 50,
+    "weight_kg": 22.7,
+    "source": "USDA Handbook 697, Table 6: Wirebound crate (Standard cabbage crate size)"
+  },
+  {
+    "crop": "Cantaloupes",
+    "package_size": "1/2 cartons",
+    "weight_lbs": 40,
+    "weight_kg": 18.1,
+    "source": "USDA Handbook 697, Table 6: 1/2 carton or crate"
+  },
+  {
+    "crop": "Carrots",
+    "package_size": "sacks 48 1-lb",
+    "weight_lbs": 48,
+    "weight_kg": 21.8,
+    "source": "USDA Handbook 697, Table 6: Sacks, 48 1-pound"
+  },
+  {
+    "crop": "Cauliflower",
+    "package_size": "cartons film wrapped",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "source": "USDA Handbook 697, Table 6: Carton, filmwrapped trimmed"
+  },
+  {
+    "crop": "Celery",
+    "package_size": "cartons",
+    "weight_lbs": 60,
+    "weight_kg": 27.2,
+    "source": "USDA Handbook 697, Table 6: Carton or crate"
+  },
+  {
+    "crop": "Cherries",
+    "package_size": "16 lb cartons",
+    "weight_lbs": 16,
+    "weight_kg": 7.3,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Cherries",
+    "package_size": "18 lb cartons",
+    "weight_lbs": 18,
+    "weight_kg": 8.2,
+    "source": "USDA Handbook 697, Table 6: Lug, California"
+  },
+  {
+    "crop": "Corn, Sweet",
+    "package_size": "cartons",
+    "weight_lbs": 50,
+    "weight_kg": 22.7,
+    "source": "USDA Handbook 697, Table 6: Carton"
+  },
+  {
+    "crop": "Corn, Sweet",
+    "package_size": "wirebound crates",
+    "weight_lbs": 42,
+    "weight_kg": 19.1,
+    "source": "USDA Handbook 697, Table 6: Wirebound crate"
+  },
+  {
+    "crop": "Cranberries",
+    "package_size": "cartons",
+    "weight_lbs": 18,
+    "weight_kg": 8.2,
+    "source": "USDA Handbook 697, Table 6: Carton, 24 12-ounce filmbags"
+  },
+  {
+    "crop": "Cucumbers",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 55,
+    "weight_kg": 24.9,
+    "source": "USDA Handbook 697, Table 6: 1-1/9-bushel, carton/crate"
+  },
+  {
+    "crop": "Eggplant",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 33,
+    "weight_kg": 15.0,
+    "source": "USDA Handbook 697, Table 6: 1-1/9-bushel, carton/crate"
+  },
+  {
+    "crop": "Grapes",
+    "package_size": "18 lb containers",
+    "weight_lbs": 18,
+    "weight_kg": 8.2,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Grapes",
+    "package_size": "19 lb containers",
+    "weight_lbs": 19,
+    "weight_kg": 8.6,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Honeydews",
+    "package_size": "2/3 cartons",
+    "weight_lbs": 30,
+    "weight_kg": 13.6,
+    "source": "USDA Handbook 697, Table 6: 2/3 carton"
+  },
+  {
+    "crop": "Lemons",
+    "package_size": "cartons",
+    "weight_lbs": 38,
+    "weight_kg": 17.2,
+    "source": "USDA Handbook 697, Table 6: Carton (California/Arizona)"
+  },
+  {
+    "crop": "Lettuce (Iceberg)",
+    "package_size": "cartons",
+    "weight_lbs": 50,
+    "weight_kg": 22.7,
+    "source": "USDA Handbook 697, Table 6: Carton"
+  },
+  {
+    "crop": "Limes",
+    "package_size": "40 lb cartons",
+    "weight_lbs": 38,
+    "weight_kg": 17.2,
+    "source": "USDA Handbook 697, Table 6: Carton (Standard is 38 lbs)"
+  },
+  {
+    "crop": "Mangoes",
+    "package_size": "flats 1 layer",
+    "weight_lbs": 10.5,
+    "weight_kg": 4.8,
+    "source": "USDA Handbook 697, Table 6: Lug (Mexico) 10-11 lbs"
+  },
+  {
+    "crop": "Nectarines",
+    "package_size": "25 lb cartons loose",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Okra",
+    "package_size": "1/2 bushel cartons",
+    "weight_lbs": 15,
+    "weight_kg": 6.8,
+    "source": "USDA Handbook 697, Table 6: 1/2 bushel is approx 15 lbs (Bushel = 30 lbs)"
+  },
+  {
+    "crop": "Onions, Dry",
+    "package_size": "50 lb sacks",
+    "weight_lbs": 50,
+    "weight_kg": 22.7,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Onions, Green",
+    "package_size": "cartons bunched",
+    "weight_lbs": 13,
+    "weight_kg": 5.9,
+    "source": "USDA Handbook 697, Table 6: Carton"
+  },
+  {
+    "crop": "Oranges",
+    "package_size": "7/10 bushel cartons",
+    "weight_lbs": 42,
+    "weight_kg": 19.1,
+    "source": "USDA Handbook 697, Table 6: 7/10-bushel carton (Texas/Florida)"
+  },
+  {
+    "crop": "Papayas",
+    "package_size": "cartons",
+    "weight_lbs": 10,
+    "weight_kg": 4.5,
+    "source": "USDA Handbook 697, Table 6: Carton"
+  },
+  {
+    "crop": "Peaches",
+    "package_size": "25 lb cartons loose",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Pears",
+    "package_size": "4/5 bushel cartons",
+    "weight_lbs": 45,
+    "weight_kg": 20.4,
+    "source": "USDA Handbook 697, Table 6: 4/5-bushel carton (Northwest/California)"
+  },
+  {
+    "crop": "Peppers, Bell",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 28,
+    "weight_kg": 12.7,
+    "source": "USDA Handbook 697, Table 6: Bushel, 1-1/9-bushel carton/crate"
+  },
+  {
+    "crop": "Pineapples",
+    "package_size": "cartons 1 layer",
+    "weight_lbs": 40,
+    "weight_kg": 18.1,
+    "source": "USDA Handbook 697, Table 6: Carton"
+  },
+  {
+    "crop": "Plums",
+    "package_size": "28 lb cartons loose",
+    "weight_lbs": 28,
+    "weight_kg": 12.7,
+    "source": "Explicit Report Weight / USDA Table 6 (1/2 bushel carton = 28 lbs)"
+  },
+  {
+    "crop": "Potatoes",
+    "package_size": "50 lb cartons",
+    "weight_lbs": 50,
+    "weight_kg": 22.7,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Raspberries",
+    "package_size": "flats 12 6-oz cups",
+    "weight_lbs": 4.5,
+    "weight_kg": 2.0,
+    "source": "Derived: 12 * 6oz = 4.5 lbs"
+  },
+  {
+    "crop": "Spinach",
+    "package_size": "cartons bunched",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "source": "USDA Handbook 697, Table 6: Bushel"
+  },
+  {
+    "crop": "Squash",
+    "package_size": "1/2 or 5/9 bushel cartons",
+    "weight_lbs": 21,
+    "weight_kg": 9.5,
+    "source": "Derived: Half of standard Squash Bushel (42 lbs)"
+  },
+  {
+    "crop": "Strawberries",
+    "package_size": "flats 8 1-lb containers",
+    "weight_lbs": 8,
+    "weight_kg": 3.6,
+    "source": "Explicit Report Weight"
+  },
+  {
+    "crop": "Strawberries",
+    "package_size": "flats 12 1-pint baskets",
+    "weight_lbs": 12,
+    "weight_kg": 5.4,
+    "source": "USDA Handbook 697, Table 6: 12, 1-pint"
+  },
+  {
+    "crop": "Sweet Potatoes",
+    "package_size": "40 lb cartons",
+    "weight_lbs": 40,
+    "weight_kg": 18.1,
+    "source": "Explicit Report Weight / USDA Table 6: Carton"
+  },
+  {
+    "crop": "Tomatoes",
+    "package_size": "25 lb cartons",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "source": "Explicit Report Weight / USDA Table 6: Carton"
+  },
+  {
+    "crop": "Watermelons",
+    "package_size": "cartons",
+    "weight_lbs": 85,
+    "weight_kg": 38.6,
+    "source": "USDA Handbook 697, Table 6: Carton"
+  },
+  {
+    "crop": "Watermelons",
+    "package_size": "bins",
+    "weight_lbs": 1050,
+    "weight_kg": 476.3,
+    "source": "USDA Handbook 697, Table 6: Bin"
+  }
+]

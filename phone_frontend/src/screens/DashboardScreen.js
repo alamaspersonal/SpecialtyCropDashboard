@@ -156,8 +156,8 @@ export default function DashboardScreen({ route, navigation }) {
         let shippingHighAvg = getAvg(filteredShipping, selectedPackages.shipping, 'high_price');
 
         // Retail data
-        let retailLowAvg = getAvg(filteredRetail, selectedPackages.retail, 'low_price');
-        let retailHighAvg = getAvg(filteredRetail, selectedPackages.retail, 'high_price');
+        let retailLowAvg = getAvg(filteredRetail, selectedPackages.retail, 'wtd_avg_price');
+        let retailHighAvg = getAvg(filteredRetail, selectedPackages.retail, 'wtd_avg_price');
 
         // Fallback Mock Logic if no real shipping data found
         let isShippingEstimated = false;

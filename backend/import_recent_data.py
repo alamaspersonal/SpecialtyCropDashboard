@@ -66,8 +66,9 @@ def import_data():
                     package=row.get('package') or row.get('pkg') or row.get('size'),
                     item_size=row.get('item_size'),
                     organic=row.get('organic'),
-                    low_price=parse_float(row.get('low_price')) or parse_float(row.get('wtd_avg_price')),
+                    low_price=parse_float(row.get('low_price')),
                     high_price=parse_float(row.get('high_price')),
+                    wtd_avg_price=parse_float(row.get('wtd_avg_price')),
                     market_tone_comments=row.get('market_tone_comments'),
                 )
                 batch.append(crop)

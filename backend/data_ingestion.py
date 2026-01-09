@@ -5,10 +5,11 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal, UnifiedCropPrice, Base
 
-DATA_DIR = "../APP_CROP_DATA"
+# Path to the data directory (relative to backend/)
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "APP_CROP_DATA"))
 
 def clean_price(price_str):
-    if pd.isna(price_str) or price_str == "N/A":
+    if pd.isna(price_str) or price_str == "N/A":   
         return None
     try:
         return float(price_str)
@@ -68,8 +69,9 @@ def process_file(filepath, db: Session):
             variety=variety if pd.notna(variety) and variety != "N/A" else None,
             package=package if pd.notna(package) and package != "N/A" else None,
             district=district if pd.notna(district) and district != "N/A" else None,
-            price_min=min_p or avg_p,
-            price_max=max_p or avg_p,
+            price_min=min_p,
+            price_max=max_p,
+            price_retail=avg_p,
         )
         records.append(record)
         
@@ -91,6 +93,7 @@ def main():
     print("Cleared UnifiedCropPrice table.")
 
     csv_files = glob.glob(os.path.join(DATA_DIR, "*.csv"))
+    print(f"Found {len(csv_files)} files in {DATA_DIR}")
     for csv_file in csv_files:
         process_file(csv_file, db)
     

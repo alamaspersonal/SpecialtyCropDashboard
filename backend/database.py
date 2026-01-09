@@ -43,6 +43,7 @@ class CropPrice(Base):
     high_price = Column(Float, nullable=True)
     mostly_low_price = Column(Float, nullable=True)
     mostly_high_price = Column(Float, nullable=True)
+    wtd_avg_price = Column(Float, nullable=True)
     
     # Notes
     market_tone_comments = Column(Text, nullable=True)
@@ -59,6 +60,7 @@ class UnifiedCropPrice(Base):
     package = Column(String, index=True)
     price_min = Column(Float)
     price_max = Column(Float)
+    price_retail = Column(Float)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
