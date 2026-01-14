@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Environment files (contain API keys)
+.env
+.env.local
+*.env
+
+# Data files
+*.csv
+*.db
+
+# OS files
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
