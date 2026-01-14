@@ -20,6 +20,8 @@ import { supabase } from './supabase';
  */
 export const getFilters = async (currentFilters = {}) => {
     try {
+        console.log('[DEBUG] getFilters called with:', currentFilters);
+        
         // Build query with current filters applied
         let query = supabase.from('CropPrice').select('category, commodity, variety, package, district, organic');
 
@@ -41,6 +43,8 @@ export const getFilters = async (currentFilters = {}) => {
         }
 
         const { data, error } = await query.limit(5000);
+        
+        console.log('[DEBUG] Supabase response - data length:', data?.length, 'error:', error);
 
         if (error) throw error;
 
@@ -52,7 +56,7 @@ export const getFilters = async (currentFilters = {}) => {
             return [...new Set(values)].sort();
         };
 
-        return {
+        const result = {
             categories: extractUnique('category'),
             commodities: extractUnique('commodity'),
             varieties: extractUnique('variety'),
@@ -60,6 +64,14 @@ export const getFilters = async (currentFilters = {}) => {
             districts: extractUnique('district'),
             organics: extractUnique('organic'),
         };
+        
+        console.log('[DEBUG] getFilters result:', {
+            categoriesCount: result.categories.length,
+            commoditiesCount: result.commodities.length,
+            varietiesCount: result.varieties.length
+        });
+        
+        return result;
     } catch (error) {
         console.error('Error fetching filters:', error);
         throw error;

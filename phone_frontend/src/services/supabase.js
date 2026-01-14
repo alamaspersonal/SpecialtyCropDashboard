@@ -14,6 +14,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_KEY;
 
+console.log('[DEBUG] Supabase URL:', supabaseUrl);
+console.log('[DEBUG] Supabase Key exists:', !!supabaseAnonKey);
+
 if (!supabaseUrl || !supabaseAnonKey) {
     console.warn('Supabase credentials not found in environment variables');
 }
