@@ -1392,6 +1392,14 @@
     "units": null
   },
   {
+    "crop": "Strawberries",
+    "package_size": "flats 4 2-lb containers",
+    "weight_lbs": 8,
+    "weight_kg": 3.6,
+    "source": "Explicit Report Weight",
+    "units": null
+  },
+  {
     "crop": "Sweet Potatoes",
     "package_size": "40 lb cartons",
     "weight_lbs": 40,

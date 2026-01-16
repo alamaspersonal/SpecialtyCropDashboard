@@ -84,14 +84,23 @@ const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, on
     const textColor = isDark ? 'black' : 'white';
     const subTextColor = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
 
-    // Calculate price per lb or per unit
+    // Calculate price per lb or per unit (low and high)
     const pricePerUnit = (() => {
-        const avgPrice = (parseFloat(lowPrice) + parseFloat(highPrice)) / 2;
+        const low = parseFloat(lowPrice) || 0;
+        const high = parseFloat(highPrice) || 0;
         if (weightLbs && weightLbs > 0) {
-            return { value: (avgPrice / weightLbs).toFixed(2), unit: 'lb' };
+            return { 
+                low: (low / weightLbs).toFixed(2), 
+                high: (high / weightLbs).toFixed(2), 
+                unit: 'lb' 
+            };
         }
         if (units && units > 0) {
-            return { value: (avgPrice / units).toFixed(2), unit: 'unit' };
+            return { 
+                low: (low / units).toFixed(2), 
+                high: (high / units).toFixed(2), 
+                unit: 'unit' 
+            };
         }
         return null;
     })();
@@ -118,7 +127,7 @@ const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, on
                 {/* Price per unit row */}
                 {pricePerUnit && (
                     <Text style={[styles.pricePerUnit, { color: subTextColor }]}>
-                        ${pricePerUnit.value}/{pricePerUnit.unit}
+                        ${pricePerUnit.low} – ${pricePerUnit.high}/{pricePerUnit.unit}
                     </Text>
                 )}
 
@@ -137,26 +146,28 @@ const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, on
 export default function PriceWaterfallMobile({ stats, costs, packageData, actions, weightData }) {
     if (!stats) return null;
 
-    const terminalLow = stats.terminal_low_avg;
-    const terminalHigh = stats.terminal_high_avg;
-    const shippingLow = stats.shipping_low_avg;
-    const shippingHigh = stats.shipping_high_avg;
+    // Helper to safely format numbers
+    const formatPrice = (val) => (val ?? 0).toFixed(2);
 
-    // Derived prices
+    const terminalLow = stats.terminal_low_avg ?? 0;
+    const terminalHigh = stats.terminal_high_avg ?? 0;
+    const shippingLow = stats.shipping_low_avg ?? 0;
+    const shippingHigh = stats.shipping_high_avg ?? 0;
+
     // Derived prices: Use real retail if available, else calc
     const retailLow = stats.retail_low_avg > 0
-        ? stats.retail_low_avg.toFixed(2)
-        : (terminalLow * 1.4).toFixed(2);
+        ? formatPrice(stats.retail_low_avg)
+        : formatPrice(terminalLow * 1.4);
 
     const retailHigh = stats.retail_high_avg > 0
-        ? stats.retail_high_avg.toFixed(2)
-        : (terminalHigh * 1.4).toFixed(2);
-    const totalCosts = Object.values(costs).reduce((a, b) => a + parseFloat(b), 0);
-    const farmLow = (shippingLow - totalCosts).toFixed(2);
-    const farmHigh = (shippingHigh - totalCosts).toFixed(2);
+        ? formatPrice(stats.retail_high_avg)
+        : formatPrice(terminalHigh * 1.4);
+    const totalCosts = Object.values(costs).reduce((a, b) => a + parseFloat(b || 0), 0);
+    const farmLow = formatPrice(shippingLow - totalCosts);
+    const farmHigh = formatPrice(shippingHigh - totalCosts);
 
     // Determine Retail Estimate
-    const isRetailEstimated = stats.retail_low_avg <= 0;
+    const isRetailEstimated = (stats.retail_low_avg ?? 0) <= 0;
 
     return (
         <View style={styles.container}>
@@ -177,8 +188,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
 
             <PriceBlock
                 label="Terminal Market"
-                lowPrice={terminalLow.toFixed(2)}
-                highPrice={terminalHigh.toFixed(2)}
+                lowPrice={formatPrice(terminalLow)}
+                highPrice={formatPrice(terminalHigh)}
                 bg="#0ea5e9"
                 options={packageData?.terminal}
                 selectedValue={actions?.selectedPackages?.terminal}
@@ -189,8 +200,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
 
             <PriceBlock
                 label="Shipping Point"
-                lowPrice={shippingLow.toFixed(2)}
-                highPrice={shippingHigh.toFixed(2)}
+                lowPrice={formatPrice(shippingLow)}
+                highPrice={formatPrice(shippingHigh)}
                 bg="#fdba74"
                 options={packageData?.shipping}
                 selectedValue={actions?.selectedPackages?.shipping}
