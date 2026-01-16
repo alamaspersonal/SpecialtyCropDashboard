@@ -9,8 +9,8 @@ import pandas as pd
 from datetime import datetime
 
 
-# Path to the data directory (relative to backend_update/)
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "APP_CROP_DATA"))
+# Path to the data directory (local to backend_update/)
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "APP_CROP_DATA"))
 
 
 def clean_price(price_val):
@@ -42,7 +42,7 @@ def format_for_crop_price(df):
     
     Columns matching Supabase schema: report_date, market_type, market_location_name, 
              district, category, commodity, variety, package, organic,
-             low_price, high_price
+             low_price, high_price, wtd_avg_price
     """
     records = []
     
@@ -70,6 +70,7 @@ def format_for_crop_price(df):
             'organic': row.get('organic') if pd.notna(row.get('organic')) else None,
             'low_price': clean_price(row.get('low_price')),
             'high_price': clean_price(row.get('high_price')),
+            'wtd_avg_price': clean_price(row.get('wtd_avg_price')),  # For retail data
         }
         records.append(record)
     

@@ -70,14 +70,21 @@ export default function DashboardScreen({ route, navigation }) {
                 delete apiFilters.date;
                 delete apiFilters.package;
 
+                console.log('[DEBUG] Fetching prices with:', { filters: apiFilters, limit: 500, daysParam, timeRange });
+
                 // Fetching raw prices with higher limit to get mix
                 const data = await getPrices(apiFilters, 500, daysParam);
+                console.log('[DEBUG] Received data length:', data?.length);
+                console.log('[DEBUG] Sample data:', data?.slice(0, 3));
+                
                 setPriceData(data); // Keep raw fallback
 
                 // Partition Data - Using actual market_type values from CSV
                 const tData = data.filter(d => d.market_type === 'Terminal' || !d.market_type);
                 const sData = data.filter(d => d.market_type === 'Shipping' || d.market_type === 'Shipping Point');
                 const rData = data.filter(d => d.market_type === 'Retail' || d.market_type === 'Retail - Specialty Crops');
+
+                console.log('[DEBUG] Partitioned data - Terminal:', tData.length, 'Shipping:', sData.length, 'Retail:', rData.length);
 
                 setTerminalData(tData);
                 setShippingData(sData);
@@ -198,9 +205,18 @@ export default function DashboardScreen({ route, navigation }) {
         let shippingLowAvg = getAvg(filteredShipping, selectedPackages.shipping, 'low_price');
         let shippingHighAvg = getAvg(filteredShipping, selectedPackages.shipping, 'high_price');
 
-        // Retail data
+        // Retail data - use wtd_avg_price if available, otherwise use low/high prices
+        // Try wtd_avg_price first (retail-specific field)
         let retailLowAvg = getAvg(filteredRetail, selectedPackages.retail, 'wtd_avg_price');
         let retailHighAvg = getAvg(filteredRetail, selectedPackages.retail, 'wtd_avg_price');
+        
+        // Fall back to low_price/high_price if wtd_avg_price is not available
+        if (retailLowAvg === 0) {
+            retailLowAvg = getAvg(filteredRetail, selectedPackages.retail, 'low_price');
+            retailHighAvg = getAvg(filteredRetail, selectedPackages.retail, 'high_price');
+        }
+        
+        console.log('[DEBUG] Retail data - count:', filteredRetail.length, 'lowAvg:', retailLowAvg, 'highAvg:', retailHighAvg);
 
         // Fallback Mock Logic if no real shipping data found
         let isShippingEstimated = false;

@@ -1393,7 +1393,15 @@
   },
   {
     "crop": "Strawberries",
-    "package_size": "flats 4 2-lb containers",
+    "package_size": "flats 4 1-lb containers with lids",
+    "weight_lbs": 4,
+    "weight_kg": 1.8,
+    "source": "Explicit Report Weight",
+    "units": null
+  },
+  {
+    "crop": "Strawberries",
+    "package_size": "flats 4 2-lb containers with lids",
     "weight_lbs": 8,
     "weight_kg": 3.6,
     "source": "Explicit Report Weight",

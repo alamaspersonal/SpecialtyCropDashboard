@@ -89,6 +89,8 @@ export const getFilters = async (currentFilters = {}) => {
  */
 export const getPrices = async (filters = {}, limit = 100, days = null) => {
     try {
+        console.log('[DEBUG supabaseApi] getPrices called with:', { filters, limit, days });
+        
         let query = supabase
             .from('CropPrice')
             .select('*')
@@ -119,10 +121,45 @@ export const getPrices = async (filters = {}, limit = 100, days = null) => {
         if (days) {
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - days);
-            query = query.gte('report_date', cutoffDate.toISOString());
+            const cutoffISO = cutoffDate.toISOString();
+            console.log('[DEBUG supabaseApi] Date filter - days:', days, 'cutoff:', cutoffISO);
+            query = query.gte('report_date', cutoffISO);
         }
 
-        const { data, error } = await query;
+        let { data, error } = await query;
+        
+        console.log('[DEBUG supabaseApi] Query result - data length:', data?.length, 'error:', error);
+        
+        // FALLBACK: If date filter returns no data, retry without date filter
+        // This handles cases where database has stale data
+        if (days && (!data || data.length === 0) && !error) {
+            console.log('[DEBUG supabaseApi] No data in timeframe, falling back to latest available data');
+            
+            // Rebuild query without date filter
+            let fallbackQuery = supabase
+                .from('CropPrice')
+                .select('*')
+                .order('report_date', { ascending: false })
+                .limit(limit);
+            
+            // Re-apply commodity filters
+            if (filters.commodity) fallbackQuery = fallbackQuery.eq('commodity', filters.commodity);
+            if (filters.variety) fallbackQuery = fallbackQuery.eq('variety', filters.variety);
+            if (filters.category) fallbackQuery = fallbackQuery.eq('category', filters.category);
+            if (filters.package) fallbackQuery = fallbackQuery.eq('package', filters.package);
+            if (filters.district) fallbackQuery = fallbackQuery.eq('district', filters.district);
+            if (filters.organic) fallbackQuery = fallbackQuery.eq('organic', filters.organic);
+            
+            const fallbackResult = await fallbackQuery;
+            data = fallbackResult.data;
+            error = fallbackResult.error;
+            console.log('[DEBUG supabaseApi] Fallback result - data length:', data?.length);
+        }
+        
+        if (data?.length > 0) {
+            console.log('[DEBUG supabaseApi] Date range in data:', 
+                data[data.length - 1]?.report_date, 'to', data[0]?.report_date);
+        }
 
         if (error) throw error;
         return data || [];

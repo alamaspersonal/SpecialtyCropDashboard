@@ -1,6 +1,6 @@
 """
 Update the weight_lbs, weight_kgs, and units columns in Supabase UnifiedCropPrice table
-based on package_units.json mappings.
+based on package_units.json mappings, with package_guess.json as fallback.
 """
 import json
 import os
@@ -14,22 +14,45 @@ url = os.getenv("EXPO_PUBLIC_SUPABASE_URL")
 key = os.getenv("EXPO_PUBLIC_SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
-# Load package_units.json
+# Load package_units.json (primary source)
 with open("package_units.json", "r") as f:
     package_units = json.load(f)
 
-# Create lookup dictionary: (commodity.lower(), package.lower()) -> (weight_lbs, weight_kg, units)
+# Load package_guess.json (fallback source) if it exists
+package_guesses = []
+if os.path.exists("package_guess.json"):
+    with open("package_guess.json", "r") as f:
+        package_guesses = json.load(f)
+    print(f"Loaded package_guess.json with {len(package_guesses)} entries")
+
+# Create lookup dictionary: (commodity.lower(), package.lower()) -> (weight_lbs, weight_kg, units, source)
 lookup = {}
+
+# Add primary package_units first
 for entry in package_units:
     crop = entry["crop"].lower()
     pkg = entry["package_size"].lower()
     lookup[(crop, pkg)] = (
         entry.get("weight_lbs"),
         entry.get("weight_kg"),
-        entry.get("units")
+        entry.get("units"),
+        "package_units.json"
     )
 
-print(f"Loaded {len(lookup)} package weight mappings")
+# Add guesses as fallback (won't overwrite existing)
+for entry in package_guesses:
+    crop = entry["crop"].lower()
+    pkg = entry["package_size"].lower()
+    key = (crop, pkg)
+    if key not in lookup:
+        lookup[key] = (
+            entry.get("weight_lbs"),
+            entry.get("weight_kg"),
+            entry.get("units"),
+            entry.get("source", "package_guess.json")
+        )
+
+print(f"Loaded {len(lookup)} total package weight mappings")
 
 # Fetch all UnifiedCropPrice rows
 print("\nFetching UnifiedCropPrice rows...")
@@ -49,7 +72,7 @@ for row in response.data:
     # Try exact match first
     key = (commodity, package)
     if key in lookup:
-        weight_lbs, weight_kg, units = lookup[key]
+        weight_lbs, weight_kg, units, source = lookup[key]
         updates.append({
             "id": row_id,
             "weight_lbs": weight_lbs,
@@ -59,7 +82,7 @@ for row in response.data:
     else:
         # Try fuzzy match - check if commodity contains or is contained in crop name
         matched = False
-        for (crop, pkg), (w_lbs, w_kg, u) in lookup.items():
+        for (crop, pkg), (w_lbs, w_kg, u, src) in lookup.items():
             # Check commodity match (partial)
             commodity_match = crop in commodity or commodity in crop
             # Check package match (exact or partial)
