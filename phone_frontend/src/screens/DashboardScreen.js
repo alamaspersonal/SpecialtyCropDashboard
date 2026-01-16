@@ -14,6 +14,20 @@ import { getPrices } from '../services/api';
 import PriceWaterfallMobile from '../components/PriceWaterfallMobile';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../services/favorites';
 
+// Package weight lookup (simplified - ideally fetch from backend)
+const PACKAGE_WEIGHTS = {
+    // Common package weights
+    "25 lb cartons": { weight_lbs: 25, units: null },
+    "50 lb cartons": { weight_lbs: 50, units: null },
+    "40 lb cartons": { weight_lbs: 40, units: null },
+    "30 lb cartons": { weight_lbs: 30, units: null },
+    "cartons": { weight_lbs: 25, units: null },
+    "bushel cartons": { weight_lbs: 30, units: null },
+    "1 1/9 bushel cartons": { weight_lbs: 30, units: null },
+    "flats 12 1-pint baskets": { weight_lbs: 12, units: null },
+    "flats 8 1-lb containers": { weight_lbs: 8, units: null },
+};
+
 export default function DashboardScreen({ route, navigation }) {
     const { filters } = route.params;
     const [priceData, setPriceData] = useState([]);
@@ -27,6 +41,7 @@ export default function DashboardScreen({ route, navigation }) {
     const [retailData, setRetailData] = useState([]);
     const [packageOptions, setPackageOptions] = useState({ terminal: [], shipping: [], retail: [] });
     const [selectedPackages, setSelectedPackages] = useState({ terminal: '', shipping: '', retail: '' });
+    const [weightData, setWeightData] = useState({ terminal: null, shipping: null, retail: null });
 
     // Time Range Selection
     const [timeRange, setTimeRange] = useState('daily'); // 'daily' or '7day'
@@ -100,6 +115,34 @@ export default function DashboardScreen({ route, navigation }) {
         };
         fetchPrices();
     }, [filters, timeRange]);
+
+    // Update weightData when selected packages change
+    useEffect(() => {
+        const lookupWeight = (pkg) => {
+            if (!pkg) return null;
+            // Try exact match
+            if (PACKAGE_WEIGHTS[pkg]) return PACKAGE_WEIGHTS[pkg];
+            // Try partial match
+            for (const [key, val] of Object.entries(PACKAGE_WEIGHTS)) {
+                if (pkg.toLowerCase().includes(key.toLowerCase()) || 
+                    key.toLowerCase().includes(pkg.toLowerCase())) {
+                    return val;
+                }
+            }
+            // Extract weight from package name (e.g., "25 lb cartons" -> 25)
+            const match = pkg.match(/(\d+)\s*(?:lb|lbs)/i);
+            if (match) {
+                return { weight_lbs: parseInt(match[1]), units: null };
+            }
+            return null;
+        };
+
+        setWeightData({
+            terminal: lookupWeight(selectedPackages.terminal),
+            shipping: lookupWeight(selectedPackages.shipping),
+            retail: lookupWeight(selectedPackages.retail),
+        });
+    }, [selectedPackages]);
 
     const checkFavStatus = async () => {
         const status = await checkIsFavorite(filters.commodity);
@@ -233,6 +276,7 @@ export default function DashboardScreen({ route, navigation }) {
                             stats={stats}
                             costs={costs}
                             packageData={packageOptions}
+                            weightData={weightData}
                             actions={{
                                 selectedPackages,
                                 setPackage: (type, val) => setSelectedPackages(prev => ({ ...prev, [type]: val }))

@@ -1,0 +1,586 @@
+[
+  {
+    "commodity": "Aloe Leaves",
+    "package": "30 lb cartons"
+  },
+  {
+    "commodity": "Anise",
+    "package": "cartons"
+  },
+  {
+    "commodity": "Artichokes",
+    "package": "cartons"
+  },
+  {
+    "commodity": "Basil",
+    "package": "1 lb film bags"
+  },
+  {
+    "commodity": "Basil",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Bay Leaves",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Bean Sprouts",
+    "package": "10 lb film bags"
+  },
+  {
+    "commodity": "Bean Sprouts",
+    "package": "5 lb film bags"
+  },
+  {
+    "commodity": "Beans, Dragon Tongue",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Beans, Fava",
+    "package": "bushel cartons/crates"
+  },
+  {
+    "commodity": "Beans, Haricot Vert (French Type)",
+    "package": "cartons 10 1-lb film bags"
+  },
+  {
+    "commodity": "Beans, Italian Type",
+    "package": "15 lb cartons"
+  },
+  {
+    "commodity": "Beans, Round Green Type",
+    "package": "30 lb reusable plastic containers (RPC)"
+  },
+  {
+    "commodity": "Beans, Wax Type",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Beets",
+    "package": "25 lb film bags"
+  },
+  {
+    "commodity": "Beets",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Bok Choy",
+    "package": "30 lb cartons"
+  },
+  {
+    "commodity": "Brussels Sprouts",
+    "package": "25 lb cartons"
+  },
+  {
+    "commodity": "Cabbage",
+    "package": "45 lb cartons"
+  },
+  {
+    "commodity": "Cactus Leaf (Nopales)",
+    "package": "35 lb crates"
+  },
+  {
+    "commodity": "Carrots",
+    "package": "25 lb sacks loose"
+  },
+  {
+    "commodity": "Carrots",
+    "package": "50 lb sacks loose"
+  },
+  {
+    "commodity": "Carrots",
+    "package": "cartons 30 1-lb film bags"
+  },
+  {
+    "commodity": "Carrots",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Carrots",
+    "package": "sacks 10 5-lb film bags"
+  },
+  {
+    "commodity": "Carrots",
+    "package": "sacks 24 2-lb film bags"
+  },
+  {
+    "commodity": "Celeriac (Celery Root)",
+    "package": "10 kg mesh sacks"
+  },
+  {
+    "commodity": "Celeriac (Celery Root)",
+    "package": "25 lb film bags"
+  },
+  {
+    "commodity": "Chayote",
+    "package": "16 kg cartons"
+  },
+  {
+    "commodity": "Chayote",
+    "package": "35 lb containers"
+  },
+  {
+    "commodity": "Chayote",
+    "package": "40 lb containers"
+  },
+  {
+    "commodity": "Chervil",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Chervil",
+    "package": "crates bunched"
+  },
+  {
+    "commodity": "Chinese Cabbage",
+    "package": "30 lb cartons"
+  },
+  {
+    "commodity": "Chives",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Chives",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Cilantro",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Cucumbers",
+    "package": "22 lb cartons"
+  },
+  {
+    "commodity": "Cucumbers",
+    "package": "bushel & 40-45 lb reusable plastic containers (RPC)"
+  },
+  {
+    "commodity": "Cucumbers",
+    "package": "cartons film wrapped"
+  },
+  {
+    "commodity": "Dill",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Dill",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Eggplant",
+    "package": "1 bu, 1 1/9 bu, 1 1/6 bu cartons wrapped"
+  },
+  {
+    "commodity": "Eggplant",
+    "package": "30 lb cartons"
+  },
+  {
+    "commodity": "Endive",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Endive",
+    "package": "8 lb cartons"
+  },
+  {
+    "commodity": "Endive",
+    "package": "cartons"
+  },
+  {
+    "commodity": "Epasote (Epazote)",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Escarole",
+    "package": "cartons"
+  },
+  {
+    "commodity": "Fenugreek (Methi)",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Garlic",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Garlic",
+    "package": "30 lb cartons"
+  },
+  {
+    "commodity": "Ginger Root",
+    "package": "30 lb cartons"
+  },
+  {
+    "commodity": "Greens, Collard",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Greens, Dandelion",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Greens, Kale",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Greens, Mustard",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Greens, Swiss Chard",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Horseradish",
+    "package": "50 lb sacks"
+  },
+  {
+    "commodity": "Jerusalem Artichokes",
+    "package": "20 lb film bags"
+  },
+  {
+    "commodity": "Jicama",
+    "package": "38-40 lb containers"
+  },
+  {
+    "commodity": "Leeks",
+    "package": "5 kg containers"
+  },
+  {
+    "commodity": "Leeks",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Lettuce, Boston",
+    "package": "cartons film lined"
+  },
+  {
+    "commodity": "Lettuce, Green Leaf",
+    "package": "cartons film lined"
+  },
+  {
+    "commodity": "Lettuce, Iceberg",
+    "package": "cartons"
+  },
+  {
+    "commodity": "Lettuce, Red Leaf",
+    "package": "cartons film lined"
+  },
+  {
+    "commodity": "Lettuce, Romaine",
+    "package": "cartons 12 3-count packages"
+  },
+  {
+    "commodity": "Lettuce, Romaine",
+    "package": "cartons film lined"
+  },
+  {
+    "commodity": "Marjoram",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Marjoram",
+    "package": "film bags bunched"
+  },
+  {
+    "commodity": "Mint",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Mint",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Mushrooms",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Mushrooms",
+    "package": "5 lb cartons"
+  },
+  {
+    "commodity": "Mushrooms",
+    "package": "cartons 12 8-oz trays film wrapped"
+  },
+  {
+    "commodity": "Mushrooms",
+    "package": "cartons 24 3 1/2-oz film bags"
+  },
+  {
+    "commodity": "Onions, Green",
+    "package": "cartons 4 film bags iceless"
+  },
+  {
+    "commodity": "Oregano",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Oregano",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Parsley",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Parsnips",
+    "package": "20 lb film bags loose"
+  },
+  {
+    "commodity": "Peas, English",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Peas, Snow",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Peas, Sugar Snap",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Peppers, Anaheim",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Peppers, Bell Type",
+    "package": "25 lb cartons"
+  },
+  {
+    "commodity": "Peppers, Bell Type",
+    "package": "25 lb cartons place pack"
+  },
+  {
+    "commodity": "Peppers, Bell Type",
+    "package": "5 kg/11 lb cartons"
+  },
+  {
+    "commodity": "Peppers, Fresno",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Peppers, Habanero",
+    "package": "10 lb reusable plastic containers (RPC)"
+  },
+  {
+    "commodity": "Peppers, Jalapeno",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Peppers, Manzano",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Peppers, Mixed Mini Sweet Types",
+    "package": "cartons 12 1-lb film bags"
+  },
+  {
+    "commodity": "Peppers, Pasilla",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Peppers, Serrano",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Peppers, Shishito",
+    "package": "20 lb cartons"
+  },
+  {
+    "commodity": "Peppers, Yellow Chile",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Radicchio",
+    "package": "1 layer containers"
+  },
+  {
+    "commodity": "Radishes",
+    "package": "25 lb film bags topped"
+  },
+  {
+    "commodity": "Radishes",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Radishes",
+    "package": "cartons topped 30 6-oz film bags"
+  },
+  {
+    "commodity": "Rhubarb",
+    "package": "6 kg containers"
+  },
+  {
+    "commodity": "Rosemary",
+    "package": "1 lb film bags"
+  },
+  {
+    "commodity": "Rosemary",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Rutabagas",
+    "package": "25 lb film bags"
+  },
+  {
+    "commodity": "Sage",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Sage",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Salicornia (Sea Bean)",
+    "package": "cartons"
+  },
+  {
+    "commodity": "Salsify",
+    "package": "cartons"
+  },
+  {
+    "commodity": "Savory",
+    "package": "1 lb film bags"
+  },
+  {
+    "commodity": "Savory",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Sorrel",
+    "package": "1 lb film bags"
+  },
+  {
+    "commodity": "Sorrel",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Squash, Acorn",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Squash, Banana",
+    "package": "50 lb cartons"
+  },
+  {
+    "commodity": "Squash, Butternut",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Squash, Delicata",
+    "package": "lugs"
+  },
+  {
+    "commodity": "Squash, Grey",
+    "package": "4/7 bushel cartons"
+  },
+  {
+    "commodity": "Squash, Kabocha",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Squash, Red Kuri",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Squash, Spaghetti",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Squash, Yellow Straightneck",
+    "package": "1 1/9 bushel cartons/crates"
+  },
+  {
+    "commodity": "Squash, Yellow Straightneck",
+    "package": "4/7 bushel cartons"
+  },
+  {
+    "commodity": "Squash, Zucchini",
+    "package": "1 1/9 bushel cartons"
+  },
+  {
+    "commodity": "Squash, Zucchini",
+    "package": "4/7 bushel cartons"
+  },
+  {
+    "commodity": "Tarragon",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Tarragon",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Thyme",
+    "package": "1 lb film bags loose"
+  },
+  {
+    "commodity": "Thyme",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Tomatillos",
+    "package": "20 lb containers"
+  },
+  {
+    "commodity": "Tomatillos",
+    "package": "38 lb reusable plastic containers (RPC)"
+  },
+  {
+    "commodity": "Tomatoes",
+    "package": "10 lb cartons"
+  },
+  {
+    "commodity": "Tomatoes",
+    "package": "5 kg/11 lb flats"
+  },
+  {
+    "commodity": "Tomatoes",
+    "package": "cartons 2 layer"
+  },
+  {
+    "commodity": "Tomatoes",
+    "package": "flats 1 layer"
+  },
+  {
+    "commodity": "Tomatoes, Cherry",
+    "package": "cartons 12 10-oz cups with lids"
+  },
+  {
+    "commodity": "Tomatoes, Cherry",
+    "package": "flats 12 1-pint baskets"
+  },
+  {
+    "commodity": "Tomatoes, Cherry",
+    "package": "flats 12 1/2-pint cups with lids"
+  },
+  {
+    "commodity": "Tomatoes, Grape Type",
+    "package": "20 lb cartons loose"
+  },
+  {
+    "commodity": "Tomatoes, Grape Type",
+    "package": "flats 12 10-oz containers with lids"
+  },
+  {
+    "commodity": "Turmeric",
+    "package": "30 lb mesh sacks"
+  },
+  {
+    "commodity": "Turnips",
+    "package": "25 lb film bags"
+  },
+  {
+    "commodity": "Verdolaga",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Watercress",
+    "package": "cartons bunched"
+  },
+  {
+    "commodity": "Yuca (Cassava)",
+    "package": "16 kg cartons"
+  }
+]

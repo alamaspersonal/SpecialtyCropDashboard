@@ -79,10 +79,22 @@ const PackageSelector = ({ options, selectedValue, onValueChange, isDark }) => {
     );
 };
 
-const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, onValueChange, isEstimated }) => {
+const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, onValueChange, isEstimated, weightLbs, units }) => {
     const isDark = bg === '#facc15' || bg === '#fdba74';
     const textColor = isDark ? 'black' : 'white';
     const subTextColor = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
+
+    // Calculate price per lb or per unit
+    const pricePerUnit = (() => {
+        const avgPrice = (parseFloat(lowPrice) + parseFloat(highPrice)) / 2;
+        if (weightLbs && weightLbs > 0) {
+            return { value: (avgPrice / weightLbs).toFixed(2), unit: 'lb' };
+        }
+        if (units && units > 0) {
+            return { value: (avgPrice / units).toFixed(2), unit: 'unit' };
+        }
+        return null;
+    })();
 
     return (
         <View style={styles.blockRow}>
@@ -103,6 +115,13 @@ const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, on
                     </View>
                 </View>
 
+                {/* Price per unit row */}
+                {pricePerUnit && (
+                    <Text style={[styles.pricePerUnit, { color: subTextColor }]}>
+                        ${pricePerUnit.value}/{pricePerUnit.unit}
+                    </Text>
+                )}
+
                 <PackageSelector
                     options={options}
                     selectedValue={selectedValue}
@@ -115,7 +134,7 @@ const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, on
     );
 };
 
-export default function PriceWaterfallMobile({ stats, costs, packageData, actions }) {
+export default function PriceWaterfallMobile({ stats, costs, packageData, actions, weightData }) {
     if (!stats) return null;
 
     const terminalLow = stats.terminal_low_avg;
@@ -152,6 +171,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 options={packageData?.retail}
                 selectedValue={actions?.selectedPackages?.retail}
                 onValueChange={(v) => actions?.setPackage('retail', v)}
+                weightLbs={weightData?.retail?.weight_lbs}
+                units={weightData?.retail?.units}
             />
 
             <PriceBlock
@@ -162,6 +183,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 options={packageData?.terminal}
                 selectedValue={actions?.selectedPackages?.terminal}
                 onValueChange={(v) => actions?.setPackage('terminal', v)}
+                weightLbs={weightData?.terminal?.weight_lbs}
+                units={weightData?.terminal?.units}
             />
 
             <PriceBlock
@@ -173,6 +196,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 selectedValue={actions?.selectedPackages?.shipping}
                 onValueChange={(v) => actions?.setPackage('shipping', v)}
                 isEstimated={stats.is_shipping_estimated}
+                weightLbs={weightData?.shipping?.weight_lbs}
+                units={weightData?.shipping?.units}
             />
 
             <PriceBlock
@@ -181,6 +206,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 highPrice={farmHigh}
                 bg="#facc15"
                 isEstimated={true}
+                weightLbs={weightData?.shipping?.weight_lbs}
+                units={weightData?.shipping?.units}
             />
 
         </View>
@@ -248,6 +275,12 @@ const styles = StyleSheet.create({
     blockPrice: {
         fontSize: 20,
         fontWeight: 'bold',
+    },
+    pricePerUnit: {
+        fontSize: 12,
+        fontWeight: '500',
+        marginTop: 6,
+        textAlign: 'center',
     },
     connector: {
         width: 2,
