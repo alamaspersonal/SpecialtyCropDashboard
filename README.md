@@ -91,16 +91,17 @@ USDA API → backend_update → Supabase → Phone App
 
 ### Services Layer (`phone_frontend/src/services/`)
 
-| File | Purpose |
-|------|---------|
-| `supabase.js` | Supabase client initialization |
-| `supabaseApi.js` | API functions mirroring FastAPI endpoints |
-| `useQueries.js` | React Query hooks for caching & offline support |
-| `api.js` | Unified exports for backward compatibility |
+| File             | Purpose                                         |
+| ---------------- | ----------------------------------------------- |
+| `supabase.js`    | Supabase client initialization                  |
+| `supabaseApi.js` | API functions mirroring FastAPI endpoints       |
+| `useQueries.js`  | React Query hooks for caching & offline support |
+| `api.js`         | Unified exports for backward compatibility      |
 
 ### Offline Support
 
 The app uses TanStack Query (React Query) for:
+
 - **Caching**: Data cached for 30 minutes
 - **Offline mode**: Returns cached data when network unavailable
 - **Background refresh**: Updates data silently when online
@@ -109,14 +110,15 @@ The app uses TanStack Query (React Query) for:
 
 ## Daily Update Pipeline (`backend_update/`)
 
-| File | Purpose |
-|------|---------|
-| `update_daily.py` | Main script - run this for updates |
-| `get_recent_data.py` | Fetches last 30 days from USDA MARS API |
-| `format_data.py` | Transforms CSV to database schemas |
-| `overwrite_supabse.py` | Clears and uploads to Supabase tables |
+| File                   | Purpose                                 |
+| ---------------------- | --------------------------------------- |
+| `update_daily.py`      | Main script - run this for updates      |
+| `get_recent_data.py`   | Fetches last 30 days from USDA MARS API |
+| `format_data.py`       | Transforms CSV to database schemas      |
+| `overwrite_supabse.py` | Clears and uploads to Supabase tables   |
 
 **Required `.env` variables:**
+
 ```
 USDA_API_KEY=your_key_here
 SUPABASE_URL=https://xxx.supabase.co
@@ -139,9 +141,9 @@ Access at `http://localhost:5173` or install as PWA on mobile.
 
 ## Database Tables (Supabase)
 
-| Table | Description |
-|-------|-------------|
-| `CropPrice` | Full price data with all USDA fields |
+| Table              | Description                           |
+| ------------------ | ------------------------------------- |
+| `CropPrice`        | Full price data with all USDA fields  |
 | `UnifiedCropPrice` | Simplified schema for charts/analysis |
 
 ---
