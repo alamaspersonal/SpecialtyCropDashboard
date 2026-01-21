@@ -36,10 +36,31 @@ def parse_date(date_str):
         return None
 
 
+def normalize_category(raw_cat):
+    """
+    Normalize category to one of: Vegetables, Fruits, Potatoes & Onions, Nuts, Other.
+    """
+    if pd.isna(raw_cat) or raw_cat == "":
+        return "Other"
+    
+    cat_lower = str(raw_cat).lower().strip()
+    
+    # Check for keywords to map to standard categories
+    if "veg" in cat_lower:
+        return "Vegetables"
+    if "fruit" in cat_lower:
+        return "Fruits"
+    if "nut" in cat_lower:
+        return "Nuts"
+    if "onion" in cat_lower or "potato" in cat_lower:
+        return "Potatoes & Onions"
+    
+    # Default catch-all
+    return "Other"
+
+
 def format_for_crop_price(df):
     """
-    Format DataFrame for CropPrice table.
-    
     Columns matching Supabase schema: report_date, market_type, market_location_name, 
              district, category, commodity, variety, package, organic,
              low_price, high_price, wtd_avg_price
@@ -52,6 +73,20 @@ def format_for_crop_price(df):
         if not report_date:
             report_date = parse_date(row.get('report_end_date'))
         
+        # Skip if commodity is missing (garbage row)
+        commodity = row.get('commodity')
+        if pd.isna(commodity) or commodity == "" or commodity == "N/A":
+            continue
+
+        # Map category from various possible columns
+        category = row.get('category')
+        if pd.isna(category):
+            category = row.get('community') # Retail 3324
+        if pd.isna(category):
+            category = row.get('grp')      # Shipping Point 2390/2391
+        if pd.isna(category):
+            category = row.get('group')
+        
         # Normalize variety and package columns
         variety = row.get('variety') if 'variety' in row else row.get('var')
         package = row.get('package') if 'package' in row else row.get('pkg')
@@ -63,8 +98,8 @@ def format_for_crop_price(df):
             'market_type': row.get('market_type'),
             'market_location_name': row.get('market_location_name'),
             'district': row.get('district') if pd.notna(row.get('district')) else None,
-            'category': row.get('category') if pd.notna(row.get('category')) else None,
-            'commodity': row.get('commodity'),
+            'category': normalize_category(category),
+            'commodity': commodity,
             'variety': variety if pd.notna(variety) and variety != "N/A" else None,
             'package': package if pd.notna(package) and package != "N/A" else None,
             'organic': row.get('organic') if pd.notna(row.get('organic')) else None,

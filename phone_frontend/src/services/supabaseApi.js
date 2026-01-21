@@ -10,47 +10,77 @@
  */
 
 import { supabase } from './supabase';
+import { STATIC_FILTERS } from '../constants/staticFilters';
 
 /**
  * Get distinct filter values for the filter UI.
  * Mirrors: GET /api/filters
  * 
- * @param {Object} currentFilters - Currently selected filters to narrow down options
+ * @param {Object} currentFilters - Currently selected filters (Ignored for static list)
  * @returns {Object} Object containing arrays of distinct values for each filter field
  */
 export const getFilters = async (currentFilters = {}) => {
     try {
-        console.log('[DEBUG] getFilters called with:', currentFilters);
+        // Check if any filters are actually active
+        const hasActiveFilters = Object.values(currentFilters).some(
+            val => val !== null && val !== undefined && val !== ''
+        );
+
+        if (!hasActiveFilters) {
+            console.log('[DEBUG] No active filters, returning STATIC_FILTERS');
+            return STATIC_FILTERS;
+        }
+
+        console.log('[DEBUG] Active filters detected, querying Supabase:', currentFilters);
         
-        // Build query with current filters applied
-        let query = supabase.from('CropPrice').select('category, commodity, variety, package, district, organic');
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
 
-        // Apply existing filters to narrow down options
-        if (currentFilters.commodity) {
-            query = query.eq('commodity', currentFilters.commodity);
-        }
-        if (currentFilters.variety) {
-            query = query.eq('variety', currentFilters.variety);
-        }
-        if (currentFilters.category) {
-            query = query.eq('category', currentFilters.category);
-        }
-        if (currentFilters.district) {
-            query = query.eq('district', currentFilters.district);
-        }
-        if (currentFilters.organic) {
-            query = query.eq('organic', currentFilters.organic);
+        while (hasMore) {
+            // Build query with current filters applied
+            let query = supabase
+                .from('CropPrice')
+                .select('category, commodity, variety, package, district, organic')
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+
+            // Apply existing filters to narrow down options
+            if (currentFilters.commodity) query = query.eq('commodity', currentFilters.commodity);
+            if (currentFilters.variety) query = query.eq('variety', currentFilters.variety);
+            if (currentFilters.category) query = query.eq('category', currentFilters.category);
+            if (currentFilters.district) query = query.eq('district', currentFilters.district);
+            if (currentFilters.organic) query = query.eq('organic', currentFilters.organic);
+
+            const { data, error } = await query;
+            
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allData = [...allData, ...data];
+                console.log(`[DEBUG] Fetched page ${page}, rows: ${data.length}, total: ${allData.length}`);
+                
+                if (data.length < pageSize) {
+                    hasMore = false; // Less than integer page size means last page
+                } else {
+                    page++;
+                }
+            } else {
+                hasMore = false;
+            }
+            
+            // Safety break for massive datasets (optional, but good practice)
+            if (allData.length > 50000) {
+                console.warn('[DEBUG] Reached safety limit of 50k rows, stopping fetch.');
+                break;
+            }
         }
 
-        const { data, error } = await query.limit(5000);
-        
-        console.log('[DEBUG] Supabase response - data length:', data?.length, 'error:', error);
-
-        if (error) throw error;
+        console.log('[DEBUG] Total rows fetched for filters:', allData.length);
 
         // Extract unique values for each field
         const extractUnique = (field) => {
-            const values = data
+            const values = allData
                 .map(row => row[field])
                 .filter(val => val && val !== 'N/A');
             return [...new Set(values)].sort();
@@ -65,15 +95,12 @@ export const getFilters = async (currentFilters = {}) => {
             organics: extractUnique('organic'),
         };
         
-        console.log('[DEBUG] getFilters result:', {
-            categoriesCount: result.categories.length,
-            commoditiesCount: result.commodities.length,
-            varietiesCount: result.varieties.length
-        });
-        
         return result;
+
     } catch (error) {
         console.error('Error fetching filters:', error);
+        // Fallback to static filters on error?
+        // return STATIC_FILTERS; 
         throw error;
     }
 };
@@ -218,57 +245,84 @@ export const getUnifiedPrices = async (commodity, options = {}) => {
  */
 export const getStats = async (commodity) => {
     try {
-        // First get the latest date
-        const { data: latestData, error: latestError } = await supabase
-            .from('UnifiedCropPrice')
-            .select('report_date')
-            .order('report_date', { ascending: false })
-            .limit(1);
-
-        if (latestError) throw latestError;
-        if (!latestData || latestData.length === 0) {
-            return { error: 'No data found' };
-        }
-
-        const targetDate = latestData[0].report_date;
-
-        // Get data for target date and commodity
+        // Calculate date ranges
+        const now = new Date();
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(now.getDate() - 14);
+        
+        // Fetch last 14 days of data for this commodity
         const { data, error } = await supabase
             .from('UnifiedCropPrice')
             .select('*')
-            .eq('report_date', targetDate)
-            .eq('commodity', commodity);
+            .eq('commodity', commodity)
+            .gte('report_date', twoWeeksAgo.toISOString())
+            .order('report_date', { ascending: false });
 
         if (error) throw error;
+        if (!data || data.length === 0) {
+            return { error: 'No data found' };
+        }
 
-        // Partition by market type
-        const terminalRows = data.filter(d => d.market_type === 'Terminal');
-        const shippingRows = data.filter(d =>
-            d.market_type === 'Shipping Point' || d.market_type === 'Shipping'
-        );
+        // Get the most frequent package type (mode) to display appropriate units
+        const packageCounts = {};
+        data.forEach(r => {
+            if (r.package) packageCounts[r.package] = (packageCounts[r.package] || 0) + 1;
+        });
+        const dominantPackage = Object.keys(packageCounts).reduce((a, b) => packageCounts[a] > packageCounts[b] ? a : b, 'lb');
 
-        // Calculate averages (filtering nulls)
-        const calcAvg = (rows, field) => {
-            const validVals = rows
-                .map(r => r[field])
+        // Split into current week (last 7 days from latest data point) and previous week
+        const latestDateStr = data[0].report_date;
+        const latestDate = new Date(latestDateStr);
+        const oneWeekBeforeLatest = new Date(latestDate);
+        oneWeekBeforeLatest.setDate(latestDate.getDate() - 7);
+
+        const currentWeekData = data.filter(d => new Date(d.report_date) >= oneWeekBeforeLatest);
+        const prevWeekData = data.filter(d => new Date(d.report_date) < oneWeekBeforeLatest);
+
+        // Calculate Average helper
+        const calcAvg = (rows, type) => {
+            const valid = rows
+                .filter(r => r.market_type.includes(type))
+                .map(r => r.price_retail || r.price_max) // Prioritize retail, fallback to max
                 .filter(v => v !== null && v !== undefined);
-            return validVals.length > 0
-                ? validVals.reduce((a, b) => a + b, 0) / validVals.length
-                : 0;
+            return valid.length > 0
+                ? valid.reduce((a, b) => a + b, 0) / valid.length
+                : null;
         };
 
-        const tAvg = calcAvg(terminalRows, 'price_retail') || calcAvg(terminalRows, 'price_max');
-        const sAvg = calcAvg(shippingRows, 'price_retail') || calcAvg(shippingRows, 'price_max');
-        const spread = (tAvg && sAvg) ? tAvg - sAvg : null;
+        // Current Week Averages
+        const currTerminal = calcAvg(currentWeekData, 'Terminal');
+        const currShipping = calcAvg(currentWeekData, 'Shipping');
+        const currRetail = calcAvg(currentWeekData, 'Retail');
+
+        // Previous Week Averages
+        const prevTerminal = calcAvg(prevWeekData, 'Terminal');
+        const prevShipping = calcAvg(prevWeekData, 'Shipping');
+        const prevRetail = calcAvg(prevWeekData, 'Retail');
+
+        // Calculate % Changes
+        const calcPct = (curr, prev) => prev ? ((curr - prev) / prev) * 100 : 0;
 
         return {
-            current_terminal_avg: Math.round(tAvg * 100) / 100,
-            terminal_count: terminalRows.length,
-            current_shipping_avg: Math.round(sAvg * 100) / 100,
-            shipping_count: shippingRows.length,
-            spread: spread ? Math.round(spread * 100) / 100 : null,
-            date: targetDate,
+            date: latestDateStr,
+            package_unit: dominantPackage,
+            
+            terminal: {
+                avg: currTerminal || 0,
+                pct_change: calcPct(currTerminal, prevTerminal)
+            },
+            shipping: {
+                avg: currShipping || 0,
+                pct_change: calcPct(currShipping, prevShipping)
+            },
+            retail: {
+                avg: currRetail || 0,
+                pct_change: calcPct(currRetail, prevRetail)
+            },
+            
+            spread: (currTerminal && currShipping) ? currTerminal - currShipping : null
         };
+
     } catch (error) {
         console.error('Error fetching stats:', error);
         throw error;

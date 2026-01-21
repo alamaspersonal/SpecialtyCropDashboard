@@ -10,9 +10,11 @@ import {
     ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { getPrices } from '../services/api';
 import PriceWaterfallMobile from '../components/PriceWaterfallMobile';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../services/favorites';
+import { generateMarketInsights } from '../services/cerebrasApi';
 
 // Package weight lookup (simplified - ideally fetch from backend)
 const PACKAGE_WEIGHTS = {
@@ -34,6 +36,10 @@ export default function DashboardScreen({ route, navigation }) {
     const [loading, setLoading] = useState(true);
     const [marketNotes, setMarketNotes] = useState('');
     const [isFavorite, setIsFavorite] = useState(false);
+    
+    // AI Insights State
+    const [aiInsights, setAiInsights] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
 
     // Data Partitioning
     const [terminalData, setTerminalData] = useState([]);
@@ -122,6 +128,58 @@ export default function DashboardScreen({ route, navigation }) {
         };
         fetchPrices();
     }, [filters, timeRange]);
+
+    // Generate AI Insights when stats are ready
+    useEffect(() => {
+        const fetchAIInsights = async () => {
+            if (!priceData.length || !filters.commodity) return;
+            
+            setAiLoading(true);
+            try {
+                // Get all market notes from the data
+                const allNotes = priceData
+                    .map(d => d.market_tone_comments)
+                    .filter(Boolean)
+                    .slice(0, 5);
+                
+                // Build stats object for AI
+                const aiStats = {
+                    terminal: {
+                        avg: terminalData.length > 0 
+                            ? terminalData.reduce((acc, d) => acc + (d.low_price || 0), 0) / terminalData.length 
+                            : 0,
+                        pct_change: 0 // Would need historical data for real calculation
+                    },
+                    shipping: {
+                        avg: shippingData.length > 0 
+                            ? shippingData.reduce((acc, d) => acc + (d.low_price || 0), 0) / shippingData.length 
+                            : 0,
+                        pct_change: 0
+                    },
+                    retail: {
+                        avg: retailData.length > 0 
+                            ? retailData.reduce((acc, d) => acc + (d.low_price || 0), 0) / retailData.length 
+                            : 0,
+                        pct_change: 0
+                    }
+                };
+                
+                const insights = await generateMarketInsights(
+                    filters.commodity,
+                    aiStats,
+                    allNotes
+                );
+                setAiInsights(insights);
+            } catch (error) {
+                console.error('Error generating AI insights:', error);
+                setAiInsights('');
+            } finally {
+                setAiLoading(false);
+            }
+        };
+        
+        fetchAIInsights();
+    }, [priceData, filters.commodity, terminalData, shippingData, retailData]);
 
     // Update weightData when selected packages change
     useEffect(() => {
@@ -245,15 +303,15 @@ export default function DashboardScreen({ route, navigation }) {
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Text style={styles.backBtnText}>← Back</Text>
+                    <Ionicons name="arrow-back" size={24} color="#1e293b" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Price Waterfall</Text>
+                <Text style={styles.headerTitle}>Price Dashboard</Text>
                 <View style={{ flexDirection: 'row', gap: 16 }}>
                     <TouchableOpacity onPress={toggleFavorite}>
-                        <Text style={[styles.settingsText, { color: isFavorite ? '#eab308' : '#cbd5e1' }]}>★</Text>
+                        <Ionicons name={isFavorite ? "star" : "star-outline"} size={24} color={isFavorite ? '#eab308' : '#cbd5e1'} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setShowCostModal(true)}>
-                        <Text style={styles.settingsText}>Costs</Text>
+                        <Ionicons name="settings-outline" size={24} color="#22c55e" />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -299,10 +357,22 @@ export default function DashboardScreen({ route, navigation }) {
                             }}
                         />
 
-                        {/* Market Notes */}
+                        {/* AI Market Insights */}
                         <View style={styles.notesContainer}>
-                            <Text style={styles.notesTitle}>Market Notes:</Text>
-                            <Text style={styles.noteItem}>{marketNotes || '• Demand exceeds supply.'}</Text>
+                            <View style={styles.notesTitleRow}>
+                                <Ionicons name="sparkles" size={18} color="#166534" />
+                                <Text style={styles.notesTitle}>AI Market Insights</Text>
+                            </View>
+                            {aiLoading ? (
+                                <View style={styles.aiLoadingContainer}>
+                                    <ActivityIndicator size="small" color="#22c55e" />
+                                    <Text style={styles.aiLoadingText}>Analyzing market data...</Text>
+                                </View>
+                            ) : (
+                                <Text style={styles.noteItem}>
+                                    {aiInsights || marketNotes || 'Market analysis loading...'}
+                                </Text>
+                            )}
                         </View>
 
 
@@ -345,48 +415,70 @@ export default function DashboardScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f8fafc' },
-    header: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, backgroundColor: 'white', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-    backButton: { padding: 4 },
-    backBtnText: { color: '#64748b', fontSize: 16 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#0f172a' },
-    settingsText: { color: '#0ea5e9', fontSize: 16, fontWeight: '600' },
-    scrollContent: { padding: 16 },
-    subtitle: { fontSize: 20, fontWeight: 'bold', color: '#334155', textAlign: 'center', marginBottom: 20 },
+    header: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        paddingHorizontal: 16, 
+        paddingVertical: 12, 
+        backgroundColor: '#f8fafc', 
+        borderBottomWidth: 1, 
+        borderColor: '#e2e8f0' 
+    },
+    backButton: { 
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#f1f5f9',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    backBtnText: { color: '#1e293b', fontSize: 16, fontWeight: '600' },
+    headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
+    settingsText: { color: '#22c55e', fontSize: 16, fontWeight: '600' },
+    scrollContent: { padding: 16, paddingBottom: 40 },
+    subtitle: { fontSize: 24, fontWeight: 'bold', color: '#1e293b', textAlign: 'center', marginBottom: 20 },
 
-    notesContainer: { backgroundColor: '#dcfce7', padding: 16, borderRadius: 12, marginTop: 24, borderWidth: 1, borderColor: '#bbf7d0' },
-    notesTitle: { fontWeight: 'bold', color: '#166534', marginBottom: 8 },
-    noteItem: { color: '#14532d', marginBottom: 4 },
+    notesContainer: { backgroundColor: '#dcfce7', padding: 16, borderRadius: 16, marginTop: 24, borderWidth: 1, borderColor: '#bbf7d0' },
+    notesTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 },
+    notesTitle: { fontWeight: 'bold', color: '#166534', fontSize: 16 },
+    noteItem: { color: '#14532d', marginBottom: 4, fontSize: 14, lineHeight: 20 },
+    aiLoadingContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    aiLoadingText: { color: '#166534', fontSize: 14, fontStyle: 'italic' },
 
-
-    noDataText: { textAlign: 'center', color: 'gray', marginTop: 20 },
+    noDataText: { textAlign: 'center', color: '#64748b', marginTop: 40, fontSize: 16 },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-    modalContent: { backgroundColor: 'white', borderRadius: 16, padding: 24 },
-    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+    modalContent: { backgroundColor: 'white', borderRadius: 20, padding: 24 },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#1e293b' },
     inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     inputLabel: { fontSize: 16, textTransform: 'capitalize', color: '#64748b' },
-    input: { backgroundColor: '#f1f5f9', width: 100, padding: 8, borderRadius: 8, textAlign: 'right' },
-    closeButton: { backgroundColor: '#0ea5e9', padding: 16, borderRadius: 12, marginTop: 12, alignItems: 'center' },
-    closeButtonText: { color: 'white', fontWeight: 'bold' },
+    input: { backgroundColor: '#f1f5f9', width: 100, padding: 12, borderRadius: 10, textAlign: 'right', fontSize: 16 },
+    closeButton: { backgroundColor: '#22c55e', padding: 16, borderRadius: 12, marginTop: 16, alignItems: 'center' },
+    closeButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
 
-    // Time Range Toggle
+    // Time Range Toggle - Updated to green theme
     timeRangeContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginBottom: 16,
+        marginBottom: 20,
         gap: 8,
+        backgroundColor: '#f1f5f9',
+        padding: 4,
+        borderRadius: 12,
+        alignSelf: 'center',
     },
     timeRangeBtn: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
-        backgroundColor: '#e2e8f0',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        backgroundColor: 'transparent',
     },
     timeRangeBtnActive: {
-        backgroundColor: '#0ea5e9',
+        backgroundColor: '#22c55e',
     },
     timeRangeBtnText: {
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '600',
         color: '#64748b',
     },
