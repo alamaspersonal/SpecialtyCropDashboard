@@ -187,20 +187,28 @@ export default function DashboardScreen({ route, navigation }) {
         const fetchAIInsights = async () => {
             if (!priceData.length || !filters.commodity) return;
             
-            // Collect all tone comments from the data
-            const marketToneNotes = priceData
-                .map(d => d.market_tone_comments)
-                .filter(Boolean);
-            const supplyToneNotes = priceData
-                .map(d => d.supply_tone_comments)
-                .filter(Boolean);
-            const demandToneNotes = priceData
-                .map(d => d.demand_tone_comments)
-                .filter(Boolean);
+            // Build Shipping Point data (supply/demand focused)
+            const shippingComments = {
+                supply: shippingData.map(d => d.supply_tone_comments).filter(Boolean),
+                demand: shippingData.map(d => d.demand_tone_comments).filter(Boolean),
+                market: shippingData.map(d => d.market_tone_comments).filter(Boolean),
+                commodity: shippingData.map(d => d.commodity_comments).filter(Boolean)
+            };
             
-            // If no tone comments at all, skip AI call and set fallback message
-            if (marketToneNotes.length === 0 && supplyToneNotes.length === 0 && demandToneNotes.length === 0) {
-                setAiInsights('No market tone information available for this selection.');
+            // Build Terminal Market data (offerings/reporter focused)
+            const terminalComments = {
+                offerings: terminalData.map(d => d.offerings_comments).filter(Boolean),
+                reporter: terminalData.map(d => d.reporter_comment).filter(Boolean),
+                market: terminalData.map(d => d.market_tone_comments).filter(Boolean),
+                commodity: terminalData.map(d => d.commodity_comments).filter(Boolean)
+            };
+            
+            // Check if we have any comments to analyze
+            const hasShippingComments = Object.values(shippingComments).some(arr => arr.length > 0);
+            const hasTerminalComments = Object.values(terminalComments).some(arr => arr.length > 0);
+            
+            if (!hasShippingComments && !hasTerminalComments) {
+                setAiInsights('No market notes available for this selection.');
                 setAiLoading(false);
                 return;
             }
@@ -209,11 +217,8 @@ export default function DashboardScreen({ route, navigation }) {
             try {
                 const insights = await generateMarketInsights(
                     filters.commodity,
-                    {
-                        market: [...new Set(marketToneNotes)].slice(0, 3),
-                        supply: [...new Set(supplyToneNotes)].slice(0, 3),
-                        demand: [...new Set(demandToneNotes)].slice(0, 3)
-                    }
+                    shippingComments,
+                    terminalComments
                 );
                 setAiInsights(insights);
             } catch (error) {

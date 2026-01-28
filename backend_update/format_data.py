@@ -141,6 +141,9 @@ def format_for_crop_price(df):
             'wtd_avg_price': clean_price(row.get('wtd_avg_price')),
             'supply_tone_comments': row.get('supply_tone_comments') if pd.notna(row.get('supply_tone_comments')) else None,
             'demand_tone_comments': row.get('demand_tone_comments') if pd.notna(row.get('demand_tone_comments')) else None,
+            'offerings_comments': row.get('offerings_comments') if pd.notna(row.get('offerings_comments')) else None,
+            'reporter_comment': get_field(row, 'reporter_comment', 'rep_cmt') if pd.notna(get_field(row, 'reporter_comment', 'rep_cmt')) else None,
+            'commodity_comments': row.get('commodity_comments') if pd.notna(row.get('commodity_comments')) else None,
         }
         records.append(record)
     
@@ -229,6 +232,9 @@ def format_for_unified_crop_price(df):
             'market_tone_comments': row.get('market_tone_comments') if pd.notna(row.get('market_tone_comments')) else None,
             'origin': to_title_case(origin),
             'price_avg': price_avg,
+            'offerings_comments': row.get('offerings_comments') if pd.notna(row.get('offerings_comments')) else None,
+            'reporter_comment': get_field(row, 'reporter_comment', 'rep_cmt') if pd.notna(get_field(row, 'reporter_comment', 'rep_cmt')) else None,
+            'commodity_comments': row.get('commodity_comments') if pd.notna(row.get('commodity_comments')) else None,
         }
         records.append(record)
     

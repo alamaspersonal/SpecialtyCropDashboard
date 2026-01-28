@@ -3,13 +3,13 @@ import { View, Text, StyleSheet, Platform, TouchableOpacity, Modal } from 'react
 import { Picker } from '@react-native-picker/picker';
 import { useTheme } from '../context/ThemeContext';
 
-export default function FilterDropdown({ label, options, value, onChange, color }) {
+export default function FilterDropdown({ label, options, value, onChange, color, disabled }) {
     const { colors, isDark } = useTheme();
     const [modalVisible, setModalVisible] = useState(false);
     const [tempValue, setTempValue] = useState(value);
 
     const displayValue = value || 'All';
-    const accentColor = color || colors.accent;
+    const accentColor = disabled ? colors.border : (color || colors.accent); // Gray out label if disabled
 
     // For Android, use the native Picker
     if (Platform.OS === 'android') {
@@ -22,8 +22,9 @@ export default function FilterDropdown({ label, options, value, onChange, color 
                     <Picker
                         selectedValue={value}
                         onValueChange={onChange}
-                        style={[styles.picker, { color: colors.text }]}
-                        dropdownIconColor={colors.textSecondary}
+                        style={[styles.picker, { color: disabled ? colors.textMuted : colors.text }]}
+                        dropdownIconColor={disabled ? colors.textMuted : colors.textSecondary}
+                        enabled={!disabled}
                     >
                         <Picker.Item label="All" value="" color={colors.text} />
                         {options && options.map((opt) => (
@@ -57,8 +58,16 @@ export default function FilterDropdown({ label, options, value, onChange, color 
                 <Text style={styles.label}>{label}</Text>
             </View>
             <TouchableOpacity 
-                style={[styles.selectButton, { backgroundColor: colors.surface, borderColor: colors.border }]} 
+                style={[
+                    styles.selectButton, 
+                    { 
+                        backgroundColor: disabled ? colors.background : colors.surface, 
+                        borderColor: colors.border,
+                        opacity: disabled ? 0.7 : 1
+                    }
+                ]} 
                 onPress={handleOpen}
+                disabled={disabled}
             >
                 <Text style={[styles.selectButtonText, { color: colors.text }]}>{displayValue}</Text>
                 <Text style={[styles.chevron, { color: colors.textSecondary }]}>▼</Text>

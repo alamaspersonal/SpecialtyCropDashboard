@@ -179,11 +179,12 @@ export default function FiltersScreen({ navigation }) {
                             color={colors.accent}
                         />
                         <FilterDropdown
-                            label="Variety"
+                            label={selectedFilters.commodity ? "Variety" : "Variety (Select Commodity First)"}
                             options={filters.varieties}
                             value={selectedFilters.variety}
                             onChange={(v) => handleFilterChange('variety', v)}
                             color={colors.accent}
+                            disabled={!selectedFilters.commodity}
                         />
                     </View>
                 )}
