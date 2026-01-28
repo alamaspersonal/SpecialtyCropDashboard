@@ -15,6 +15,7 @@ import { getPrices } from '../services/api';
 import PriceWaterfallMobile from '../components/PriceWaterfallMobile';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../services/favorites';
 import { generateMarketInsights } from '../services/cerebrasApi';
+import { useTheme } from '../context/ThemeContext';
 
 // Package weight lookup (simplified - ideally fetch from backend)
 const PACKAGE_WEIGHTS = {
@@ -31,6 +32,7 @@ const PACKAGE_WEIGHTS = {
 };
 
 export default function DashboardScreen({ route, navigation }) {
+    const { colors, isDark } = useTheme();
     const { filters } = route.params;
     const [priceData, setPriceData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -299,49 +301,49 @@ export default function DashboardScreen({ route, navigation }) {
     const stats = calculateStats();
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="#1e293b" />
+            <View style={[styles.header, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.surfaceElevated }]}>
+                    <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Price Dashboard</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Price Dashboard</Text>
                 <View style={{ flexDirection: 'row', gap: 16 }}>
                     <TouchableOpacity onPress={toggleFavorite}>
-                        <Ionicons name={isFavorite ? "star" : "star-outline"} size={24} color={isFavorite ? '#eab308' : '#cbd5e1'} />
+                        <Ionicons name={isFavorite ? "star" : "star-outline"} size={24} color={isFavorite ? '#eab308' : colors.textMuted} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => setShowCostModal(true)}>
-                        <Ionicons name="settings-outline" size={24} color="#22c55e" />
+                        <Ionicons name="settings-outline" size={24} color={colors.accent} />
                     </TouchableOpacity>
                 </View>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {loading ? (
-                    <ActivityIndicator size="large" color="#0ea5e9" style={{ marginTop: 50 }} />
+                    <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 50 }} />
                 ) : stats ? (
                     <>
-                        <Text style={styles.subtitle}>{filters.commodity || 'Commodity'}</Text>
+                        <Text style={[styles.subtitle, { color: colors.text }]}>{filters.commodity || 'Commodity'}</Text>
 
                         {/* Time Range Toggle */}
-                        <View style={styles.timeRangeContainer}>
+                        <View style={[styles.timeRangeContainer, { backgroundColor: colors.surfaceElevated }]}>
                             <TouchableOpacity
-                                style={[styles.timeRangeBtn, timeRange === 'daily' && styles.timeRangeBtnActive]}
+                                style={[styles.timeRangeBtn, timeRange === 'daily' && { backgroundColor: colors.accent }]}
                                 onPress={() => setTimeRange('daily')}
                             >
-                                <Text style={[styles.timeRangeBtnText, timeRange === 'daily' && styles.timeRangeBtnTextActive]}>Daily</Text>
+                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === 'daily' && { color: '#0f172a' }]}>Daily</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.timeRangeBtn, timeRange === '7day' && styles.timeRangeBtnActive]}
+                                style={[styles.timeRangeBtn, timeRange === '7day' && { backgroundColor: colors.accent }]}
                                 onPress={() => setTimeRange('7day')}
                             >
-                                <Text style={[styles.timeRangeBtnText, timeRange === '7day' && styles.timeRangeBtnTextActive]}>7-Day</Text>
+                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === '7day' && { color: '#0f172a' }]}>7-Day</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.timeRangeBtn, timeRange === '30day' && styles.timeRangeBtnActive]}
+                                style={[styles.timeRangeBtn, timeRange === '30day' && { backgroundColor: colors.accent }]}
                                 onPress={() => setTimeRange('30day')}
                             >
-                                <Text style={[styles.timeRangeBtnText, timeRange === '30day' && styles.timeRangeBtnTextActive]}>30-Day</Text>
+                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === '30day' && { color: '#0f172a' }]}>30-Day</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -358,18 +360,18 @@ export default function DashboardScreen({ route, navigation }) {
                         />
 
                         {/* AI Market Insights */}
-                        <View style={styles.notesContainer}>
+                        <View style={[styles.notesContainer, { backgroundColor: isDark ? colors.surfaceElevated : '#dcfce7', borderColor: isDark ? colors.border : '#bbf7d0' }]}>
                             <View style={styles.notesTitleRow}>
-                                <Ionicons name="sparkles" size={18} color="#166534" />
-                                <Text style={styles.notesTitle}>AI Market Insights</Text>
+                                <Ionicons name="sparkles" size={18} color={isDark ? colors.accent : '#166534'} />
+                                <Text style={[styles.notesTitle, { color: isDark ? colors.accent : '#166534' }]}>AI Market Insights</Text>
                             </View>
                             {aiLoading ? (
                                 <View style={styles.aiLoadingContainer}>
-                                    <ActivityIndicator size="small" color="#22c55e" />
-                                    <Text style={styles.aiLoadingText}>Analyzing market data...</Text>
+                                    <ActivityIndicator size="small" color={colors.accent} />
+                                    <Text style={[styles.aiLoadingText, { color: isDark ? colors.textSecondary : '#166534' }]}>Analyzing market data...</Text>
                                 </View>
                             ) : (
-                                <Text style={styles.noteItem}>
+                                <Text style={[styles.noteItem, { color: isDark ? colors.text : '#14532d' }]}>
                                     {aiInsights || marketNotes || 'Market analysis loading...'}
                                 </Text>
                             )}
@@ -378,30 +380,31 @@ export default function DashboardScreen({ route, navigation }) {
 
                     </>
                 ) : (
-                    <Text style={styles.noDataText}>No data available for this selection.</Text>
+                    <Text style={[styles.noDataText, { color: colors.textSecondary }]}>No data available for this selection.</Text>
                 )}
             </ScrollView>
 
             {/* Cost Configuration Modal */}
             <Modal visible={showCostModal} animationType="slide" transparent>
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Configure Costs</Text>
+                    <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Configure Costs</Text>
 
                         {Object.entries(costs).map(([key, val]) => (
                             <View key={key} style={styles.inputRow}>
-                                <Text style={styles.inputLabel}>{key}</Text>
+                                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{key}</Text>
                                 <TextInput
-                                    style={styles.input}
+                                    style={[styles.input, { backgroundColor: colors.surfaceElevated, color: colors.text }]}
                                     value={val}
                                     onChangeText={(text) => setCosts(prev => ({ ...prev, [key]: text }))}
                                     keyboardType="numeric"
+                                    placeholderTextColor={colors.textMuted}
                                 />
                             </View>
                         ))}
 
                         <TouchableOpacity
-                            style={styles.closeButton}
+                            style={[styles.closeButton, { backgroundColor: colors.accent }]}
                             onPress={() => setShowCostModal(false)}
                         >
                             <Text style={styles.closeButtonText}>Done</Text>

@@ -1,23 +1,34 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, TextInput, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, TextInput, FlatList, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { getFavorites } from '../services/favorites';
+import { getUserName, getProfileImage } from '../services/userStorage';
+import { useTheme } from '../context/ThemeContext';
 import WatchlistAccordionItem from '../components/WatchlistAccordionItem';
 import { STATIC_FILTERS } from '../constants/staticFilters';
 
 export default function HomeScreen({ navigation }) {
+    const { colors } = useTheme();
     const [favorites, setFavorites] = useState([]);
     const [loading, setLoading] = useState(false);
     const [expandedId, setExpandedId] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
+    const [userName, setUserName] = useState('');
+    const [profileImage, setProfileImage] = useState(null);
 
-    const loadFavorites = async () => {
+    const loadData = async () => {
         setLoading(true);
-        const favs = await getFavorites();
+        const [favs, name, image] = await Promise.all([
+            getFavorites(),
+            getUserName(),
+            getProfileImage()
+        ]);
         setFavorites(favs);
+        setUserName(name || 'Friend');
+        setProfileImage(image);
         if (favs.length > 0 && !expandedId) {
             setExpandedId(0); 
         }
@@ -26,7 +37,7 @@ export default function HomeScreen({ navigation }) {
 
     useFocusEffect(
         useCallback(() => {
-            loadFavorites();
+            loadData();
         }, [])
     );
 
@@ -53,60 +64,143 @@ export default function HomeScreen({ navigation }) {
             .filter(v => v.toLowerCase().includes(lowerQuery))
             .map(v => ({ type: 'Variety', name: v }));
         
-        setSearchResults([...commodityMatches, ...varietyMatches].slice(0, 10)); // Limit results
+        setSearchResults([...commodityMatches, ...varietyMatches].slice(0, 10));
     };
 
     const handleSelectSearchResult = (result) => {
         setSearchQuery('');
         setSearchResults([]);
-        // Navigate to Dashboard with the selected filter
         const filters = result.type === 'Commodity' 
             ? { commodity: result.name } 
             : { variety: result.name };
         navigation.navigate('Dashboard', { filters });
     };
 
+    // Dynamic styles based on theme
+    const dynamicStyles = {
+        container: { flex: 1, backgroundColor: colors.background },
+        header: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20, backgroundColor: colors.background },
+        searchContainer: {
+            backgroundColor: colors.surfaceElevated,
+            borderRadius: 12,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        searchInput: {
+            fontSize: 16,
+            color: colors.text,
+            flex: 1,
+        },
+        searchResultsContainer: {
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            marginTop: 8,
+            maxHeight: 250,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+            elevation: 3,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        searchResultItem: {
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+        },
+        subGreeting: { fontSize: 14, fontWeight: 'bold', color: colors.textSecondary, marginBottom: 2 },
+        greeting: { fontSize: 28, fontWeight: 'bold', color: colors.text },
+        emptyState: { 
+            padding: 32, 
+            alignItems: 'center', 
+            backgroundColor: colors.surface, 
+            borderRadius: 16, 
+            borderStyle: 'dashed', 
+            borderWidth: 2, 
+            borderColor: colors.border, 
+            marginTop: 20 
+        },
+        fabIconCircle: {
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            backgroundColor: colors.accent,
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10,
+            elevation: 6,
+            marginBottom: -28,
+            borderWidth: 5,
+            borderColor: colors.background,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+        },
+        startFilteringButton: {
+            backgroundColor: colors.accent,
+            width: '100%',
+            paddingTop: 36,
+            paddingBottom: 18,
+            borderRadius: 20,
+            alignItems: 'center',
+            shadowColor: colors.accent,
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.35,
+            shadowRadius: 12,
+            elevation: 8
+        },
+    };
+
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={dynamicStyles.container}>
             {/* Custom Header */}
-            <View style={styles.header}>
+            <View style={dynamicStyles.header}>
                 <View style={styles.headerTopRow}>
                     <View /> 
-                    <TouchableOpacity onPress={() => navigation.navigate('Account')}>
-                        <Ionicons name="person-circle-outline" size={32} color="black" />
+                    <TouchableOpacity onPress={() => navigation.navigate('Account')} style={styles.profileButton}>
+                        {profileImage ? (
+                            <Image source={{ uri: profileImage }} style={styles.profileButtonImage} />
+                        ) : (
+                            <Ionicons name="person-circle-outline" size={32} color={colors.text} />
+                        )}
                     </TouchableOpacity>
                 </View>
                 
                 {/* Search Bar */}
-                <View style={styles.searchContainer}>
-                    <Ionicons name="search-outline" size={20} color="#94a3b8" style={{ marginRight: 8 }} />
+                <View style={dynamicStyles.searchContainer}>
+                    <Ionicons name="search-outline" size={20} color={colors.textMuted} style={{ marginRight: 8 }} />
                     <TextInput 
-                        style={styles.searchInput}
+                        style={dynamicStyles.searchInput}
                         placeholder="Search commodities or varieties..."
-                        placeholderTextColor="#94a3b8"
+                        placeholderTextColor={colors.textMuted}
                         value={searchQuery}
                         onChangeText={handleSearch}
                     />
                     {searchQuery.length > 0 && (
                         <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults([]); }}>
-                            <Ionicons name="close-circle" size={20} color="#94a3b8" />
+                            <Ionicons name="close-circle" size={20} color={colors.textMuted} />
                         </TouchableOpacity>
                     )}
                 </View>
 
                 {/* Search Results Dropdown */}
                 {searchResults.length > 0 && (
-                    <View style={styles.searchResultsContainer}>
+                    <View style={dynamicStyles.searchResultsContainer}>
                         <FlatList
                             data={searchResults}
                             keyExtractor={(item, idx) => `${item.type}-${item.name}-${idx}`}
                             renderItem={({ item }) => (
                                 <TouchableOpacity 
-                                    style={styles.searchResultItem}
+                                    style={dynamicStyles.searchResultItem}
                                     onPress={() => handleSelectSearchResult(item)}
                                 >
-                                    <Text style={styles.searchResultType}>{item.type}</Text>
-                                    <Text style={styles.searchResultName}>{item.name}</Text>
+                                    <Text style={[styles.searchResultType, { color: colors.textSecondary }]}>{item.type}</Text>
+                                    <Text style={[styles.searchResultName, { color: colors.text }]}>{item.name}</Text>
                                 </TouchableOpacity>
                             )}
                             keyboardShouldPersistTaps="handled"
@@ -117,11 +211,11 @@ export default function HomeScreen({ navigation }) {
 
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
-                refreshControl={<RefreshControl refreshing={loading} onRefresh={loadFavorites} />}
+                refreshControl={<RefreshControl refreshing={loading} onRefresh={loadData} tintColor={colors.accent} />}
             >
                 <View style={styles.heroSection}>
-                    <Text style={styles.subGreeting}>Welcome Back Anthony,</Text>
-                    <Text style={styles.greeting}>Your Watchlist</Text>
+                    <Text style={dynamicStyles.subGreeting}>Welcome Back {userName},</Text>
+                    <Text style={dynamicStyles.greeting}>Your Watchlist</Text>
                 </View>
 
                 {favorites.length > 0 ? (
@@ -137,20 +231,20 @@ export default function HomeScreen({ navigation }) {
                         ))}
                     </View>
                 ) : (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>You haven't added any favorites yet.</Text>
-                        <Text style={styles.emptySubText}>Search for a crop to add it to your watchlist.</Text>
+                    <View style={dynamicStyles.emptyState}>
+                        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>You haven't added any favorites yet.</Text>
+                        <Text style={[styles.emptySubText, { color: colors.textMuted }]}>Search for a crop to add it to your watchlist.</Text>
                     </View>
                 )}
             </ScrollView>
 
-             {/* Floating Action Button for Filtering - Custom Design with Popping Icon */}
+            {/* Floating Action Button */}
             <View style={styles.fabWrapper}>
-                <View style={styles.fabIconCircle}>
-                    <Ionicons name="options-outline" size={32} color="black" />
+                <View style={dynamicStyles.fabIconCircle}>
+                    <Ionicons name="options-outline" size={32} color="#0f172a" />
                 </View>
                 <TouchableOpacity
-                    style={styles.startFilteringButton}
+                    style={dynamicStyles.startFilteringButton}
                     onPress={() => navigation.navigate('Filters')}
                     activeOpacity={0.8}
                 >
@@ -162,67 +256,27 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f8fafc' },
-    
-    header: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20, backgroundColor: '#f8fafc' },
     headerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     
-    searchContainer: {
-        backgroundColor: '#f1f5f9',
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    searchInput: {
-        fontSize: 16,
-        color: '#1e293b',
-        flex: 1,
-    },
-    searchResultsContainer: {
-        backgroundColor: 'white',
-        borderRadius: 12,
-        marginTop: 8,
-        maxHeight: 250,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-    },
-    searchResultItem: {
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f1f5f9',
-    },
     searchResultType: {
         fontSize: 10,
-        color: '#64748b',
         fontWeight: 'bold',
         textTransform: 'uppercase',
         marginBottom: 2,
     },
     searchResultName: {
         fontSize: 16,
-        color: '#1e293b',
         fontWeight: '500',
     },
 
-    scrollContent: { paddingHorizontal: 24, paddingBottom: 120 }, // Extra padding for large FAB
+    scrollContent: { paddingHorizontal: 24, paddingBottom: 120 },
     
     heroSection: { marginBottom: 20, marginTop: 10 },
-    subGreeting: { fontSize: 14, fontWeight: 'bold', color: '#1e293b', marginBottom: 2 },
-    greeting: { fontSize: 28, fontWeight: 'bold', color: '#1e293b' },
 
     accordionContainer: { gap: 12 },
 
-    emptyState: { padding: 32, alignItems: 'center', backgroundColor: 'white', borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#e2e8f0', marginTop: 20 },
-    emptyText: { color: '#64748b', fontSize: 16, fontWeight: '500', marginBottom: 4 },
-    emptySubText: { color: '#94a3b8', fontSize: 14, textAlign: 'center' },
+    emptyText: { fontSize: 16, fontWeight: '500', marginBottom: 4 },
+    emptySubText: { fontSize: 14, textAlign: 'center' },
 
     fabWrapper: {
         position: 'absolute',
@@ -231,39 +285,22 @@ const styles = StyleSheet.create({
         right: 16,
         alignItems: 'center',
     },
-    fabIconCircle: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#22c55e',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 10,
-        elevation: 6,
-        marginBottom: -28,
-        borderWidth: 5,
-        borderColor: '#f8fafc',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-    },
-    startFilteringButton: {
-        backgroundColor: '#22c55e',
-        width: '100%',
-        paddingTop: 36,
-        paddingBottom: 18,
-        borderRadius: 20,
-        alignItems: 'center',
-        shadowColor: "#22c55e",
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-        elevation: 8
-    },
     startFilteringText: {
-        color: 'white', 
+        color: '#0f172a', 
         fontSize: 22,
         fontWeight: 'bold',
+    },
+    profileButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        overflow: 'hidden',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    profileButtonImage: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
     },
 });

@@ -12,8 +12,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { getFilters } from '../services/api';
 import FilterDropdown from '../components/FilterDropdown';
 import { CATEGORY_COMMODITIES, COMMODITY_TO_CATEGORY } from '../constants/staticFilters';
+import { useTheme } from '../context/ThemeContext';
 
 export default function FiltersScreen({ navigation }) {
+    const { colors } = useTheme();
     const [filters, setFilters] = useState(null);
     const [selectedFilters, setSelectedFilters] = useState({
         commodity: '',
@@ -120,31 +122,31 @@ export default function FiltersScreen({ navigation }) {
 
     if (loading) {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#22c55e" />
-                    <Text style={styles.loadingText}>Loading filters...</Text>
+                    <ActivityIndicator size="large" color={colors.accent} />
+                    <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading filters...</Text>
                 </View>
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="#1e293b" />
+            <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.surfaceElevated }]}>
+                    <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Filters</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Filters</Text>
                 <TouchableOpacity onPress={clearFilters}>
-                    <Text style={styles.clearText}>Clear</Text>
+                    <Text style={[styles.clearText, { color: colors.accent }]}>Clear</Text>
                 </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-                <Text style={styles.sectionTitle}>Refine Your Search</Text>
-                <Text style={styles.sectionSubtitle}>Select criteria to view specific price data</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Refine Your Search</Text>
+                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>Select criteria to view specific price data</Text>
 
                 {error && (
                     <View style={styles.errorBox}>
@@ -160,53 +162,52 @@ export default function FiltersScreen({ navigation }) {
                             options={filters.categories}
                             value={selectedFilters.category}
                             onChange={(v) => handleFilterChange('category', v)}
-                            color="#22c55e"
+                            color={colors.accent}
                         />
                         <FilterDropdown
                             label="Commodity"
                             options={
-                                // Use local mapping for INSTANT options when category is selected
                                 selectedFilters.category 
                                     ? CATEGORY_COMMODITIES[selectedFilters.category] || []
                                     : filters.commodities
                             }
                             value={selectedFilters.commodity}
                             onChange={(v) => handleFilterChange('commodity', v)}
-                            color="#22c55e"
+                            color={colors.accent}
                         />
                         <FilterDropdown
                             label="Variety"
                             options={filters.varieties}
                             value={selectedFilters.variety}
                             onChange={(v) => handleFilterChange('variety', v)}
-                            color="#22c55e"
+                            color={colors.accent}
                         />
                         <FilterDropdown
                             label="District"
                             options={filters.districts}
                             value={selectedFilters.district}
                             onChange={(v) => handleFilterChange('district', v)}
-                            color="#22c55e"
+                            color={colors.accent}
                         />
                         <FilterDropdown
                             label="Organic"
                             options={filters.organics}
                             value={selectedFilters.organic}
                             onChange={(v) => handleFilterChange('organic', v)}
-                            color="#22c55e"
+                            color={colors.accent}
                         />
                     </View>
                 )}
             </ScrollView>
 
             {/* Bottom Action Button */}
-            <View style={styles.buttonContainer}>
+            <View style={[styles.buttonContainer, { backgroundColor: colors.background }]}>
                 <TouchableOpacity
-                    style={styles.viewButton}
+                    style={[styles.viewButton, { backgroundColor: colors.accent, shadowColor: colors.accent }]}
                     onPress={handleViewDashboard}
                     activeOpacity={0.8}
                 >
-                    <Ionicons name="bar-chart-outline" size={22} color="white" style={{ marginRight: 8 }} />
+                    <Ionicons name="bar-chart-outline" size={22} color="#0f172a" style={{ marginRight: 8 }} />
                     <Text style={styles.viewButtonText}>View Dashboard</Text>
                 </TouchableOpacity>
             </View>

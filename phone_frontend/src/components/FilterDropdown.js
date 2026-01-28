@@ -1,29 +1,33 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Platform, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity, Modal } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { useTheme } from '../context/ThemeContext';
 
 export default function FilterDropdown({ label, options, value, onChange, color }) {
+    const { colors, isDark } = useTheme();
     const [modalVisible, setModalVisible] = useState(false);
     const [tempValue, setTempValue] = useState(value);
 
     const displayValue = value || 'All';
+    const accentColor = color || colors.accent;
 
     // For Android, use the native Picker directly
     if (Platform.OS === 'android') {
         return (
             <View style={styles.container}>
-                <View style={[styles.labelContainer, { backgroundColor: color }]}>
+                <View style={[styles.labelContainer, { backgroundColor: accentColor }]}>
                     <Text style={styles.label}>{label}</Text>
                 </View>
-                <View style={styles.pickerContainer}>
+                <View style={[styles.pickerContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     <Picker
                         selectedValue={value}
                         onValueChange={onChange}
-                        style={styles.picker}
+                        style={[styles.picker, { color: colors.text }]}
+                        dropdownIconColor={colors.textSecondary}
                     >
-                        <Picker.Item label="All" value="" />
+                        <Picker.Item label="All" value="" color={colors.text} />
                         {options && options.map((opt) => (
-                            <Picker.Item key={opt} label={opt} value={opt} />
+                            <Picker.Item key={opt} label={opt} value={opt} color={colors.text} />
                         ))}
                     </Picker>
                 </View>
@@ -49,12 +53,15 @@ export default function FilterDropdown({ label, options, value, onChange, color 
 
     return (
         <View style={styles.container}>
-            <View style={[styles.labelContainer, { backgroundColor: color }]}>
+            <View style={[styles.labelContainer, { backgroundColor: accentColor }]}>
                 <Text style={styles.label}>{label}</Text>
             </View>
-            <TouchableOpacity style={styles.selectButton} onPress={handleOpen}>
-                <Text style={styles.selectButtonText}>{displayValue}</Text>
-                <Text style={styles.chevron}>▼</Text>
+            <TouchableOpacity 
+                style={[styles.selectButton, { backgroundColor: colors.surface, borderColor: colors.border }]} 
+                onPress={handleOpen}
+            >
+                <Text style={[styles.selectButtonText, { color: colors.text }]}>{displayValue}</Text>
+                <Text style={[styles.chevron, { color: colors.textSecondary }]}>▼</Text>
             </TouchableOpacity>
 
             <Modal
@@ -63,21 +70,21 @@ export default function FilterDropdown({ label, options, value, onChange, color 
                 animationType="slide"
             >
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
+                    <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                        <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
                             <TouchableOpacity onPress={handleCancel}>
-                                <Text style={styles.cancelText}>Cancel</Text>
+                                <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
                             </TouchableOpacity>
-                            <Text style={styles.modalTitle}>{label}</Text>
+                            <Text style={[styles.modalTitle, { color: colors.text }]}>{label}</Text>
                             <TouchableOpacity onPress={handleConfirm}>
-                                <Text style={styles.doneText}>Done</Text>
+                                <Text style={[styles.doneText, { color: accentColor }]}>Done</Text>
                             </TouchableOpacity>
                         </View>
                         <Picker
                             selectedValue={tempValue}
                             onValueChange={setTempValue}
                             style={styles.modalPicker}
-                            itemStyle={styles.pickerItem}
+                            itemStyle={[styles.pickerItem, { color: colors.text }]}
                         >
                             <Picker.Item label="All" value="" />
                             {options && options.map((opt) => (
@@ -102,17 +109,15 @@ const styles = StyleSheet.create({
         borderTopRightRadius: 6,
     },
     label: {
-        color: 'white',
+        color: '#0f172a',
         fontSize: 12,
         fontWeight: '600',
     },
     pickerContainer: {
         borderWidth: 1,
-        borderColor: '#d1d5db',
         borderTopWidth: 0,
         borderBottomLeftRadius: 6,
         borderBottomRightRadius: 6,
-        backgroundColor: 'white',
         overflow: 'hidden',
     },
     picker: {
@@ -127,21 +132,17 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#d1d5db',
         borderTopWidth: 0,
         borderBottomLeftRadius: 6,
         borderBottomRightRadius: 6,
-        backgroundColor: 'white',
         paddingHorizontal: 12,
         paddingVertical: 14,
     },
     selectButtonText: {
         fontSize: 16,
-        color: '#1f2937',
     },
     chevron: {
         fontSize: 12,
-        color: '#6b7280',
     },
     // Modal styles
     modalOverlay: {
@@ -150,7 +151,6 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.4)',
     },
     modalContent: {
-        backgroundColor: 'white',
         borderTopLeftRadius: 16,
         borderTopRightRadius: 16,
         paddingBottom: 20,
@@ -161,21 +161,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
     },
     modalTitle: {
         fontSize: 17,
         fontWeight: '600',
-        color: '#1f2937',
     },
     cancelText: {
         fontSize: 17,
-        color: '#6b7280',
     },
     doneText: {
         fontSize: 17,
         fontWeight: '600',
-        color: '#0f766e',
     },
     modalPicker: {
         height: 216,
