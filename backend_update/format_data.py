@@ -59,11 +59,40 @@ def normalize_category(raw_cat):
     return "Other"
 
 
+def normalize_organic(value):
+    """Normalize organic field to 'yes' or 'no'."""
+    if pd.isna(value) or value == "" or value == "N/A":
+        return "no"
+    val_lower = str(value).lower().strip()
+    if val_lower in ("y", "yes", "organic", "true", "1"):
+        return "yes"
+    return "no"
+
+
+def to_title_case(value):
+    """Convert value to title case (e.g., 'Ambrosia Apple', 'Central California')."""
+    if pd.isna(value) or value == "" or value == "N/A":
+        return None
+    return str(value).strip().title()
+
+
+def get_field(row, *field_names):
+    """Get the first non-null value from a list of possible field names."""
+    for field in field_names:
+        val = row.get(field)
+        if pd.notna(val) and val != "" and val != "N/A":
+            return val
+    return None
+
+
 def format_for_crop_price(df):
     """
-    Columns matching Supabase schema: report_date, market_type, market_location_name, 
-             district, category, commodity, variety, package, organic,
-             low_price, high_price, wtd_avg_price
+    Format DataFrame for CropPrice table.
+    
+    Columns: report_date, market_type, market_location_name, district, origin,
+             category, commodity, variety, package, item_size, organic,
+             low_price, high_price, mostly_low_price, mostly_high_price,
+             market_tone_comments, wtd_avg_price, supply_tone_comments, demand_tone_comments
     """
     records = []
     
@@ -79,37 +108,60 @@ def format_for_crop_price(df):
             continue
 
         # Map category from various possible columns
-        category = row.get('category')
-        if pd.isna(category):
-            category = row.get('community') # Retail 3324
-        if pd.isna(category):
-            category = row.get('grp')      # Shipping Point 2390/2391
-        if pd.isna(category):
-            category = row.get('group')
+        category = get_field(row, 'category', 'community', 'grp', 'group')
         
         # Normalize variety and package columns
-        variety = row.get('variety') if 'variety' in row else row.get('var')
-        package = row.get('package') if 'package' in row else row.get('pkg')
-        if pd.isna(package) or package == "":
-            package = row.get('size')
+        variety = get_field(row, 'variety', 'var')
+        package = get_field(row, 'package', 'pkg', 'size')
         
         record = {
             'report_date': report_date.isoformat() if report_date else None,
-            'market_type': row.get('market_type'),
+            'market_type': to_title_case(row.get('market_type')),
             'market_location_name': row.get('market_location_name'),
-            'district': row.get('district') if pd.notna(row.get('district')) else None,
+            'district': to_title_case(row.get('district')),
+            'origin': to_title_case(row.get('origin')),
             'category': normalize_category(category),
-            'commodity': commodity,
-            'variety': variety if pd.notna(variety) and variety != "N/A" else None,
-            'package': package if pd.notna(package) and package != "N/A" else None,
-            'organic': row.get('organic') if pd.notna(row.get('organic')) else None,
+            'commodity': to_title_case(commodity),
+            'variety': to_title_case(variety),
+            'package': to_title_case(package),
+            'item_size': row.get('item_size') if pd.notna(row.get('item_size')) else None,
+            'organic': normalize_organic(row.get('organic')),
             'low_price': clean_price(row.get('low_price')),
             'high_price': clean_price(row.get('high_price')),
-            'wtd_avg_price': clean_price(row.get('wtd_avg_price')),  # For retail data
+            'mostly_low_price': clean_price(row.get('mostly_low_price')),
+            'mostly_high_price': clean_price(row.get('mostly_high_price')),
+            'market_tone_comments': row.get('market_tone_comments') if pd.notna(row.get('market_tone_comments')) else None,
+            'wtd_avg_price': clean_price(row.get('wtd_avg_price')),
+            'supply_tone_comments': row.get('supply_tone_comments') if pd.notna(row.get('supply_tone_comments')) else None,
+            'demand_tone_comments': row.get('demand_tone_comments') if pd.notna(row.get('demand_tone_comments')) else None,
         }
         records.append(record)
     
     return pd.DataFrame(records)
+
+
+def calculate_price_avg(df):
+    """
+    Calculate price_avg for a DataFrame.
+    
+    1. Calculate average for each price field (excluding nulls)
+    2. Average only the field averages that have data
+    
+    Returns: int or None
+    """
+    field_avgs = []
+    
+    for field in ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price']:
+        if field in df.columns:
+            non_null = df[field].dropna()
+            if len(non_null) > 0:
+                field_avgs.append(non_null.mean())
+    
+    if not field_avgs:
+        return None
+    
+    # Average the field averages (divide by count of fields with data, not always 4)
+    return int(sum(field_avgs) / len(field_avgs))
 
 
 def format_for_unified_crop_price(df):
@@ -117,7 +169,8 @@ def format_for_unified_crop_price(df):
     Format DataFrame for UnifiedCropPrice table.
     
     Columns: report_date, market_type, district, commodity, variety, package,
-             price_min, price_max, price_retail
+             weight_lbs, weight_kgs, units, supply_tone_comments, demand_tone_comments,
+             market_tone_comments, origin, price_avg
     """
     records = []
     
@@ -131,20 +184,38 @@ def format_for_unified_crop_price(df):
         if not report_date:
             continue
         
+        # Skip if commodity is missing
+        commodity = row.get('commodity')
+        if pd.isna(commodity) or commodity == "" or commodity == "N/A":
+            continue
+        
         # Normalize variety and package columns
-        variety = row.get('variety') if 'variety' in row else row.get('var')
-        package = row.get('package') if 'package' in row else row.get('pkg')
+        variety = get_field(row, 'variety', 'var')
+        package = get_field(row, 'package', 'pkg', 'size')
+        
+        # Calculate price_avg for this single row
+        prices = []
+        for field in ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price']:
+            val = clean_price(row.get(field))
+            if val is not None:
+                prices.append(val)
+        price_avg = int(sum(prices) / len(prices)) if prices else None
         
         record = {
             'report_date': report_date.isoformat() if report_date else None,
-            'market_type': row.get('market_type'),
-            'district': row.get('district') if pd.notna(row.get('district')) and row.get('district') != "N/A" else None,
-            'commodity': row.get('commodity'),
-            'variety': variety if pd.notna(variety) and variety != "N/A" else None,
-            'package': package if pd.notna(package) and package != "N/A" else None,
-            'price_min': clean_price(row.get('low_price')),
-            'price_max': clean_price(row.get('high_price')),
-            'price_retail': clean_price(row.get('wtd_avg_price')),
+            'market_type': to_title_case(row.get('market_type')),
+            'district': to_title_case(row.get('district')),
+            'commodity': to_title_case(commodity),
+            'variety': to_title_case(variety),
+            'package': to_title_case(package),
+            'weight_lbs': None,  # Not available in CSV
+            'weight_kgs': None,  # Not available in CSV
+            'units': None,       # Not available in CSV
+            'supply_tone_comments': row.get('supply_tone_comments') if pd.notna(row.get('supply_tone_comments')) else None,
+            'demand_tone_comments': row.get('demand_tone_comments') if pd.notna(row.get('demand_tone_comments')) else None,
+            'market_tone_comments': row.get('market_tone_comments') if pd.notna(row.get('market_tone_comments')) else None,
+            'origin': to_title_case(row.get('origin')),
+            'price_avg': price_avg,
         }
         records.append(record)
     
@@ -198,3 +269,12 @@ if __name__ == "__main__":
     crop_price_df, unified_df = load_and_format_all_data()
     print("\nCropPrice columns:", list(crop_price_df.columns))
     print("UnifiedCropPrice columns:", list(unified_df.columns))
+    
+    # Show sample data
+    if not crop_price_df.empty:
+        print("\nSample CropPrice data:")
+        print(crop_price_df.head(3).to_string())
+    
+    if not unified_df.empty:
+        print("\nSample UnifiedCropPrice data:")
+        print(unified_df.head(3).to_string())

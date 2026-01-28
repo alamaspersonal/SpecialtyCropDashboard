@@ -144,31 +144,8 @@ export default function DashboardScreen({ route, navigation }) {
                     .filter(Boolean)
                     .slice(0, 5);
                 
-                // Build stats object for AI
-                const aiStats = {
-                    terminal: {
-                        avg: terminalData.length > 0 
-                            ? terminalData.reduce((acc, d) => acc + (d.low_price || 0), 0) / terminalData.length 
-                            : 0,
-                        pct_change: 0 // Would need historical data for real calculation
-                    },
-                    shipping: {
-                        avg: shippingData.length > 0 
-                            ? shippingData.reduce((acc, d) => acc + (d.low_price || 0), 0) / shippingData.length 
-                            : 0,
-                        pct_change: 0
-                    },
-                    retail: {
-                        avg: retailData.length > 0 
-                            ? retailData.reduce((acc, d) => acc + (d.low_price || 0), 0) / retailData.length 
-                            : 0,
-                        pct_change: 0
-                    }
-                };
-                
                 const insights = await generateMarketInsights(
                     filters.commodity,
-                    aiStats,
                     allNotes
                 );
                 setAiInsights(insights);
