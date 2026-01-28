@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getFilters } from '../services/api';
 import FilterDropdown from '../components/FilterDropdown';
+import { CATEGORY_COMMODITIES, COMMODITY_TO_CATEGORY } from '../constants/staticFilters';
 
 export default function FiltersScreen({ navigation }) {
     const [filters, setFilters] = useState(null);
@@ -37,10 +38,70 @@ export default function FiltersScreen({ navigation }) {
             }
         };
         fetchFilters();
-    }, [selectedFilters]);
+    }, [selectedFilters.category, selectedFilters.commodity, selectedFilters.district, selectedFilters.organic]);
 
     const handleFilterChange = (filterName, value) => {
-        setSelectedFilters(prev => ({ ...prev, [filterName]: value }));
+        // Handle cascading filter logic based on which filter changed
+        // Uses local mappings for INSTANT validation - no database calls!
+        
+        if (filterName === 'category') {
+            // When category changes, immediately check if commodity is still valid
+            setSelectedFilters(prev => {
+                const newCategory = value;
+                let newCommodity = prev.commodity;
+                let newVariety = prev.variety;
+                
+                // If we have a commodity selected, check if it belongs to the new category
+                if (prev.commodity && newCategory) {
+                    const validCommodities = CATEGORY_COMMODITIES[newCategory] || [];
+                    if (!validCommodities.includes(prev.commodity)) {
+                        // Commodity is not in the new category - clear it immediately
+                        console.log('[DEBUG] Instantly clearing invalid commodity:', prev.commodity);
+                        newCommodity = '';
+                        newVariety = ''; // Also clear variety
+                    }
+                }
+                
+                // If category is cleared, don't clear commodity (allow browsing)
+                
+                return { 
+                    ...prev, 
+                    category: newCategory,
+                    commodity: newCommodity,
+                    variety: newVariety,
+                };
+            });
+        } 
+        else if (filterName === 'commodity') {
+            // When commodity is selected, instantly look up its parent category
+            setSelectedFilters(prev => {
+                let newCategory = prev.category;
+                
+                // Auto-fill category if not set and we have a commodity
+                if (value && !prev.category) {
+                    const lookupCategory = COMMODITY_TO_CATEGORY[value];
+                    if (lookupCategory) {
+                        console.log('[DEBUG] Instantly auto-filling category:', lookupCategory, 'for commodity:', value);
+                        newCategory = lookupCategory;
+                    }
+                }
+                
+                return { 
+                    ...prev, 
+                    commodity: value,
+                    category: newCategory,
+                    variety: '', // Clear variety when commodity changes
+                };
+            });
+        }
+        else if (filterName === 'variety') {
+            // Variety is a leaf node, just update it
+            setSelectedFilters(prev => ({ ...prev, variety: value }));
+        }
+        else {
+            // District and organic are independent - just update them
+            setSelectedFilters(prev => ({ ...prev, [filterName]: value }));
+        }
     };
 
     const handleViewDashboard = () => {
@@ -103,7 +164,12 @@ export default function FiltersScreen({ navigation }) {
                         />
                         <FilterDropdown
                             label="Commodity"
-                            options={filters.commodities}
+                            options={
+                                // Use local mapping for INSTANT options when category is selected
+                                selectedFilters.category 
+                                    ? CATEGORY_COMMODITIES[selectedFilters.category] || []
+                                    : filters.commodities
+                            }
                             value={selectedFilters.commodity}
                             onChange={(v) => handleFilterChange('commodity', v)}
                             color="#22c55e"

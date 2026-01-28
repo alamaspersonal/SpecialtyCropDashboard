@@ -3,6 +3,72 @@
  * Generated on: Wed Jan 21 10:07:07 PST 2026
  */
 
+/**
+ * Category to Commodities mapping for instant local validation.
+ * Used to immediately clear invalid child filters when parent category changes.
+ */
+export const CATEGORY_COMMODITIES = {
+    "Fruits": [
+        "Apple Pears", "Apples", "Apples, Processed", "Apricots", "Avocados", "Bananas",
+        "Blackberries", "Blood Orange", "Blueberries", "Cantaloupes", "Cherries", 
+        "Clementines", "Coconut", "Cranberries", "Currants", "Dekopon (Shiranui)",
+        "Grapefruit", "Grapes", "Honeydews", "Kiwifruit", "Lemons", "Limes", "Mangoes",
+        "Melogold", "Melon, Hami", "Meyer Lemon", "Nectarines", "Oranges", "Papaya",
+        "Peaches", "Pears", "Persimmons", "Pineapples", "Plantains", "Plums", 
+        "Pomegranates", "Pummelo", "Raspberries", "Rhubarb", "Satsuma", "Satsumas",
+        "Strawberries", "Tangelos", "Tangerines", "Tangerines/Mandarins", "Watermelons"
+    ],
+    "Nuts": [
+        "Almonds", "Filberts", "Peanuts", "Walnuts"
+    ],
+    "Vegetables": [
+        "Aloe Leaves", "Anaheim Pepper", "Anise", "Artichokes", "Asparagus", "Basil",
+        "Bay Leaves", "Bean Sprouts", "Beans", "Beans, Dragon Tongue", "Beans, Fava",
+        "Beans, Haricot Vert (French Type)", "Beans, Italian Type", "Beans, Round Green Type",
+        "Beans, Wax Type", "Beets", "Bok Choy", "Broccoli", "Brussels Sprouts", "Cabbage",
+        "Cactus Leaf (Nopales)", "Carrots", "Cauliflower", "Celeriac (Celery Root)", "Celery",
+        "Chayote", "Chervil", "Chinese Cabbage", "Chives", "Cilantro", "Collards",
+        "Corn, Sweet", "Corn-Sweet", "Cucumbers", "Curly Parsley", "Dill", "Eggplant",
+        "Endive", "Epasote (Epazote)", "Escarole", "Fenugreek (Methi)", "Garlic",
+        "Ginger Root", "Greens, Broccoli Rabe (Rappini)", "Greens, Collard", 
+        "Greens, Dandelion", "Greens, Kale", "Greens, Mustard", "Greens, Swiss Chard",
+        "Horseradish", "Jalapeno Peppers", "Jerusalem Artichokes", "Jicama", "Kale",
+        "Leeks", "Lettuce", "Lettuce, Boston", "Lettuce, Green Leaf", "Lettuce, Iceberg",
+        "Lettuce, Red Leaf", "Lettuce, Romaine", "Marjoram", "Mint", "Mixed Mini Sweet Peppers",
+        "Mushrooms", "Mustard", "Okra", "Onions, Green", "Oregano", "Parsley", "Parsnips",
+        "Peas, English", "Peas, Snow", "Peas, Sugar Snap", "Peppers (Bell Type)",
+        "Peppers, Anaheim", "Peppers, Bell Type", "Peppers, Fresno", "Peppers, Habanero",
+        "Peppers, Jalapeno", "Peppers, Manzano", "Peppers, Mixed Mini Sweet Types",
+        "Peppers, Pasilla", "Peppers, Serrano", "Peppers, Shishito", "Peppers, Yellow Chile",
+        "Plain Parsley", "Poblano Pepper", "Radicchio", "Radishes", "Rapini/Broccoli Rabe",
+        "Rosemary", "Rutabagas", "Sage", "Salad (Mixed Types)", "Salicornia (Sea Bean)",
+        "Salsify", "Savory", "Serrano Peppers", "Snow Peas", "Sorrel", "Spinach", "Squash",
+        "Squash, Acorn", "Squash, Banana", "Squash, Butternut", "Squash, Delicata",
+        "Squash, Grey", "Squash, Kabocha", "Squash, Red Kuri", "Squash, Spaghetti",
+        "Squash, Yellow Straightneck", "Squash, Zucchini", "Sugar Snap Peas", "Swiss Chard",
+        "Tarragon", "Thyme", "Tomatillos", "Tomatoes", "Tomatoes, Cherry", 
+        "Tomatoes, Grape Type", "Tomatoes, Plum Type", "Turmeric", "Turnip Tops", "Turnips",
+        "Verdolaga", "Watercress", "Yuca (Cassava)"
+    ],
+    "Potatoes & Onions": [
+        "Onions, Dry", "Potatoes", "Sweet Potatoes"
+    ],
+    "Other": [
+        "Hemp (Seed) Oil", "Hemp Protein", "Hemp Seeds Shelled", "Honey", "Ornamentals"
+    ]
+};
+
+/**
+ * Reverse lookup: Commodity to Category mapping.
+ * Built automatically from CATEGORY_COMMODITIES.
+ */
+export const COMMODITY_TO_CATEGORY = {};
+Object.entries(CATEGORY_COMMODITIES).forEach(([category, commodities]) => {
+    commodities.forEach(commodity => {
+        COMMODITY_TO_CATEGORY[commodity] = category;
+    });
+});
+
 export const STATIC_FILTERS = {
     "categories": [
         "Fruits",

@@ -162,9 +162,6 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
     const retailHigh = stats.retail_high_avg > 0
         ? formatPrice(stats.retail_high_avg)
         : formatPrice(terminalHigh * 1.4);
-    const totalCosts = Object.values(costs).reduce((a, b) => a + parseFloat(b || 0), 0);
-    const farmLow = formatPrice(shippingLow - totalCosts);
-    const farmHigh = formatPrice(shippingHigh - totalCosts);
 
     // Determine Retail Estimate
     const isRetailEstimated = (stats.retail_low_avg ?? 0) <= 0;
@@ -207,16 +204,6 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 selectedValue={actions?.selectedPackages?.shipping}
                 onValueChange={(v) => actions?.setPackage('shipping', v)}
                 isEstimated={stats.is_shipping_estimated}
-                weightLbs={weightData?.shipping?.weight_lbs}
-                units={weightData?.shipping?.units}
-            />
-
-            <PriceBlock
-                label="Reference Farm"
-                lowPrice={farmLow}
-                highPrice={farmHigh}
-                bg="#facc15"
-                isEstimated={true}
                 weightLbs={weightData?.shipping?.weight_lbs}
                 units={weightData?.shipping?.units}
             />

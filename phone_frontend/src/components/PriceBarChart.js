@@ -36,7 +36,6 @@ export default function PriceBarChart({ currentPrice, priorPrice, currentDate, p
                     {/* Placeholders for other price types to match mockup layout */}
                     <View style={[styles.placeholderBar, { backgroundColor: '#e879f9' }]}><Text style={styles.placeholderText}>National retail price</Text></View>
                     <View style={[styles.placeholderBar, { backgroundColor: '#fdba74' }]}><Text style={styles.placeholderText}>Shipping point price</Text></View>
-                    <View style={[styles.placeholderBar, { backgroundColor: '#fef08a' }]}><Text style={styles.placeholderText}>Reference farm price</Text></View>
                 </View>
             </View>
 
@@ -49,7 +48,6 @@ export default function PriceBarChart({ currentPrice, priorPrice, currentDate, p
                     {/* Placeholders */}
                     <View style={[styles.placeholderBar, { backgroundColor: '#e879f9' }]}><Text style={styles.placeholderText}>National retail price</Text></View>
                     <View style={[styles.placeholderBar, { backgroundColor: '#fdba74' }]}><Text style={styles.placeholderText}>Shipping point price</Text></View>
-                    <View style={[styles.placeholderBar, { backgroundColor: '#fef08a' }]}><Text style={styles.placeholderText}>Reference farm price</Text></View>
                 </View>
             </View>
         </View>

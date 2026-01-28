@@ -12,29 +12,7 @@ export default function WatchlistAccordionItem({ item, expanded, onToggle, onPre
         }
     }, [expanded, item.commodity]);
 
-    // Helper to format currency
-    const formatPrice = (price) => price ? `$${price.toFixed(2)}` : 'N/A';
-    
-    // Helper for percentage change 
-    const renderPercentChange = (val) => {
-        const roundedVal = Math.round(val);
-        const color = roundedVal >= 0 ? '#16a34a' : '#dc2626';
-        const arrow = roundedVal >= 0 ? '▲' : '▼';
-        
-        return (
-            <Text style={[styles.percentText, { color }]}>
-                {arrow} {Math.abs(roundedVal)}% This Week
-            </Text>
-        );
-    };
 
-    // Helper to determine unit display
-    const getUnitText = () => {
-        if (!stats?.package_unit) return '/lb';
-        // Simple logic: if unit is short, use it, else generic? 
-        // For now, use what API returns but keep it concise if possible.
-        return `/${stats.package_unit}`;
-    };
 
     return (
         <View style={styles.card}>
@@ -58,44 +36,6 @@ export default function WatchlistAccordionItem({ item, expanded, onToggle, onPre
                        <Text style={styles.dateText}>
                             {stats?.date ? new Date(stats.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Loading...'}
                         </Text>
-                    </View>
-
-                    <View style={styles.metricsContainer}>
-                        {/* Retail Metric */}
-                        {stats?.retail?.avg > 0 && (
-                            <View style={styles.metricRow}>
-                                <Text style={styles.metricLabel}>Retail: </Text>
-                                <Text style={styles.metricValue}>
-                                    {formatPrice(stats.retail.avg)}
-                                    <Text style={styles.unitText}>{getUnitText()}</Text>
-                                </Text>
-                                {renderPercentChange(stats.retail.pct_change)}
-                            </View>
-                        )}
-
-                        {/* Terminal Metric */}
-                        {stats?.terminal?.avg > 0 && (
-                             <View style={styles.metricRow}>
-                                <Text style={styles.metricLabel}>Terminal: </Text>
-                                <Text style={[styles.metricValue, { color: '#dc2626' }]}>
-                                    {formatPrice(stats.terminal.avg)}
-                                    <Text style={styles.unitText}>{getUnitText()}</Text>
-                                </Text>
-                                {renderPercentChange(stats.terminal.pct_change)}
-                            </View>
-                        )}
-
-                         {/* Shipping Metric */}
-                         {stats?.shipping?.avg > 0 && (
-                            <View style={styles.metricRow}>
-                                <Text style={styles.metricLabel}>Shipping: </Text>
-                                <Text style={[styles.metricValue, { color: '#16a34a' }]}>
-                                    {formatPrice(stats.shipping.avg)}
-                                    <Text style={styles.unitText}>{getUnitText()}</Text>
-                                </Text>
-                                {renderPercentChange(stats.shipping.pct_change)}
-                            </View>
-                         )}
                     </View>
 
                     <Text style={styles.marketNotes}>
@@ -149,35 +89,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#1e293b',
     },
-    metricsContainer: {
-        marginBottom: 12,
-    },
-    metricRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        marginBottom: 4,
-    },
-    metricLabel: {
-        fontWeight: 'bold',
-        color: '#1e293b',
-        fontSize: 14,
-    },
-    metricValue: {
-        fontWeight: 'bold',
-        color: '#16a34a', 
-        fontSize: 14,
-    },
-    unitText: {
-        color: '#16a34a', // Match price color for the unit too? Or keep gray? Mockup shows green.
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
-    percentText: {
-        fontSize: 10,
-        marginLeft: 8,
-        fontWeight: 'bold',
-    },
+
     marketNotes: {
         fontSize: 13,
         color: '#334155',

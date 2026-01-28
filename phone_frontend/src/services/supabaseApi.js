@@ -16,7 +16,14 @@ import { STATIC_FILTERS } from '../constants/staticFilters';
  * Get distinct filter values for the filter UI.
  * Mirrors: GET /api/filters
  * 
- * @param {Object} currentFilters - Currently selected filters (Ignored for static list)
+ * When fetching options for a filter, we exclude that filter's current value
+ * but keep parent filters applied. This ensures users see all available options
+ * within their parent filter selections, not just their previous choice.
+ * 
+ * Filter hierarchy: category -> commodity -> variety
+ * Independent filters: district, organic
+ * 
+ * @param {Object} currentFilters - Currently selected filters
  * @returns {Object} Object containing arrays of distinct values for each filter field
  */
 export const getFilters = async (currentFilters = {}) => {
@@ -33,74 +40,123 @@ export const getFilters = async (currentFilters = {}) => {
 
         console.log('[DEBUG] Active filters detected, querying Supabase:', currentFilters);
         
-        let allData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
+        // Helper function to fetch options for a specific field
+        // excludeField: don't apply filter for this field (so user sees all options)
+        // applyFilters: which filters to apply (parent/sibling filters)
+        const fetchOptionsForField = async (field, applyFilters) => {
+            let allData = [];
+            let page = 0;
+            const pageSize = 1000;
+            let hasMore = true;
 
-        while (hasMore) {
-            // Build query with current filters applied
-            let query = supabase
-                .from('CropPrice')
-                .select('category, commodity, variety, package, district, organic')
-                .range(page * pageSize, (page + 1) * pageSize - 1);
+            while (hasMore) {
+                let query = supabase
+                    .from('CropPrice')
+                    .select(field)
+                    .range(page * pageSize, (page + 1) * pageSize - 1);
 
-            // Apply existing filters to narrow down options
-            if (currentFilters.commodity) query = query.eq('commodity', currentFilters.commodity);
-            if (currentFilters.variety) query = query.eq('variety', currentFilters.variety);
-            if (currentFilters.category) query = query.eq('category', currentFilters.category);
-            if (currentFilters.district) query = query.eq('district', currentFilters.district);
-            if (currentFilters.organic) query = query.eq('organic', currentFilters.organic);
+                // Apply only the specified filters (not the field being fetched)
+                if (applyFilters.category) query = query.eq('category', applyFilters.category);
+                if (applyFilters.commodity) query = query.eq('commodity', applyFilters.commodity);
+                if (applyFilters.variety) query = query.eq('variety', applyFilters.variety);
+                if (applyFilters.district) query = query.eq('district', applyFilters.district);
+                if (applyFilters.organic) query = query.eq('organic', applyFilters.organic);
 
-            const { data, error } = await query;
-            
-            if (error) throw error;
+                const { data, error } = await query;
+                if (error) throw error;
 
-            if (data && data.length > 0) {
-                allData = [...allData, ...data];
-                console.log(`[DEBUG] Fetched page ${page}, rows: ${data.length}, total: ${allData.length}`);
-                
-                if (data.length < pageSize) {
-                    hasMore = false; // Less than integer page size means last page
+                if (data && data.length > 0) {
+                    allData = [...allData, ...data];
+                    if (data.length < pageSize) {
+                        hasMore = false;
+                    } else {
+                        page++;
+                    }
                 } else {
-                    page++;
+                    hasMore = false;
                 }
-            } else {
-                hasMore = false;
-            }
-            
-            // Safety break for massive datasets (optional, but good practice)
-            if (allData.length > 50000) {
-                console.warn('[DEBUG] Reached safety limit of 50k rows, stopping fetch.');
-                break;
-            }
-        }
 
-        console.log('[DEBUG] Total rows fetched for filters:', allData.length);
+                if (allData.length > 50000) {
+                    console.warn('[DEBUG] Reached safety limit of 50k rows, stopping fetch.');
+                    break;
+                }
+            }
 
-        // Extract unique values for each field
-        const extractUnique = (field) => {
+            // Extract unique values
             const values = allData
                 .map(row => row[field])
                 .filter(val => val && val !== 'N/A');
             return [...new Set(values)].sort();
         };
 
+        // Build filter sets for each field, excluding the field itself
+        // Category: no parent filters, just use other independent filters
+        const categoryFilters = {
+            district: currentFilters.district,
+            organic: currentFilters.organic,
+        };
+
+        // Commodity: apply category filter (parent), exclude commodity itself
+        const commodityFilters = {
+            category: currentFilters.category,
+            district: currentFilters.district,
+            organic: currentFilters.organic,
+        };
+
+        // Variety: apply category and commodity filters (parents), exclude variety itself
+        const varietyFilters = {
+            category: currentFilters.category,
+            commodity: currentFilters.commodity,
+            district: currentFilters.district,
+            organic: currentFilters.organic,
+        };
+
+        // District: apply main filters but exclude district itself
+        const districtFilters = {
+            category: currentFilters.category,
+            commodity: currentFilters.commodity,
+            variety: currentFilters.variety,
+            organic: currentFilters.organic,
+        };
+
+        // Organic: apply main filters but exclude organic itself
+        const organicFilters = {
+            category: currentFilters.category,
+            commodity: currentFilters.commodity,
+            variety: currentFilters.variety,
+            district: currentFilters.district,
+        };
+
+        // Fetch all filter options in parallel
+        const [categories, commodities, varieties, districts, organics] = await Promise.all([
+            fetchOptionsForField('category', categoryFilters),
+            fetchOptionsForField('commodity', commodityFilters),
+            fetchOptionsForField('variety', varietyFilters),
+            fetchOptionsForField('district', districtFilters),
+            fetchOptionsForField('organic', organicFilters),
+        ]);
+
         const result = {
-            categories: extractUnique('category'),
-            commodities: extractUnique('commodity'),
-            varieties: extractUnique('variety'),
-            packages: extractUnique('package'),
-            districts: extractUnique('district'),
-            organics: extractUnique('organic'),
+            categories,
+            commodities,
+            varieties,
+            packages: [], // Not needed in filter UI
+            districts,
+            organics,
         };
         
+        console.log('[DEBUG] Filter options fetched:', {
+            categories: categories.length,
+            commodities: commodities.length,
+            varieties: varieties.length,
+            districts: districts.length,
+            organics: organics.length,
+        });
+
         return result;
 
     } catch (error) {
         console.error('Error fetching filters:', error);
-        // Fallback to static filters on error?
-        // return STATIC_FILTERS; 
         throw error;
     }
 };
