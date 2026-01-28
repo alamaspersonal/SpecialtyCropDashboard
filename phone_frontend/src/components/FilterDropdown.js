@@ -11,7 +11,7 @@ export default function FilterDropdown({ label, options, value, onChange, color 
     const displayValue = value || 'All';
     const accentColor = color || colors.accent;
 
-    // For Android, use the native Picker directly
+    // For Android, use the native Picker
     if (Platform.OS === 'android') {
         return (
             <View style={styles.container}>
