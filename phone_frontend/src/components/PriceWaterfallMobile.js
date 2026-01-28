@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { useTheme } from '../context/ThemeContext';
 
-const PackageSelector = ({ options, selectedValue, onValueChange, isDark }) => {
+const DropdownSelector = ({ label, options, selectedValue, onValueChange, isCardDark }) => {
+    const { colors, isDark } = useTheme();
     const [modalVisible, setModalVisible] = useState(false);
 
     if (!options || options.length === 0) return null;
 
-    const textColor = isDark ? 'black' : 'white';
-    const bgColor = isDark ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)';
+    const textColor = isCardDark ? 'black' : 'white';
+    const bgColor = isCardDark ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.2)';
 
-    // Truncate long package names
-    const displayValue = selectedValue?.length > 20
-        ? selectedValue.substring(0, 18) + '...'
-        : selectedValue || 'Select';
+    // Truncate long names
+    const displayValue = selectedValue?.length > 15
+        ? selectedValue.substring(0, 13) + '...'
+        : selectedValue || 'All';
 
     return (
         <>
@@ -21,7 +23,7 @@ const PackageSelector = ({ options, selectedValue, onValueChange, isDark }) => {
                 onPress={() => setModalVisible(true)}
             >
                 <Text style={[styles.selectorText, { color: textColor }]} numberOfLines={1}>
-                    📦 {displayValue}
+                    {label}: {displayValue}
                 </Text>
                 <Text style={[styles.chevron, { color: textColor }]}>▼</Text>
             </TouchableOpacity>
@@ -37,40 +39,42 @@ const PackageSelector = ({ options, selectedValue, onValueChange, isDark }) => {
                     activeOpacity={1}
                     onPress={() => setModalVisible(false)}
                 >
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Select Package</Text>
+                    <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.modalTitle, { color: colors.text, borderBottomColor: colors.border }]}>Select {label}</Text>
                         <FlatList
-                            data={options}
+                            data={['All', ...options]}
                             keyExtractor={(item) => item}
                             renderItem={({ item }) => (
                                 <TouchableOpacity
                                     style={[
                                         styles.optionItem,
-                                        selectedValue === item && styles.optionItemSelected
+                                        { borderBottomColor: colors.border },
+                                        (selectedValue === item || (item === 'All' && !selectedValue)) && { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : '#f0fdf4' }
                                     ]}
                                     onPress={() => {
-                                        onValueChange(item);
+                                        onValueChange(item === 'All' ? '' : item);
                                         setModalVisible(false);
                                     }}
                                 >
                                     <Text style={[
                                         styles.optionText,
-                                        selectedValue === item && styles.optionTextSelected
+                                        { color: colors.text },
+                                        (selectedValue === item || (item === 'All' && !selectedValue)) && { color: colors.accent, fontWeight: '600' }
                                     ]}>
                                         {item}
                                     </Text>
-                                    {selectedValue === item && (
-                                        <Text style={styles.checkmark}>✓</Text>
+                                    {(selectedValue === item || (item === 'All' && !selectedValue)) && (
+                                        <Text style={[styles.checkmark, { color: colors.accent }]}>✓</Text>
                                     )}
                                 </TouchableOpacity>
                             )}
                             style={styles.optionsList}
                         />
                         <TouchableOpacity
-                            style={styles.cancelButton}
+                            style={[styles.cancelButton, { borderTopColor: colors.border }]}
                             onPress={() => setModalVisible(false)}
                         >
-                            <Text style={styles.cancelText}>Cancel</Text>
+                            <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
                 </TouchableOpacity>
@@ -79,28 +83,39 @@ const PackageSelector = ({ options, selectedValue, onValueChange, isDark }) => {
     );
 };
 
-const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, onValueChange, isEstimated, weightLbs, units }) => {
-    const isDark = bg === '#facc15' || bg === '#fdba74';
-    const textColor = isDark ? 'black' : 'white';
-    const subTextColor = isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
+const PriceBlock = ({ 
+    label, 
+    avgPrice, 
+    bg, 
+    packageOptions, 
+    selectedPackage, 
+    onPackageChange,
+    originOptions,
+    selectedOrigin,
+    onOriginChange,
+    districtOptions,
+    selectedDistrict,
+    onDistrictChange,
+    isEstimated, 
+    weightLbs, 
+    units 
+}) => {
+    const isCardDark = bg === '#facc15' || bg === '#fdba74';
+    const textColor = isCardDark ? 'black' : 'white';
+    const subTextColor = isCardDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
 
-    // Calculate price per lb or per unit (low and high)
+    // Check if we have valid price data
+    const priceValue = parseFloat(avgPrice) || 0;
+    const hasData = priceValue > 0;
+
+    // Calculate price per lb or per unit
     const pricePerUnit = (() => {
-        const low = parseFloat(lowPrice) || 0;
-        const high = parseFloat(highPrice) || 0;
+        if (!hasData) return null;
         if (weightLbs && weightLbs > 0) {
-            return { 
-                low: (low / weightLbs).toFixed(2), 
-                high: (high / weightLbs).toFixed(2), 
-                unit: 'lb' 
-            };
+            return { value: (priceValue / weightLbs).toFixed(2), unit: 'lb' };
         }
         if (units && units > 0) {
-            return { 
-                low: (low / units).toFixed(2), 
-                high: (high / units).toFixed(2), 
-                unit: 'unit' 
-            };
+            return { value: (priceValue / units).toFixed(2), unit: 'unit' };
         }
         return null;
     })();
@@ -112,59 +127,66 @@ const PriceBlock = ({ label, lowPrice, highPrice, bg, options, selectedValue, on
                     {label} {isEstimated ? '(Est.)' : ''}
                 </Text>
 
-                <View style={styles.priceRow}>
-                    <View style={styles.priceColumn}>
-                        <Text style={[styles.priceSubLabel, { color: subTextColor }]}>Low</Text>
-                        <Text style={[styles.blockPrice, { color: textColor }]}>${lowPrice}</Text>
-                    </View>
-                    <Text style={[styles.priceDivider, { color: subTextColor }]}>–</Text>
-                    <View style={styles.priceColumn}>
-                        <Text style={[styles.priceSubLabel, { color: subTextColor }]}>High</Text>
-                        <Text style={[styles.blockPrice, { color: textColor }]}>${highPrice}</Text>
-                    </View>
+                {/* Price Display */}
+                <View style={styles.priceContainer}>
+                    {hasData ? (
+                        <>
+                            <Text style={[styles.priceSubLabel, { color: subTextColor }]}>Avg Price</Text>
+                            <Text style={[styles.blockPrice, { color: textColor }]}>${avgPrice}</Text>
+                        </>
+                    ) : (
+                        <Text style={[styles.noDataText, { color: subTextColor }]}>No Price Data</Text>
+                    )}
                 </View>
 
-                {/* Price per unit row */}
+                {/* Price per unit */}
                 {pricePerUnit && (
                     <Text style={[styles.pricePerUnit, { color: subTextColor }]}>
-                        ${pricePerUnit.low} – ${pricePerUnit.high}/{pricePerUnit.unit}
+                        ${pricePerUnit.value}/{pricePerUnit.unit}
                     </Text>
                 )}
 
-                <PackageSelector
-                    options={options}
-                    selectedValue={selectedValue}
-                    onValueChange={onValueChange}
-                    isDark={isDark}
+                {/* Package Selector */}
+                <DropdownSelector
+                    label="Package"
+                    options={packageOptions}
+                    selectedValue={selectedPackage}
+                    onValueChange={onPackageChange}
+                    isCardDark={isCardDark}
                 />
+
+                {/* Origin Selector */}
+                {originOptions && originOptions.length > 0 && (
+                    <DropdownSelector
+                        label="Origin"
+                        options={originOptions}
+                        selectedValue={selectedOrigin}
+                        onValueChange={onOriginChange}
+                        isCardDark={isCardDark}
+                    />
+                )}
+
+                {/* District Selector */}
+                {districtOptions && districtOptions.length > 0 && (
+                    <DropdownSelector
+                        label="District"
+                        options={districtOptions}
+                        selectedValue={selectedDistrict}
+                        onValueChange={onDistrictChange}
+                        isCardDark={isCardDark}
+                    />
+                )}
             </View>
             <View style={styles.connector} />
         </View>
     );
 };
 
-export default function PriceWaterfallMobile({ stats, costs, packageData, actions, weightData }) {
+export default function PriceWaterfallMobile({ stats, costs, packageData, actions, weightData, originData, districtData }) {
     if (!stats) return null;
 
     // Helper to safely format numbers
     const formatPrice = (val) => (val ?? 0).toFixed(2);
-
-    const terminalLow = stats.terminal_low_avg ?? 0;
-    const terminalHigh = stats.terminal_high_avg ?? 0;
-    const shippingLow = stats.shipping_low_avg ?? 0;
-    const shippingHigh = stats.shipping_high_avg ?? 0;
-
-    // Derived prices: Use real retail if available, else calc
-    const retailLow = stats.retail_low_avg > 0
-        ? formatPrice(stats.retail_low_avg)
-        : formatPrice(terminalLow * 1.4);
-
-    const retailHigh = stats.retail_high_avg > 0
-        ? formatPrice(stats.retail_high_avg)
-        : formatPrice(terminalHigh * 1.4);
-
-    // Determine Retail Estimate
-    const isRetailEstimated = (stats.retail_low_avg ?? 0) <= 0;
 
     return (
         <View style={styles.container}>
@@ -172,38 +194,53 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
 
             <PriceBlock
                 label="National Retail"
-                lowPrice={retailLow}
-                highPrice={retailHigh}
+                avgPrice={formatPrice(stats.retail_avg)}
                 bg="#d946ef"
-                isEstimated={isRetailEstimated}
-                options={packageData?.retail}
-                selectedValue={actions?.selectedPackages?.retail}
-                onValueChange={(v) => actions?.setPackage('retail', v)}
+                isEstimated={stats.is_retail_estimated}
+                packageOptions={packageData?.retail}
+                selectedPackage={actions?.selectedPackages?.retail}
+                onPackageChange={(v) => actions?.setPackage('retail', v)}
+                originOptions={originData?.retail}
+                selectedOrigin={actions?.selectedOrigins?.retail}
+                onOriginChange={(v) => actions?.setOrigin('retail', v)}
+                districtOptions={districtData?.retail}
+                selectedDistrict={actions?.selectedDistricts?.retail}
+                onDistrictChange={(v) => actions?.setDistrict('retail', v)}
                 weightLbs={weightData?.retail?.weight_lbs}
                 units={weightData?.retail?.units}
             />
 
             <PriceBlock
                 label="Terminal Market"
-                lowPrice={formatPrice(terminalLow)}
-                highPrice={formatPrice(terminalHigh)}
+                avgPrice={formatPrice(stats.terminal_avg)}
                 bg="#0ea5e9"
-                options={packageData?.terminal}
-                selectedValue={actions?.selectedPackages?.terminal}
-                onValueChange={(v) => actions?.setPackage('terminal', v)}
+                packageOptions={packageData?.terminal}
+                selectedPackage={actions?.selectedPackages?.terminal}
+                onPackageChange={(v) => actions?.setPackage('terminal', v)}
+                originOptions={originData?.terminal}
+                selectedOrigin={actions?.selectedOrigins?.terminal}
+                onOriginChange={(v) => actions?.setOrigin('terminal', v)}
+                districtOptions={districtData?.terminal}
+                selectedDistrict={actions?.selectedDistricts?.terminal}
+                onDistrictChange={(v) => actions?.setDistrict('terminal', v)}
                 weightLbs={weightData?.terminal?.weight_lbs}
                 units={weightData?.terminal?.units}
             />
 
             <PriceBlock
                 label="Shipping Point"
-                lowPrice={formatPrice(shippingLow)}
-                highPrice={formatPrice(shippingHigh)}
+                avgPrice={formatPrice(stats.shipping_avg)}
                 bg="#fdba74"
-                options={packageData?.shipping}
-                selectedValue={actions?.selectedPackages?.shipping}
-                onValueChange={(v) => actions?.setPackage('shipping', v)}
                 isEstimated={stats.is_shipping_estimated}
+                packageOptions={packageData?.shipping}
+                selectedPackage={actions?.selectedPackages?.shipping}
+                onPackageChange={(v) => actions?.setPackage('shipping', v)}
+                originOptions={originData?.shipping}
+                selectedOrigin={actions?.selectedOrigins?.shipping}
+                onOriginChange={(v) => actions?.setOrigin('shipping', v)}
+                districtOptions={districtData?.shipping}
+                selectedDistrict={actions?.selectedDistricts?.shipping}
+                onDistrictChange={(v) => actions?.setDistrict('shipping', v)}
                 weightLbs={weightData?.shipping?.weight_lbs}
                 units={weightData?.shipping?.units}
             />
@@ -232,7 +269,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     card: {
-        width: '70%',
+        width: '75%',
         paddingVertical: 14,
         paddingHorizontal: 16,
         borderRadius: 12,
@@ -251,34 +288,31 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
         opacity: 0.9
     },
-    priceRow: {
-        flexDirection: 'row',
+    priceContainer: {
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-    },
-    priceColumn: {
-        alignItems: 'center',
+        marginBottom: 4,
     },
     priceSubLabel: {
         fontSize: 10,
         fontWeight: '500',
         marginBottom: 2,
     },
-    priceDivider: {
-        fontSize: 18,
-        fontWeight: '300',
-        marginHorizontal: 4,
-    },
     blockPrice: {
-        fontSize: 20,
+        fontSize: 24,
         fontWeight: 'bold',
     },
     pricePerUnit: {
         fontSize: 12,
         fontWeight: '500',
-        marginTop: 6,
+        marginTop: 4,
+        marginBottom: 8,
         textAlign: 'center',
+    },
+    noDataText: {
+        fontSize: 16,
+        fontWeight: '600',
+        fontStyle: 'italic',
+        paddingVertical: 8,
     },
     connector: {
         width: 2,
@@ -286,7 +320,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#cbd5e1',
     },
 
-    // Package Selector Pill
+    // Dropdown Selector Pill
     selectorPill: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -294,7 +328,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 16,
-        marginTop: 8,
+        marginTop: 6,
         gap: 4,
     },
     selectorText: {

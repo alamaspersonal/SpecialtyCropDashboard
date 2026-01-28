@@ -114,12 +114,19 @@ def format_for_crop_price(df):
         variety = get_field(row, 'variety', 'var')
         package = get_field(row, 'package', 'pkg', 'size')
         
+        # Handle origin logic: for retail, origin is often in 'region' column
+        market_type_val = row.get('market_type')
+        origin = row.get('origin')
+        if not origin and market_type_val in ('Retail', 'Retail - Specialty Crops'):
+            origin = row.get('region')
+
         record = {
             'report_date': report_date.isoformat() if report_date else None,
             'market_type': to_title_case(row.get('market_type')),
             'market_location_name': row.get('market_location_name'),
             'district': to_title_case(row.get('district')),
-            'origin': to_title_case(row.get('origin')),
+            'district': to_title_case(row.get('district')),
+            'origin': to_title_case(origin),
             'category': normalize_category(category),
             'commodity': to_title_case(commodity),
             'variety': to_title_case(variety),
@@ -201,9 +208,15 @@ def format_for_unified_crop_price(df):
                 prices.append(val)
         price_avg = int(sum(prices) / len(prices)) if prices else None
         
+        # Handle origin logic: for retail, origin is often in 'region' column
+        market_type_val = row.get('market_type')
+        origin = row.get('origin')
+        if not origin and market_type_val in ('Retail', 'Retail - Specialty Crops'):
+            origin = row.get('region')
+
         record = {
             'report_date': report_date.isoformat() if report_date else None,
-            'market_type': to_title_case(row.get('market_type')),
+            'market_type': to_title_case(market_type_val),
             'district': to_title_case(row.get('district')),
             'commodity': to_title_case(commodity),
             'variety': to_title_case(variety),
@@ -214,7 +227,7 @@ def format_for_unified_crop_price(df):
             'supply_tone_comments': row.get('supply_tone_comments') if pd.notna(row.get('supply_tone_comments')) else None,
             'demand_tone_comments': row.get('demand_tone_comments') if pd.notna(row.get('demand_tone_comments')) else None,
             'market_tone_comments': row.get('market_tone_comments') if pd.notna(row.get('market_tone_comments')) else None,
-            'origin': to_title_case(row.get('origin')),
+            'origin': to_title_case(origin),
             'price_avg': price_avg,
         }
         records.append(record)

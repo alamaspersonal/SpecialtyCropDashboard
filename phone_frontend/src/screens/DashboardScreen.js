@@ -51,8 +51,23 @@ export default function DashboardScreen({ route, navigation }) {
     const [selectedPackages, setSelectedPackages] = useState({ terminal: '', shipping: '', retail: '' });
     const [weightData, setWeightData] = useState({ terminal: null, shipping: null, retail: null });
 
+    // Origin and District Selection
+    const [originOptions, setOriginOptions] = useState({ terminal: [], shipping: [], retail: [] });
+    const [selectedOrigins, setSelectedOrigins] = useState({ terminal: '', shipping: '', retail: '' });
+    const [districtOptions, setDistrictOptions] = useState({ terminal: [], shipping: [], retail: [] });
+    const [selectedDistricts, setSelectedDistricts] = useState({ terminal: '', shipping: '', retail: '' });
+
     // Time Range Selection
     const [timeRange, setTimeRange] = useState('daily'); // 'daily' or '7day'
+
+    // Top-level Filter Controls
+    // Top-level Filter Controls
+    const [organicOnly, setOrganicOnly] = useState(false);
+    const [hasOrganicData, setHasOrganicData] = useState(false);
+    const [varietyOptions, setVarietyOptions] = useState([]);
+    // Initialize selectedVariety from navigation params if available
+    const [selectedVariety, setSelectedVariety] = useState(filters.variety || '');
+    const [showVarietyModal, setShowVarietyModal] = useState(false);
 
     // Costs State
     const [showCostModal, setShowCostModal] = useState(false);
@@ -74,9 +89,12 @@ export default function DashboardScreen({ route, navigation }) {
                 const daysParam = timeRange === '7day' ? 7 : timeRange === '30day' ? 30 : null;
 
                 // Prepare filters: Always exclude specific date to rely on latest data or ranges
+                // Prepare filters: Always exclude specific date to rely on latest data or ranges
+                // Also exclude variety to fetch ALL varieties for the commodity, allowing the dropdown to be full
                 const apiFilters = { ...filters };
                 delete apiFilters.date;
                 delete apiFilters.package;
+                delete apiFilters.variety;
 
                 console.log('[DEBUG] Fetching prices with:', { filters: apiFilters, limit: 500, daysParam, timeRange });
 
@@ -98,16 +116,49 @@ export default function DashboardScreen({ route, navigation }) {
                 setShippingData(sData);
                 setRetailData(rData);
 
-                // Extract Packages
-                const getPackages = (arr) => [...new Set(arr.map(d => d.package).filter(Boolean))].sort();
-                const tPackages = getPackages(tData);
-                const sPackages = getPackages(sData);
-                const rPackages = getPackages(rData);
+                // Extract varieties from all data
+                const allVarieties = [...new Set(data.map(d => d.variety).filter(Boolean))].sort();
+                setVarietyOptions(allVarieties);
+
+                // Check if any organic data exists
+                const organicExists = data.some(d => d.organic === 'yes');
+                setHasOrganicData(organicExists);
+                // If no organic data, reset the organic filter
+                if (!organicExists && organicOnly) {
+                    setOrganicOnly(false);
+                }
+
+                // Extract Packages, Origins, and Districts
+                const getUnique = (arr, field) => [...new Set(arr.map(d => d[field]).filter(Boolean))].sort();
+                
+                const tPackages = getUnique(tData, 'package');
+                const sPackages = getUnique(sData, 'package');
+                const rPackages = getUnique(rData, 'package');
+
+                const tOrigins = getUnique(tData, 'origin');
+                const sOrigins = getUnique(sData, 'origin');
+                const rOrigins = getUnique(rData, 'origin');
+
+                const tDistricts = getUnique(tData, 'district');
+                const sDistricts = getUnique(sData, 'district');
+                const rDistricts = getUnique(rData, 'district');
 
                 setPackageOptions({
                     terminal: tPackages,
                     shipping: sPackages,
                     retail: rPackages
+                });
+
+                setOriginOptions({
+                    terminal: tOrigins,
+                    shipping: sOrigins,
+                    retail: rOrigins
+                });
+
+                setDistrictOptions({
+                    terminal: tDistricts,
+                    shipping: sDistricts,
+                    retail: rDistricts
                 });
 
                 // Preserve selected packages if still valid, otherwise set defaults
@@ -136,17 +187,33 @@ export default function DashboardScreen({ route, navigation }) {
         const fetchAIInsights = async () => {
             if (!priceData.length || !filters.commodity) return;
             
+            // Collect all tone comments from the data
+            const marketToneNotes = priceData
+                .map(d => d.market_tone_comments)
+                .filter(Boolean);
+            const supplyToneNotes = priceData
+                .map(d => d.supply_tone_comments)
+                .filter(Boolean);
+            const demandToneNotes = priceData
+                .map(d => d.demand_tone_comments)
+                .filter(Boolean);
+            
+            // If no tone comments at all, skip AI call and set fallback message
+            if (marketToneNotes.length === 0 && supplyToneNotes.length === 0 && demandToneNotes.length === 0) {
+                setAiInsights('No market tone information available for this selection.');
+                setAiLoading(false);
+                return;
+            }
+            
             setAiLoading(true);
             try {
-                // Get all market notes from the data
-                const allNotes = priceData
-                    .map(d => d.market_tone_comments)
-                    .filter(Boolean)
-                    .slice(0, 5);
-                
                 const insights = await generateMarketInsights(
                     filters.commodity,
-                    allNotes
+                    {
+                        market: [...new Set(marketToneNotes)].slice(0, 3),
+                        supply: [...new Set(supplyToneNotes)].slice(0, 3),
+                        demand: [...new Set(demandToneNotes)].slice(0, 3)
+                    }
                 );
                 setAiInsights(insights);
             } catch (error) {
@@ -159,6 +226,115 @@ export default function DashboardScreen({ route, navigation }) {
         
         fetchAIInsights();
     }, [priceData, filters.commodity, terminalData, shippingData, retailData]);
+
+    // Cascading filter logic: recalculate options and validate selections
+    useEffect(() => {
+        if (!terminalData.length && !shippingData.length && !retailData.length) return;
+
+        // Helper: Filter base data by top-level selections
+        const getBaseData = (data) => {
+            let filtered = data;
+            if (organicOnly) {
+                filtered = filtered.filter(d => d.organic === 'yes');
+            }
+            if (selectedVariety) {
+                filtered = filtered.filter(d => d.variety === selectedVariety);
+            }
+            return filtered;
+        };
+
+        const tBase = getBaseData(terminalData);
+        const sBase = getBaseData(shippingData);
+        const rBase = getBaseData(retailData);
+
+        const getUnique = (arr, field) => [...new Set(arr.map(d => d[field]).filter(Boolean))].sort();
+
+        // Helper: Calculate options for a specific market type based on OTHER current filters
+        const getOptionsForType = (baseData, currentPkg, currentOrg, currentDist) => {
+            // Packages: filtered by Origin + District
+            const pkgData = baseData.filter(d => 
+                (!currentOrg || d.origin === currentOrg) && 
+                (!currentDist || d.district === currentDist)
+            );
+
+            // Origins: filtered by Package + District
+            const orgData = baseData.filter(d => 
+                (!currentPkg || d.package === currentPkg) && 
+                (!currentDist || d.district === currentDist)
+            );
+
+            // Districts: filtered by Package + Origin
+            const distData = baseData.filter(d => 
+                (!currentPkg || d.package === currentPkg) && 
+                (!currentOrg || d.origin === currentOrg)
+            );
+
+            return {
+                packages: getUnique(pkgData, 'package'),
+                origins: getUnique(orgData, 'origin'),
+                districts: getUnique(distData, 'district')
+            };
+        };
+
+        // Calculate options for each market type
+        const tOpts = getOptionsForType(tBase, selectedPackages.terminal, selectedOrigins.terminal, selectedDistricts.terminal);
+        const sOpts = getOptionsForType(sBase, selectedPackages.shipping, selectedOrigins.shipping, selectedDistricts.shipping);
+        const rOpts = getOptionsForType(rBase, selectedPackages.retail, selectedOrigins.retail, selectedDistricts.retail);
+
+        // Update Options States
+        // We use JSON.stringify to compare and avoid unnecessary re-renders if content is identical
+        const newPkgOpts = { terminal: tOpts.packages, shipping: sOpts.packages, retail: rOpts.packages };
+        setPackageOptions(prev => JSON.stringify(prev) === JSON.stringify(newPkgOpts) ? prev : newPkgOpts);
+
+        const newOrgOpts = { terminal: tOpts.origins, shipping: sOpts.origins, retail: rOpts.origins };
+        setOriginOptions(prev => JSON.stringify(prev) === JSON.stringify(newOrgOpts) ? prev : newOrgOpts);
+
+        const newDistOpts = { terminal: tOpts.districts, shipping: sOpts.districts, retail: rOpts.districts };
+        setDistrictOptions(prev => JSON.stringify(prev) === JSON.stringify(newDistOpts) ? prev : newDistOpts);
+
+
+        // Helper: Validate and Auto-Select
+        const validate = (options, currentVal) => {
+            if (options.length === 0) return '';
+            if (options.length === 1) return options[0]; // Auto-select single option
+            if (options.includes(currentVal)) return currentVal; // Keep valid selection
+            return ''; // Reset to 'All' if invalid
+        };
+
+        // Update Selections if needed (checking current vs new valid)
+        // using functional updates to check previous state and avoid loops
+        setSelectedPackages(prev => {
+            const next = {
+                terminal: validate(tOpts.packages, prev.terminal),
+                shipping: validate(sOpts.packages, prev.shipping),
+                retail: validate(rOpts.packages, prev.retail)
+            };
+            return (prev.terminal === next.terminal && prev.shipping === next.shipping && prev.retail === next.retail) ? prev : next;
+        });
+
+        setSelectedOrigins(prev => {
+            const next = {
+                terminal: validate(tOpts.origins, prev.terminal),
+                shipping: validate(sOpts.origins, prev.shipping),
+                retail: validate(rOpts.origins, prev.retail)
+            };
+            return (prev.terminal === next.terminal && prev.shipping === next.shipping && prev.retail === next.retail) ? prev : next;
+        });
+
+        setSelectedDistricts(prev => {
+            const next = {
+                terminal: validate(tOpts.districts, prev.terminal),
+                shipping: validate(sOpts.districts, prev.shipping),
+                retail: validate(rOpts.districts, prev.retail)
+            };
+            return (prev.terminal === next.terminal && prev.shipping === next.shipping && prev.retail === next.retail) ? prev : next;
+        });
+
+    }, [
+        selectedVariety, organicOnly, 
+        terminalData, shippingData, retailData, 
+        selectedPackages, selectedOrigins, selectedDistricts
+    ]);
 
     // Update weightData when selected packages change
     useEffect(() => {
@@ -223,54 +399,98 @@ export default function DashboardScreen({ route, navigation }) {
             }
         };
 
-        const filteredTerminal = filterByTimeRange(terminalData);
-        const filteredShipping = filterByTimeRange(shippingData);
-        const filteredRetail = filterByTimeRange(retailData);
+        // Apply organic filter first
+        let baseTerminal = terminalData;
+        let baseShipping = shippingData;
+        let baseRetail = retailData;
 
-        // Filter by selected package if set
-        const getAvg = (data, userPackage, priceField) => {
-            if (!data.length) return 0;
-            const filtered = userPackage ? data.filter(d => d.package === userPackage) : data;
-            if (!filtered.length) return 0;
-            return filtered.reduce((acc, curr) => acc + (curr[priceField] || 0), 0) / filtered.length;
+        if (organicOnly) {
+            baseTerminal = baseTerminal.filter(d => d.organic === 'yes');
+            baseShipping = baseShipping.filter(d => d.organic === 'yes');
+            baseRetail = baseRetail.filter(d => d.organic === 'yes');
+        }
+
+        if (selectedVariety) {
+            baseTerminal = baseTerminal.filter(d => d.variety === selectedVariety);
+            baseShipping = baseShipping.filter(d => d.variety === selectedVariety);
+            baseRetail = baseRetail.filter(d => d.variety === selectedVariety);
+        }
+
+        const filteredTerminal = filterByTimeRange(baseTerminal);
+        const filteredShipping = filterByTimeRange(baseShipping);
+        const filteredRetail = filterByTimeRange(baseRetail);
+
+        // Filter by selected package, origin, and district
+        const filterData = (data, type) => {
+            let filtered = data;
+            if (selectedPackages[type]) {
+                filtered = filtered.filter(d => d.package === selectedPackages[type]);
+            }
+            if (selectedOrigins[type]) {
+                filtered = filtered.filter(d => d.origin === selectedOrigins[type]);
+            }
+            if (selectedDistricts[type]) {
+                filtered = filtered.filter(d => d.district === selectedDistricts[type]);
+            }
+            return filtered;
         };
 
-        const terminalLowAvg = getAvg(filteredTerminal, selectedPackages.terminal, 'low_price');
-        const terminalHighAvg = getAvg(filteredTerminal, selectedPackages.terminal, 'high_price');
+        // Calculate average price from available price fields (matching backend logic)
+        const calcAvgPrice = (data) => {
+            if (!data.length) return 0;
+            
+            const priceFields = ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price'];
+            const fieldAvgs = [];
+            
+            priceFields.forEach(field => {
+                const validValues = data.map(d => d[field]).filter(v => v !== null && v !== undefined && !isNaN(v));
+                if (validValues.length > 0) {
+                    fieldAvgs.push(validValues.reduce((a, b) => a + b, 0) / validValues.length);
+                }
+            });
+            
+            if (fieldAvgs.length === 0) {
+                // Fallback to wtd_avg_price for retail
+                const wtdValues = data.map(d => d.wtd_avg_price).filter(v => v !== null && v !== undefined && !isNaN(v));
+                if (wtdValues.length > 0) {
+                    return wtdValues.reduce((a, b) => a + b, 0) / wtdValues.length;
+                }
+                return 0;
+            }
+            
+            return fieldAvgs.reduce((a, b) => a + b, 0) / fieldAvgs.length;
+        };
 
-        // If we have real shipping data, use it. Otherwise derive it.
-        let shippingLowAvg = getAvg(filteredShipping, selectedPackages.shipping, 'low_price');
-        let shippingHighAvg = getAvg(filteredShipping, selectedPackages.shipping, 'high_price');
+        const terminalFiltered = filterData(filteredTerminal, 'terminal');
+        const shippingFiltered = filterData(filteredShipping, 'shipping');
+        const retailFiltered = filterData(filteredRetail, 'retail');
 
-        // Retail data - use wtd_avg_price if available, otherwise use low/high prices
-        // Try wtd_avg_price first (retail-specific field)
-        let retailLowAvg = getAvg(filteredRetail, selectedPackages.retail, 'wtd_avg_price');
-        let retailHighAvg = getAvg(filteredRetail, selectedPackages.retail, 'wtd_avg_price');
+        let terminalAvg = calcAvgPrice(terminalFiltered);
+        let shippingAvg = calcAvgPrice(shippingFiltered);
+        let retailAvg = calcAvgPrice(retailFiltered);
         
-        // Fall back to low_price/high_price if wtd_avg_price is not available
-        if (retailLowAvg === 0) {
-            retailLowAvg = getAvg(filteredRetail, selectedPackages.retail, 'low_price');
-            retailHighAvg = getAvg(filteredRetail, selectedPackages.retail, 'high_price');
-        }
-        
-        console.log('[DEBUG] Retail data - count:', filteredRetail.length, 'lowAvg:', retailLowAvg, 'highAvg:', retailHighAvg);
+        console.log('[DEBUG] Avg prices - Terminal:', terminalAvg, 'Shipping:', shippingAvg, 'Retail:', retailAvg);
 
         // Fallback Mock Logic if no real shipping data found
         let isShippingEstimated = false;
-        if (shippingLowAvg === 0 && terminalLowAvg > 0) {
-            shippingLowAvg = terminalLowAvg * 0.6;
-            shippingHighAvg = terminalHighAvg * 0.6;
+        if (shippingAvg === 0 && terminalAvg > 0) {
+            shippingAvg = terminalAvg * 0.6;
             isShippingEstimated = true;
         }
 
+        // Fallback for retail if no data
+        let isRetailEstimated = false;
+        if (retailAvg === 0 && terminalAvg > 0) {
+            retailAvg = terminalAvg * 1.4;
+            isRetailEstimated = true;
+        }
+
         return {
-            terminal_low_avg: terminalLowAvg,
-            terminal_high_avg: terminalHighAvg,
-            shipping_low_avg: shippingLowAvg,
-            shipping_high_avg: shippingHighAvg,
-            retail_low_avg: retailLowAvg,
-            retail_high_avg: retailHighAvg,
+            terminal_avg: terminalAvg,
+            shipping_avg: shippingAvg,
+            retail_avg: retailAvg,
             is_shipping_estimated: isShippingEstimated,
+            is_retail_estimated: isRetailEstimated,
             date: filters.date || 'Today',
             timeRange: timeRange
         };
@@ -302,6 +522,50 @@ export default function DashboardScreen({ route, navigation }) {
                     <>
                         <Text style={[styles.subtitle, { color: colors.text }]}>{filters.commodity || 'Commodity'}</Text>
 
+                        {/* Variety Dropdown */}
+                        <TouchableOpacity
+                            style={[styles.varietySelector, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
+                            onPress={() => setShowVarietyModal(true)}
+                        >
+                            <Text style={[styles.varietySelectorLabel, { color: colors.textSecondary }]}>Variety:</Text>
+                            <Text style={[styles.varietySelectorValue, { color: colors.text }]}>
+                                {selectedVariety || 'All Varieties'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+                        </TouchableOpacity>
+
+                        {/* Organic Checkbox */}
+                        <TouchableOpacity
+                            style={[
+                                styles.organicCheckbox, 
+                                { 
+                                    backgroundColor: !hasOrganicData 
+                                        ? colors.surfaceElevated
+                                        : organicOnly 
+                                            ? '#dcfce7' 
+                                            : colors.surfaceElevated,
+                                    opacity: hasOrganicData ? 1 : 0.5
+                                }
+                            ]}
+                            onPress={() => hasOrganicData && setOrganicOnly(!organicOnly)}
+                            disabled={!hasOrganicData}
+                            activeOpacity={hasOrganicData ? 0.7 : 1}
+                        >
+                            <View style={[
+                                styles.checkbox, 
+                                organicOnly && hasOrganicData && styles.checkboxChecked,
+                                !hasOrganicData && styles.checkboxDisabled
+                            ]}>
+                                {organicOnly && hasOrganicData && <Ionicons name="checkmark" size={14} color="white" />}
+                            </View>
+                            <Text style={[
+                                styles.organicLabel, 
+                                { color: !hasOrganicData ? colors.textMuted : organicOnly ? '#166534' : colors.text }
+                            ]}>
+                                {hasOrganicData ? 'Organic Only' : 'Organic Only (No Data)'}
+                            </Text>
+                        </TouchableOpacity>
+
                         {/* Time Range Toggle */}
                         <View style={[styles.timeRangeContainer, { backgroundColor: colors.surfaceElevated }]}>
                             <TouchableOpacity
@@ -330,9 +594,15 @@ export default function DashboardScreen({ route, navigation }) {
                             costs={costs}
                             packageData={packageOptions}
                             weightData={weightData}
+                            originData={originOptions}
+                            districtData={districtOptions}
                             actions={{
                                 selectedPackages,
-                                setPackage: (type, val) => setSelectedPackages(prev => ({ ...prev, [type]: val }))
+                                setPackage: (type, val) => setSelectedPackages(prev => ({ ...prev, [type]: val })),
+                                selectedOrigins,
+                                setOrigin: (type, val) => setSelectedOrigins(prev => ({ ...prev, [type]: val })),
+                                selectedDistricts,
+                                setDistrict: (type, val) => setSelectedDistricts(prev => ({ ...prev, [type]: val }))
                             }}
                         />
 
@@ -388,6 +658,60 @@ export default function DashboardScreen({ route, navigation }) {
                         </TouchableOpacity>
                     </View>
                 </View>
+            </Modal>
+
+            {/* Variety Selection Modal */}
+            <Modal visible={showVarietyModal} animationType="fade" transparent>
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowVarietyModal(false)}
+                >
+                    <View style={[styles.varietyModalContent, { backgroundColor: colors.surface }]}>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>Select Variety</Text>
+                        <ScrollView style={styles.varietyList}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.varietyItem, 
+                                    { borderBottomColor: colors.border },
+                                    !selectedVariety && { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : '#f0fdf4' }
+                                ]}
+                                onPress={() => { setSelectedVariety(''); setShowVarietyModal(false); }}
+                            >
+                                <Text style={[
+                                    styles.varietyItemText, 
+                                    { color: colors.text },
+                                    !selectedVariety && { color: colors.accent, fontWeight: '600' }
+                                ]}>All Varieties</Text>
+                                {!selectedVariety && <Ionicons name="checkmark" size={20} color={colors.accent} />}
+                            </TouchableOpacity>
+                            {varietyOptions.map(variety => (
+                                <TouchableOpacity
+                                    key={variety}
+                                    style={[
+                                        styles.varietyItem,
+                                        { borderBottomColor: colors.border },
+                                        selectedVariety === variety && { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : '#f0fdf4' }
+                                    ]}
+                                    onPress={() => { setSelectedVariety(variety); setShowVarietyModal(false); }}
+                                >
+                                    <Text style={[
+                                        styles.varietyItemText,
+                                        { color: colors.text },
+                                        selectedVariety === variety && { color: colors.accent, fontWeight: '600' }
+                                    ]}>{variety}</Text>
+                                    {selectedVariety === variety && <Ionicons name="checkmark" size={20} color={colors.accent} />}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                        <TouchableOpacity
+                            style={[styles.closeButton, { backgroundColor: colors.textMuted }]}
+                            onPress={() => setShowVarietyModal(false)}
+                        >
+                            <Text style={styles.closeButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
             </Modal>
         </SafeAreaView>
     );
@@ -464,5 +788,89 @@ const styles = StyleSheet.create({
     },
     timeRangeBtnTextActive: {
         color: 'white',
+    },
+
+    // Variety Selector
+    varietySelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        marginBottom: 12,
+    },
+    varietySelectorLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    varietySelectorValue: {
+        fontSize: 14,
+        fontWeight: '600',
+        flex: 1,
+        marginLeft: 8,
+    },
+    varietyModalContent: {
+        width: '90%',
+        maxHeight: '70%',
+        borderRadius: 16,
+        padding: 0,
+        overflow: 'hidden',
+    },
+    varietyList: {
+        maxHeight: 300,
+    },
+    varietyItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+    },
+    varietyItemSelected: {
+        backgroundColor: '#f0fdf4',
+    },
+    varietyItemText: {
+        fontSize: 15,
+        color: '#374151',
+    },
+    varietyItemTextSelected: {
+        color: '#22c55e',
+        fontWeight: '600',
+    },
+
+    // Organic Checkbox
+    organicCheckbox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
+        marginBottom: 16,
+    },
+    checkbox: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: '#22c55e',
+        marginRight: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    checkboxChecked: {
+        backgroundColor: '#22c55e',
+        borderColor: '#22c55e',
+    },
+    checkboxDisabled: {
+        borderColor: '#94a3b8', // Slate-400 for better visibility in both modes
+        backgroundColor: 'transparent',
+    },
+    organicLabel: {
+        fontSize: 15,
+        fontWeight: '600',
     },
 });

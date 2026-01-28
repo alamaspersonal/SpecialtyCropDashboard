@@ -6,6 +6,7 @@ import {
     ScrollView,
     TouchableOpacity,
     ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,11 +22,10 @@ export default function FiltersScreen({ navigation }) {
         commodity: '',
         variety: '',
         category: '',
-        district: '',
-        organic: '',
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [validationError, setValidationError] = useState('');
 
     useEffect(() => {
         const fetchFilters = async () => {
@@ -40,7 +40,7 @@ export default function FiltersScreen({ navigation }) {
             }
         };
         fetchFilters();
-    }, [selectedFilters.category, selectedFilters.commodity, selectedFilters.district, selectedFilters.organic]);
+    }, [selectedFilters.category, selectedFilters.commodity]);
 
     const handleFilterChange = (filterName, value) => {
         // Handle cascading filter logic based on which filter changed
@@ -100,13 +100,17 @@ export default function FiltersScreen({ navigation }) {
             // Variety is a leaf node, just update it
             setSelectedFilters(prev => ({ ...prev, variety: value }));
         }
-        else {
-            // District and organic are independent - just update them
-            setSelectedFilters(prev => ({ ...prev, [filterName]: value }));
-        }
+        
+        // Clear validation error when filters change
+        setValidationError('');
     };
 
     const handleViewDashboard = () => {
+        if (!selectedFilters.commodity) {
+            setValidationError('Please select a commodity to view the dashboard');
+            return;
+        }
+        setValidationError('');
         navigation.navigate('Dashboard', { filters: selectedFilters });
     };
 
@@ -115,9 +119,8 @@ export default function FiltersScreen({ navigation }) {
             commodity: '',
             variety: '',
             category: '',
-            district: '',
-            organic: '',
         });
+        setValidationError('');
     };
 
     if (loading) {
@@ -182,33 +185,28 @@ export default function FiltersScreen({ navigation }) {
                             onChange={(v) => handleFilterChange('variety', v)}
                             color={colors.accent}
                         />
-                        <FilterDropdown
-                            label="District"
-                            options={filters.districts}
-                            value={selectedFilters.district}
-                            onChange={(v) => handleFilterChange('district', v)}
-                            color={colors.accent}
-                        />
-                        <FilterDropdown
-                            label="Organic"
-                            options={filters.organics}
-                            value={selectedFilters.organic}
-                            onChange={(v) => handleFilterChange('organic', v)}
-                            color={colors.accent}
-                        />
                     </View>
                 )}
             </ScrollView>
 
             {/* Bottom Action Button */}
             <View style={[styles.buttonContainer, { backgroundColor: colors.background }]}>
+                {validationError ? (
+                    <Text style={styles.validationError}>{validationError}</Text>
+                ) : null}
                 <TouchableOpacity
-                    style={[styles.viewButton, { backgroundColor: colors.accent, shadowColor: colors.accent }]}
+                    style={[
+                        styles.viewButton, 
+                        { 
+                            backgroundColor: selectedFilters.commodity ? colors.accent : '#cbd5e1',
+                            shadowColor: selectedFilters.commodity ? colors.accent : 'transparent'
+                        }
+                    ]}
                     onPress={handleViewDashboard}
                     activeOpacity={0.8}
                 >
-                    <Ionicons name="bar-chart-outline" size={22} color="#0f172a" style={{ marginRight: 8 }} />
-                    <Text style={styles.viewButtonText}>View Dashboard</Text>
+                    <Ionicons name="bar-chart-outline" size={22} color={selectedFilters.commodity ? '#0f172a' : '#64748b'} style={{ marginRight: 8 }} />
+                    <Text style={[styles.viewButtonText, { color: selectedFilters.commodity ? 'white' : '#64748b' }]}>View Dashboard</Text>
                 </TouchableOpacity>
             </View>
         </SafeAreaView>
@@ -316,5 +314,12 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 18,
         fontWeight: 'bold',
+    },
+    validationError: {
+        color: '#dc2626',
+        fontSize: 14,
+        fontWeight: '500',
+        textAlign: 'center',
+        marginBottom: 12,
     },
 });

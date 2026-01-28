@@ -62,6 +62,9 @@ def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_si
             # Handle float NaN values
             if isinstance(value, float) and (pd.isna(value) or value != value):  # value != value checks for NaN
                 clean_record[key] = None
+            # Convert price_avg to int (Supabase expects bigint)
+            elif key == 'price_avg' and value is not None:
+                clean_record[key] = int(value)
             else:
                 clean_record[key] = value
         records.append(clean_record)

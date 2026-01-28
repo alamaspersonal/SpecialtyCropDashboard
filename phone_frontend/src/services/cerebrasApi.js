@@ -12,22 +12,34 @@ const CEREBRAS_API_KEY = process.env.EXPO_PUBLIC_CEREBRAS_API_KEY || '';
  * Generate AI-powered market insights
  * 
  * @param {string} commodity - The commodity being analyzed
- * @param {Array} marketNotes - Array of existing market notes from DB
+ * @param {Object} toneComments - Object with market, supply, and demand tone comments
  * @returns {Promise<string>} AI-generated market insights
  */
-export const generateMarketInsights = async (commodity, marketNotes = []) => {
+export const generateMarketInsights = async (commodity, toneComments = {}) => {
     try {
-        // Build context from existing market notes
-        const notesContext = marketNotes.length > 0 
-            ? `Market notes from recent reports:\n- ${marketNotes.slice(0, 5).join('\n- ')}` 
-            : 'No specific market notes available.';
+        // Build context from all tone comments
+        const { market = [], supply = [], demand = [] } = toneComments;
         
-        const prompt = `You are an agricultural market analyst. Read the following market report notes for ${commodity} and provide a concise summary of findings (2-3 sentences max).
+        let notesContext = '';
+        
+        if (market.length > 0) {
+            notesContext += `Market Tone:\n- ${market.join('\n- ')}\n\n`;
+        }
+        if (supply.length > 0) {
+            notesContext += `Supply Conditions:\n- ${supply.join('\n- ')}\n\n`;
+        }
+        if (demand.length > 0) {
+            notesContext += `Demand Conditions:\n- ${demand.join('\n- ')}\n\n`;
+        }
+        
+        if (!notesContext) {
+            notesContext = 'No specific market notes available.';
+        }
+        
+        const prompt = `You are an agricultural market analyst. Summarize the following market report notes for ${commodity} in 2-3 sentences.
 
 ${notesContext}
-
-Focus on synthesizing the provided notes into a clear market overview.
-Keep your response concise, professional, and directly based on the notes. Avoid generic advice.`;
+Only report what is stated in the notes above. Do not forecast, predict, or synthesize additional information. Keep your response factual and concise.`;
 
         const response = await fetch(CEREBRAS_API_URL, {
             method: 'POST',
