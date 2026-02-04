@@ -197,19 +197,19 @@ export default function FiltersScreen({ navigation }) {
                 </View>
 
                 {/* Organic Only Toggle */}
-                <View style={[styles.toggleContainer, { backgroundColor: colors.surfaceElevated }]}>
-                    <View style={styles.toggleTextContainer}>
-                        <Text style={[styles.toggleLabel, { color: colors.text }]}>Organic Only</Text>
-                        <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
-                            Show only organic produce data
-                        </Text>
+                <View style={[styles.organicToggleRow, { backgroundColor: colors.surfaceElevated }]}>
+                    <Text style={[styles.organicLabel, { color: colors.text }]}>Organic</Text>
+                    <View style={styles.yesNoContainer}>
+                        <Text style={[styles.yesNoText, { color: organicOnly ? colors.textMuted : colors.text }]}>No</Text>
+                        <Switch
+                            value={organicOnly}
+                            onValueChange={setOrganicOnly}
+                            trackColor={{ false: '#64748b', true: colors.accent }}
+                            thumbColor={organicOnly ? '#fff' : '#f4f3f4'}
+                            style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+                        />
+                        <Text style={[styles.yesNoText, { color: organicOnly ? colors.text : colors.textMuted }]}>Yes</Text>
                     </View>
-                    <Switch
-                        value={organicOnly}
-                        onValueChange={setOrganicOnly}
-                        trackColor={{ false: '#64748b', true: colors.accent }}
-                        thumbColor={organicOnly ? '#fff' : '#f4f3f4'}
-                    />
                 </View>
 
                 {filters && (
@@ -388,6 +388,28 @@ const styles = StyleSheet.create({
     toggleDescription: {
         fontSize: 13,
         lineHeight: 18,
+    },
+    organicToggleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        marginBottom: 16,
+    },
+    organicLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    yesNoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    yesNoText: {
+        fontSize: 13,
+        fontWeight: '500',
     },
     buttonContainer: {
         padding: 20,
