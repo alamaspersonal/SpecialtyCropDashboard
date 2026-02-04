@@ -162,6 +162,87 @@ export const getFilters = async (currentFilters = {}) => {
 };
 
 /**
+ * Get commodities that have data for all 3 market types (Shipping Point, Terminal, Retail).
+ * Used to filter the commodity dropdown when "complete data only" toggle is enabled.
+ * 
+ * @returns {Set<string>} Set of commodity names with complete market data
+ */
+export const getCommoditiesWithCompleteData = async () => {
+    try {
+        console.log('[DEBUG] Fetching commodities with complete market data...');
+        
+        // Paginate to get ALL commodity + market_type combinations
+        // Supabase has a default limit of 1000 rows per request
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        
+        while (hasMore) {
+            const { data, error } = await supabase
+                .from('CropPrice')
+                .select('commodity, market_type')
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+            
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                allData = [...allData, ...data];
+                if (data.length < pageSize) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            } else {
+                hasMore = false;
+            }
+            
+            // Safety limit to prevent infinite loops
+            if (allData.length > 100000) {
+                console.warn('[DEBUG] Reached safety limit of 100k rows');
+                break;
+            }
+        }
+        
+        console.log('[DEBUG] Total rows fetched:', allData.length);
+        
+        // Log all unique market_type values to understand the data
+        const allMarketTypes = new Set(allData.map(r => r.market_type).filter(Boolean));
+        console.log('[DEBUG] All unique market_type values:', [...allMarketTypes]);
+        
+        // Group by commodity and collect market types
+        const commodityMarketTypes = {};
+        allData.forEach(row => {
+            if (!row.commodity || !row.market_type) return;
+            if (!commodityMarketTypes[row.commodity]) {
+                commodityMarketTypes[row.commodity] = new Set();
+            }
+            // Normalize market type (check if it contains the key words)
+            const mt = row.market_type.toLowerCase();
+            if (mt.includes('shipping')) commodityMarketTypes[row.commodity].add('shipping');
+            if (mt.includes('terminal')) commodityMarketTypes[row.commodity].add('terminal');
+            if (mt.includes('retail')) commodityMarketTypes[row.commodity].add('retail');
+        });
+        
+        // Filter to commodities with all 3 market types
+        const completeCommodities = new Set();
+        for (const [commodity, types] of Object.entries(commodityMarketTypes)) {
+            if (types.has('shipping') && types.has('terminal') && types.has('retail')) {
+                completeCommodities.add(commodity);
+            }
+        }
+        
+        console.log('[DEBUG] Commodities with complete data:', completeCommodities.size);
+        console.log('[DEBUG] Complete commodities list:', [...completeCommodities].slice(0, 10));
+        return completeCommodities;
+        
+    } catch (error) {
+        console.error('Error fetching complete data commodities:', error);
+        return new Set(); // Return empty set on error
+    }
+};
+
+/**
  * Get crop prices with optional filters.
  * Mirrors: GET /api/prices
  * 

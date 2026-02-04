@@ -45,13 +45,13 @@ export const CATEGORY_COMMODITIES = {
         "Salsify", "Savory", "Serrano Peppers", "Snow Peas", "Sorrel", "Spinach", "Squash",
         "Squash, Acorn", "Squash, Banana", "Squash, Butternut", "Squash, Delicata",
         "Squash, Grey", "Squash, Kabocha", "Squash, Red Kuri", "Squash, Spaghetti",
-        "Squash, Yellow Straightneck", "Squash, Zucchini", "Sugar Snap Peas", "Swiss Chard",
+        "Squash, Yellow Straightneck", "Squash, Zucchini", "Sugar Snap Peas", "Sweet Potatoes", "Swiss Chard",
         "Tarragon", "Thyme", "Tomatillos", "Tomatoes", "Tomatoes, Cherry", 
         "Tomatoes, Grape Type", "Tomatoes, Plum Type", "Turmeric", "Turnip Tops", "Turnips",
         "Verdolaga", "Watercress", "Yuca (Cassava)"
     ],
     "Potatoes & Onions": [
-        "Onions, Dry", "Potatoes", "Sweet Potatoes"
+        "Onions, Dry", "Potatoes"
     ],
     "Other": [
         "Hemp (Seed) Oil", "Hemp Protein", "Hemp Seeds Shelled", "Honey", "Ornamentals"

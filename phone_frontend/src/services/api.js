@@ -14,7 +14,8 @@ export {
     getPrices,
     getUnifiedPrices,
     getStats,
-    getPriceSummary
+    getPriceSummary,
+    getCommoditiesWithCompleteData
 } from './supabaseApi';
 
 // Re-export hooks for new components

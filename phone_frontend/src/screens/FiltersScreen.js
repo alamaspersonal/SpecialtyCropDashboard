@@ -7,10 +7,11 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     Alert,
+    Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getFilters } from '../services/api';
+import { getFilters, getCommoditiesWithCompleteData } from '../services/api';
 import FilterDropdown from '../components/FilterDropdown';
 import { CATEGORY_COMMODITIES, COMMODITY_TO_CATEGORY } from '../constants/staticFilters';
 import { useTheme } from '../context/ThemeContext';
@@ -26,6 +27,10 @@ export default function FiltersScreen({ navigation }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [validationError, setValidationError] = useState('');
+    
+    // Complete market data filter state
+    const [showCompleteDataOnly, setShowCompleteDataOnly] = useState(false);
+    const [completeDataCommodities, setCompleteDataCommodities] = useState(new Set());
 
     useEffect(() => {
         const fetchFilters = async () => {
@@ -41,6 +46,17 @@ export default function FiltersScreen({ navigation }) {
         };
         fetchFilters();
     }, [selectedFilters.category, selectedFilters.commodity]);
+
+    // Fetch commodities with complete market data when toggle is enabled
+    useEffect(() => {
+        if (showCompleteDataOnly && completeDataCommodities.size === 0) {
+            const fetchCompleteData = async () => {
+                const completeCommodities = await getCommoditiesWithCompleteData();
+                setCompleteDataCommodities(completeCommodities);
+            };
+            fetchCompleteData();
+        }
+    }, [showCompleteDataOnly]);
 
     const handleFilterChange = (filterName, value) => {
         // Handle cascading filter logic based on which filter changed
@@ -158,11 +174,40 @@ export default function FiltersScreen({ navigation }) {
                     </View>
                 )}
 
+                {/* Complete Market Data Toggle */}
+                <View style={[styles.toggleContainer, { backgroundColor: colors.surfaceElevated }]}>
+                    <View style={styles.toggleTextContainer}>
+                        <Text style={[styles.toggleLabel, { color: colors.text }]}>Complete Data Only</Text>
+                        <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                            Show only crops with Shipping, Terminal, and Retail data
+                        </Text>
+                    </View>
+                    <Switch
+                        value={showCompleteDataOnly}
+                        onValueChange={setShowCompleteDataOnly}
+                        trackColor={{ false: '#64748b', true: colors.accent }}
+                        thumbColor={showCompleteDataOnly ? '#fff' : '#f4f3f4'}
+                    />
+                </View>
+
                 {filters && (
                     <View style={styles.filtersContainer}>
                         <FilterDropdown
                             label="Category"
-                            options={filters.categories}
+                            options={
+                                (() => {
+                                    let categoryList = filters.categories;
+                                    
+                                    // Filter to only categories that have commodities with complete data
+                                    if (showCompleteDataOnly && completeDataCommodities.size > 0) {
+                                        categoryList = categoryList.filter(category => {
+                                            const commoditiesInCategory = CATEGORY_COMMODITIES[category] || [];
+                                            return commoditiesInCategory.some(c => completeDataCommodities.has(c));
+                                        });
+                                    }
+                                    return categoryList;
+                                })()
+                            }
                             value={selectedFilters.category}
                             onChange={(v) => handleFilterChange('category', v)}
                             color={colors.accent}
@@ -170,9 +215,17 @@ export default function FiltersScreen({ navigation }) {
                         <FilterDropdown
                             label="Commodity"
                             options={
-                                selectedFilters.category 
-                                    ? CATEGORY_COMMODITIES[selectedFilters.category] || []
-                                    : filters.commodities
+                                (() => {
+                                    let commodityList = selectedFilters.category 
+                                        ? CATEGORY_COMMODITIES[selectedFilters.category] || []
+                                        : filters.commodities;
+                                    
+                                    // Filter to only complete data commodities when toggle is on
+                                    if (showCompleteDataOnly && completeDataCommodities.size > 0) {
+                                        commodityList = commodityList.filter(c => completeDataCommodities.has(c));
+                                    }
+                                    return commodityList;
+                                })()
                             }
                             value={selectedFilters.commodity}
                             onChange={(v) => handleFilterChange('commodity', v)}
@@ -292,6 +345,27 @@ const styles = StyleSheet.create({
     },
     filtersContainer: {
         gap: 16,
+    },
+    toggleContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 20,
+    },
+    toggleTextContainer: {
+        flex: 1,
+        marginRight: 12,
+    },
+    toggleLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    toggleDescription: {
+        fontSize: 13,
+        lineHeight: 18,
     },
     buttonContainer: {
         padding: 20,
