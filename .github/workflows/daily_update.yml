@@ -30,4 +30,5 @@ jobs:
           # DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
         run: python backend_update/update_daily.py
