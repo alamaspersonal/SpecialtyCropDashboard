@@ -31,17 +31,16 @@ export default function WatchlistAccordionItem({ item, expanded, onToggle, onPre
 
             {expanded && (
                 <View style={[styles.details, { backgroundColor: colors.surface }]}>
-                    {/* Date Block Top Left */}
-                    <View style={styles.dateBlock}>
-                       <Text style={[styles.dateText, { color: colors.text }]}>
-                            {stats?.date ? new Date(stats.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Loading...'}
-                        </Text>
-                    </View>
-
-                    <Text style={[styles.marketNotes, { color: colors.textSecondary }]}>
-                        <Text style={{fontWeight: 'bold'}}>Market Notes: </Text>
-                        Demand Exceeds Supply
-                    </Text>
+                    {stats?.market_note && (
+                        <View style={[styles.marketNoteCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+                            <Text style={[styles.marketNoteLabel, { color: colors.textSecondary }]}>
+                                Latest Market Note from {stats?.date ? new Date(stats.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''}
+                            </Text>
+                            <Text style={[styles.marketNoteText, { color: colors.text }]}>
+                                {stats.market_note}
+                            </Text>
+                        </View>
+                    )}
 
                     <TouchableOpacity 
                         style={[styles.dashboardButton, { backgroundColor: colors.accent }]}
@@ -83,9 +82,23 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: 'bold',
     },
-    marketNotes: {
-        fontSize: 13,
+    marketNoteCard: {
+        padding: 12,
+        borderRadius: 10,
+        borderWidth: 1,
         marginBottom: 16,
+    },
+    marketNoteLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 6,
+    },
+    marketNoteText: {
+        fontSize: 14,
+        lineHeight: 20,
+        fontStyle: 'italic',
     },
     dashboardButton: {
         paddingVertical: 10,

@@ -490,7 +490,18 @@ export const getStats = async (commodity) => {
                 pct_change: calcPct(currRetail, prevRetail)
             },
             
-            spread: (currTerminal && currShipping) ? currTerminal - currShipping : null
+            spread: (currTerminal && currShipping) ? currTerminal - currShipping : null,
+            
+            // Get the latest market note from the most recent data
+            market_note: (() => {
+                // Find the first non-empty market tone comment from most recent data
+                for (const row of data) {
+                    if (row.market_tone_comments && row.market_tone_comments.trim() !== '') {
+                        return row.market_tone_comments;
+                    }
+                }
+                return null;
+            })()
         };
 
     } catch (error) {

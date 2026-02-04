@@ -96,7 +96,6 @@ const PriceBlock = ({
     districtOptions,
     selectedDistrict,
     onDistrictChange,
-    isEstimated, 
     weightLbs, 
     units 
 }) => {
@@ -124,7 +123,7 @@ const PriceBlock = ({
         <View style={styles.blockRow}>
             <View style={[styles.card, { backgroundColor: bg }]}>
                 <Text style={[styles.blockLabel, { color: textColor }]}>
-                    {label} {isEstimated ? '(Est.)' : ''}
+                    {label}
                 </Text>
 
                 {/* Price Display */}
@@ -205,7 +204,6 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 label="National Retail"
                 avgPrice={formatPrice(stats.retail_avg)}
                 bg="#d946ef"
-                isEstimated={stats.is_retail_estimated}
                 packageOptions={packageData?.retail}
                 selectedPackage={actions?.selectedPackages?.retail}
                 onPackageChange={(v) => actions?.setPackage('retail', v)}
@@ -240,7 +238,6 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 label="Shipping Point"
                 avgPrice={formatPrice(stats.shipping_avg)}
                 bg="#fdba74"
-                isEstimated={stats.is_shipping_estimated}
                 packageOptions={packageData?.shipping}
                 selectedPackage={actions?.selectedPackages?.shipping}
                 onPackageChange={(v) => actions?.setPackage('shipping', v)}
