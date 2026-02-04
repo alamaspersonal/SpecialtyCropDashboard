@@ -24,7 +24,8 @@ REQUIRED_SLUG_IDS = [
     "2391", "3324"
 ]
 
-OUTPUT_DIR = "APP_CROP_DATA"
+# Output directory - use absolute path relative to this script's location
+OUTPUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "APP_CROP_DATA"))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 REQUEST_DELAY = 1.0
