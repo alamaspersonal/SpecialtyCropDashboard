@@ -29,6 +29,16 @@ const PACKAGE_WEIGHTS = {
     "1 1/9 bushel cartons": { weight_lbs: 30, units: null },
     "flats 12 1-pint baskets": { weight_lbs: 12, units: null },
     "flats 8 1-lb containers": { weight_lbs: 8, units: null },
+    "cartons 2 layer": { weight_lbs: 25, units: null },
+    
+    // Unit-based packages (count/mesh bags/trays)
+    "4 count mesh bags": { weight_lbs: null, units: 4 },
+    "5 count mesh bags": { weight_lbs: null, units: 5 },
+    "3 count mesh bags": { weight_lbs: null, units: 3 },
+    "3 count filmbag": { weight_lbs: null, units: 3 },
+    "6 ct trays filmwrapped": { weight_lbs: null, units: 6 },
+    "each": { weight_lbs: null, units: 1 },
+    "per each": { weight_lbs: null, units: 1 },
 };
 
 export default function DashboardScreen({ route, navigation }) {

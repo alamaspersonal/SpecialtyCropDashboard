@@ -97,6 +97,20 @@ def overwrite_supabase_data(crop_price_df: pd.DataFrame, unified_crop_price_df: 
     Returns:
         bool: True if successful, False otherwise
     """
+    # Filter out rows where organic is "N/A" (these are incomplete/header rows)
+    if 'organic' in crop_price_df.columns:
+        before_count = len(crop_price_df)
+        crop_price_df = crop_price_df[crop_price_df['organic'] != 'N/A']
+        filtered_count = before_count - len(crop_price_df)
+        if filtered_count > 0:
+            print(f"Filtered out {filtered_count} CropPrice rows with organic='N/A'")
+    
+    if 'organic' in unified_crop_price_df.columns:
+        before_count = len(unified_crop_price_df)
+        unified_crop_price_df = unified_crop_price_df[unified_crop_price_df['organic'] != 'N/A']
+        filtered_count = before_count - len(unified_crop_price_df)
+        if filtered_count > 0:
+            print(f"Filtered out {filtered_count} UnifiedCropPrice rows with organic='N/A'")
     try:
         client = get_supabase_client()
         

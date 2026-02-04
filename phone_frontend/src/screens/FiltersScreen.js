@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getFilters, getCommoditiesWithCompleteData } from '../services/api';
+import { getFilters, getCommoditiesWithCompleteData, getCommoditiesWithOrganicData } from '../services/api';
 import FilterDropdown from '../components/FilterDropdown';
 import { CATEGORY_COMMODITIES, COMMODITY_TO_CATEGORY } from '../constants/staticFilters';
 import { useTheme } from '../context/ThemeContext';
@@ -34,6 +34,7 @@ export default function FiltersScreen({ navigation }) {
     
     // Organic filter state
     const [organicOnly, setOrganicOnly] = useState(false);
+    const [organicCommodities, setOrganicCommodities] = useState(new Set());
 
     useEffect(() => {
         const fetchFilters = async () => {
@@ -60,6 +61,17 @@ export default function FiltersScreen({ navigation }) {
             fetchCompleteData();
         }
     }, [showCompleteDataOnly]);
+
+    // Fetch commodities with organic data when toggle is enabled
+    useEffect(() => {
+        if (organicOnly && organicCommodities.size === 0) {
+            const fetchOrganicData = async () => {
+                const organicCmds = await getCommoditiesWithOrganicData();
+                setOrganicCommodities(organicCmds);
+            };
+            fetchOrganicData();
+        }
+    }, [organicOnly]);
 
     const handleFilterChange = (filterName, value) => {
         // Handle cascading filter logic based on which filter changed
@@ -227,6 +239,14 @@ export default function FiltersScreen({ navigation }) {
                                             return commoditiesInCategory.some(c => completeDataCommodities.has(c));
                                         });
                                     }
+                                    
+                                    // Filter to only categories that have commodities with organic data
+                                    if (organicOnly && organicCommodities.size > 0) {
+                                        categoryList = categoryList.filter(category => {
+                                            const commoditiesInCategory = CATEGORY_COMMODITIES[category] || [];
+                                            return commoditiesInCategory.some(c => organicCommodities.has(c));
+                                        });
+                                    }
                                     return categoryList;
                                 })()
                             }
@@ -245,6 +265,11 @@ export default function FiltersScreen({ navigation }) {
                                     // Filter to only complete data commodities when toggle is on
                                     if (showCompleteDataOnly && completeDataCommodities.size > 0) {
                                         commodityList = commodityList.filter(c => completeDataCommodities.has(c));
+                                    }
+                                    
+                                    // Filter to only organic commodities when toggle is on
+                                    if (organicOnly && organicCommodities.size > 0) {
+                                        commodityList = commodityList.filter(c => organicCommodities.has(c));
                                     }
                                     return commodityList;
                                 })()

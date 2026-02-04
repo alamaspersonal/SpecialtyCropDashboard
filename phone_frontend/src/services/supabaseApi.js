@@ -243,6 +243,39 @@ export const getCommoditiesWithCompleteData = async () => {
 };
 
 /**
+ * Get commodities that have organic data available.
+ * Used to filter the commodity dropdown when "organic only" toggle is enabled.
+ * 
+ * @returns {Set<string>} Set of commodity names with organic data
+ */
+export const getCommoditiesWithOrganicData = async () => {
+    try {
+        console.log('[DEBUG] Fetching commodities with organic data...');
+        
+        // Query for distinct commodities where organic = 'yes' or 'Yes' or 'Y'
+        const { data, error } = await supabase
+            .from('CropPrice')
+            .select('commodity')
+            .or('organic.eq.yes,organic.eq.Yes,organic.eq.Y');
+        
+        if (error) throw error;
+        
+        // Extract unique commodities
+        const organicCommodities = new Set(
+            data?.map(row => row.commodity).filter(Boolean) || []
+        );
+        
+        console.log('[DEBUG] Commodities with organic data:', organicCommodities.size);
+        console.log('[DEBUG] Organic commodities list:', [...organicCommodities].slice(0, 10));
+        return organicCommodities;
+        
+    } catch (error) {
+        console.error('Error fetching organic commodities:', error);
+        return new Set(); // Return empty set on error
+    }
+};
+
+/**
  * Get crop prices with optional filters.
  * Mirrors: GET /api/prices
  * 
