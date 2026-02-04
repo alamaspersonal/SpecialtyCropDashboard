@@ -8,18 +8,18 @@ import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# Load environment variables
-load_dotenv()
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SECRET_KEY")
-
 
 def get_supabase_client() -> Client:
     """Create and return a Supabase client."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    # Load environment variables (from .env file if present, otherwise from system env)
+    load_dotenv()
+    
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SECRET_KEY")
+    
+    if not supabase_url or not supabase_key:
         raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY must be set in .env")
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    return create_client(supabase_url, supabase_key)
 
 
 def clear_table(client: Client, table_name: str):

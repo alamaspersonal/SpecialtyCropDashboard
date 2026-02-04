@@ -28,18 +28,18 @@ jobs:
       - name: Debug - Check environment variables
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
         run: |
           echo "=== Debug: Checking environment variables ==="
           echo "USDA_API_KEY length: ${#USDA_API_KEY}"
           echo "USDA_API_KEY first 4 chars: ${USDA_API_KEY:0:4}..."
           echo "SUPABASE_URL set: $(if [ -n \"$SUPABASE_URL\" ]; then echo 'YES'; else echo 'NO'; fi)"
-          echo "SUPABASE_KEY length: ${#SUPABASE_KEY}"
+          echo "SUPABASE_SECRET_KEY length: ${#SUPABASE_SECRET_KEY}"
 
       - name: Run update script
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
         run: python backend_update/update_daily.py
