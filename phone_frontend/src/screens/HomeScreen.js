@@ -291,12 +291,14 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     profileButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         overflow: 'hidden',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#22c55e',
     },
     profileButtonImage: {
         width: 36,

@@ -33,7 +33,7 @@ const PACKAGE_WEIGHTS = {
 
 export default function DashboardScreen({ route, navigation }) {
     const { colors, isDark } = useTheme();
-    const { filters } = route.params;
+    const { filters, organicOnly: initialOrganicOnly } = route.params;
     const [priceData, setPriceData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [marketNotes, setMarketNotes] = useState('');
@@ -62,7 +62,7 @@ export default function DashboardScreen({ route, navigation }) {
 
     // Top-level Filter Controls
     // Top-level Filter Controls
-    const [organicOnly, setOrganicOnly] = useState(false);
+    const [organicOnly, setOrganicOnly] = useState(initialOrganicOnly || false);
     const [hasOrganicData, setHasOrganicData] = useState(false);
     const [varietyOptions, setVarietyOptions] = useState([]);
     // Initialize selectedVariety from navigation params if available

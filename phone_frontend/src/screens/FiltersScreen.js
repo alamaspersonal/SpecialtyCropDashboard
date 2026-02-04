@@ -31,6 +31,9 @@ export default function FiltersScreen({ navigation }) {
     // Complete market data filter state
     const [showCompleteDataOnly, setShowCompleteDataOnly] = useState(false);
     const [completeDataCommodities, setCompleteDataCommodities] = useState(new Set());
+    
+    // Organic filter state
+    const [organicOnly, setOrganicOnly] = useState(false);
 
     useEffect(() => {
         const fetchFilters = async () => {
@@ -127,7 +130,10 @@ export default function FiltersScreen({ navigation }) {
             return;
         }
         setValidationError('');
-        navigation.navigate('Dashboard', { filters: selectedFilters });
+        navigation.navigate('Dashboard', { 
+            filters: selectedFilters,
+            organicOnly: organicOnly
+        });
     };
 
     const clearFilters = () => {
@@ -187,6 +193,22 @@ export default function FiltersScreen({ navigation }) {
                         onValueChange={setShowCompleteDataOnly}
                         trackColor={{ false: '#64748b', true: colors.accent }}
                         thumbColor={showCompleteDataOnly ? '#fff' : '#f4f3f4'}
+                    />
+                </View>
+
+                {/* Organic Only Toggle */}
+                <View style={[styles.toggleContainer, { backgroundColor: colors.surfaceElevated }]}>
+                    <View style={styles.toggleTextContainer}>
+                        <Text style={[styles.toggleLabel, { color: colors.text }]}>Organic Only</Text>
+                        <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
+                            Show only organic produce data
+                        </Text>
+                    </View>
+                    <Switch
+                        value={organicOnly}
+                        onValueChange={setOrganicOnly}
+                        trackColor={{ false: '#64748b', true: colors.accent }}
+                        thumbColor={organicOnly ? '#fff' : '#f4f3f4'}
                     />
                 </View>
 
