@@ -26,7 +26,7 @@ const buildContextSection = (label, comments) => {
  * @param {Object} terminalData - Comments from Terminal Market data
  * @returns {Promise<string>} AI-generated market insights
  */
-export const generateMarketInsights = async (commodity, shippingData = {}, terminalData = {}) => {
+export const generateMarketInsights = async (commodity, shippingData = {}, terminalData = {}, dateInfo = null, filterContext = null) => {
     try {
         // Build Shipping Point context
         let shippingContext = '';
@@ -50,17 +50,50 @@ export const generateMarketInsights = async (commodity, shippingData = {}, termi
             return `No market notes available for ${commodity} at this time.`;
         }
 
-        const prompt = `You are an agricultural market analyst. Provide a brief market summary for ${commodity} based on the following report notes.
+        // Format ISO date to readable string like "February 10, 2026"
+        const formatDateReadable = (dateStr) => {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            if (isNaN(d)) return dateStr;
+            return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        };
+
+        // Build date strings for headers
+        let shippingDateStr = '';
+        let terminalDateStr = '';
+        if (dateInfo) {
+            if (dateInfo.shipping) {
+                shippingDateStr = formatDateReadable(dateInfo.shipping.end || dateInfo.shipping.start);
+            }
+            if (dateInfo.terminal) {
+                terminalDateStr = formatDateReadable(dateInfo.terminal.end || dateInfo.terminal.start);
+            }
+        }
+
+        // Build active filter context string
+        let filterStr = '';
+        if (filterContext) {
+            const parts = [];
+            if (filterContext.variety) parts.push(`Variety: ${filterContext.variety}`);
+            if (filterContext.organic) parts.push('Organic only');
+            if (filterContext.origin) parts.push(`Origin: ${filterContext.origin}`);
+            if (filterContext.package) parts.push(`Package: ${filterContext.package}`);
+            if (parts.length > 0) {
+                filterStr = `\n\nACTIVE FILTERS: ${parts.join(' | ')}`;
+            }
+        }
+
+        const prompt = `You are an agricultural market analyst. Provide a brief market summary for ${commodity} based on the following report notes.${filterStr}
 
 ${hasShippingContext ? `## SHIPPING POINT DATA
 ${shippingContext}` : ''}
 ${hasTerminalContext ? `## TERMINAL MARKET DATA
 ${terminalContext}` : ''}
-Respond with TWO short paragraphs (2-3 sentences each):
-1. **Shipping Point Summary:** Summarize shipping point conditions (supply, demand, pricing trends)
-2. **Terminal Market Summary:** Summarize terminal market conditions (offerings, quality, availability)
+Respond with TWO short paragraphs (2-3 sentences each) using EXACTLY these headers:
+1. **Terminal Market Insights from ${terminalDateStr || 'latest report'}:** Summarize terminal market conditions (offerings, quality, availability)
+2. **Shipping Point Insights from ${shippingDateStr || 'latest report'}:** Summarize shipping point conditions (supply, demand, pricing trends)
 
-If data for a section is missing, state that briefly. Only report what is stated in the notes. Do not forecast or synthesize additional information.`;
+If data for a section is missing, still include the header and state that data is not available. Only report what is stated in the notes. Do not forecast or synthesize additional information.`;
 
         const response = await fetch(CEREBRAS_API_URL, {
             method: 'POST',

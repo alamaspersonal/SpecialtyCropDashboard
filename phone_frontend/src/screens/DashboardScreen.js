@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -52,6 +52,8 @@ export default function DashboardScreen({ route, navigation }) {
     // AI Insights State
     const [aiInsights, setAiInsights] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
+    const cachedDailyInsights = useRef('');
+    const aiGeneratedForKey = useRef('');
 
     // Data Partitioning
     const [terminalData, setTerminalData] = useState([]);
@@ -192,8 +194,23 @@ export default function DashboardScreen({ route, navigation }) {
         fetchPrices();
     }, [filters, timeRange]);
 
-    // Generate AI Insights when stats are ready
+    // Generate AI Insights — only for daily view, regenerate on filter changes
+    const aiCacheKey = `${filters.commodity}|${selectedVariety}|${organicOnly}|${JSON.stringify(selectedOrigins)}|${JSON.stringify(selectedPackages)}`;
     useEffect(() => {
+        // If not daily, just show cached insight (no API call)
+        if (timeRange !== 'daily') {
+            if (cachedDailyInsights.current) {
+                setAiInsights(cachedDailyInsights.current);
+            }
+            return;
+        }
+
+        // If we already generated insights for this exact filter combo, reuse cache
+        if (aiGeneratedForKey.current === aiCacheKey && cachedDailyInsights.current) {
+            setAiInsights(cachedDailyInsights.current);
+            return;
+        }
+
         const fetchAIInsights = async () => {
             if (!priceData.length || !filters.commodity) return;
             
@@ -223,14 +240,38 @@ export default function DashboardScreen({ route, navigation }) {
                 return;
             }
             
+            // Build date info for the AI prompt
+            const getDateRange = (data) => {
+                const dates = data.map(d => d.report_date).filter(Boolean).sort();
+                if (dates.length === 0) return null;
+                return { start: dates[0], end: dates[dates.length - 1], reportCount: data.length };
+            };
+
+            const dateInfo = {
+                shipping: getDateRange(shippingData),
+                terminal: getDateRange(terminalData),
+            };
+
+            // Build filter context for the AI
+            const filterContext = {
+                variety: selectedVariety || null,
+                organic: organicOnly || false,
+                origin: selectedOrigins.terminal || selectedOrigins.shipping || null,
+                package: selectedPackages.terminal || selectedPackages.shipping || null,
+            };
+
             setAiLoading(true);
             try {
                 const insights = await generateMarketInsights(
                     filters.commodity,
                     shippingComments,
-                    terminalComments
+                    terminalComments,
+                    dateInfo,
+                    filterContext
                 );
                 setAiInsights(insights);
+                cachedDailyInsights.current = insights;
+                aiGeneratedForKey.current = aiCacheKey;
             } catch (error) {
                 console.error('Error generating AI insights:', error);
                 setAiInsights('');
@@ -240,7 +281,7 @@ export default function DashboardScreen({ route, navigation }) {
         };
         
         fetchAIInsights();
-    }, [priceData, filters.commodity, terminalData, shippingData, retailData]);
+    }, [priceData, filters.commodity, terminalData, shippingData, retailData, timeRange, selectedVariety, organicOnly, selectedOrigins, selectedPackages]);
 
     // Cascading filter logic: recalculate options and validate selections
     useEffect(() => {
@@ -393,6 +434,21 @@ export default function DashboardScreen({ route, navigation }) {
             setIsFavorite(true);
         }
     };
+    // Helper: extract date range from data array
+    const getDateRangeFromData = (data) => {
+        const dates = data.map(d => d.report_date).filter(Boolean).sort();
+        if (dates.length === 0) return null;
+        return { start: dates[0], end: dates[dates.length - 1] };
+    };
+
+    // Helper: format a date string for display
+    const formatDateShort = (dateStr) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d)) return dateStr;
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
     // Calculate averages
     const calculateStats = () => {
         if (!priceData.length) return null;
@@ -409,7 +465,7 @@ export default function DashboardScreen({ route, navigation }) {
                     return itemDate.toDateString() === maxDate.toDateString();
                 });
             } else {
-                // 7-day mode: backend already filters by last 7 days, so use all data
+                // 7-day / 30-day mode: backend already filters, so use all data
                 return data;
             }
         };
@@ -500,6 +556,25 @@ export default function DashboardScreen({ route, navigation }) {
             isRetailEstimated = true;
         }
 
+        // Compute per-market-type date ranges and report counts
+        const dateRanges = {
+            terminal: getDateRangeFromData(terminalFiltered),
+            shipping: getDateRangeFromData(shippingFiltered),
+            retail: getDateRangeFromData(retailFiltered),
+        };
+        const reportCounts = {
+            terminal: terminalFiltered.length,
+            shipping: shippingFiltered.length,
+            retail: retailFiltered.length,
+        };
+
+        // Overall date range across all filtered data
+        const allDates = [...terminalFiltered, ...shippingFiltered, ...retailFiltered]
+            .map(d => d.report_date).filter(Boolean).sort();
+        const overallDateRange = allDates.length > 0
+            ? { start: allDates[0], end: allDates[allDates.length - 1] }
+            : null;
+
         return {
             terminal_avg: terminalAvg,
             shipping_avg: shippingAvg,
@@ -507,7 +582,10 @@ export default function DashboardScreen({ route, navigation }) {
             is_shipping_estimated: isShippingEstimated,
             is_retail_estimated: isRetailEstimated,
             date: filters.date || 'Today',
-            timeRange: timeRange
+            timeRange: timeRange,
+            dateRanges,
+            reportCounts,
+            overallDateRange,
         };
     };
     const stats = calculateStats();
@@ -593,15 +671,33 @@ export default function DashboardScreen({ route, navigation }) {
                                 style={[styles.timeRangeBtn, timeRange === '7day' && { backgroundColor: colors.accent }]}
                                 onPress={() => setTimeRange('7day')}
                             >
-                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === '7day' && { color: '#0f172a' }]}>7-Day</Text>
+                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === '7day' && { color: '#0f172a' }]}>Last 7 Days</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.timeRangeBtn, timeRange === '30day' && { backgroundColor: colors.accent }]}
                                 onPress={() => setTimeRange('30day')}
                             >
-                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === '30day' && { color: '#0f172a' }]}>30-Day</Text>
+                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === '30day' && { color: '#0f172a' }]}>Last 30 Days</Text>
                             </TouchableOpacity>
                         </View>
+
+                        {/* Date Range Display */}
+                        {stats.overallDateRange && (
+                            <View style={[styles.dateRangeContainer, { backgroundColor: colors.surfaceElevated }]}>
+                                <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
+                                <Text style={[styles.dateRangeText, { color: colors.textSecondary }]}>
+                                    {timeRange === 'daily'
+                                        ? `Data from: ${formatDateShort(stats.overallDateRange.end)}`
+                                        : `${formatDateShort(stats.overallDateRange.start)} — ${formatDateShort(stats.overallDateRange.end)}`
+                                    }
+                                </Text>
+                            </View>
+                        )}
+                        {timeRange !== 'daily' && stats.overallDateRange && (
+                            <Text style={[styles.dateRangeSubtext, { color: colors.textMuted }]}>
+                                {timeRange === '7day' ? '7 days' : '30 days'} before most recent report
+                            </Text>
+                        )}
 
                         {/* Waterfall Component */}
                         <PriceWaterfallMobile
@@ -611,6 +707,8 @@ export default function DashboardScreen({ route, navigation }) {
                             weightData={weightData}
                             originData={originOptions}
                             districtData={districtOptions}
+                            dateRanges={stats.dateRanges}
+                            reportCounts={stats.reportCounts}
                             actions={{
                                 selectedPackages,
                                 setPackage: (type, val) => setSelectedPackages(prev => ({ ...prev, [type]: val })),
@@ -756,6 +854,27 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
     settingsText: { color: '#22c55e', fontSize: 16, fontWeight: '600' },
     scrollContent: { padding: 16, paddingBottom: 40 },
+    dateRangeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        marginBottom: 4,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 10,
+        alignSelf: 'center',
+    },
+    dateRangeText: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    dateRangeSubtext: {
+        fontSize: 11,
+        fontStyle: 'italic',
+        textAlign: 'center',
+        marginBottom: 16,
+    },
     subtitle: { fontSize: 24, fontWeight: 'bold', color: '#1e293b', textAlign: 'center', marginBottom: 20 },
 
     notesContainer: { backgroundColor: '#dcfce7', padding: 16, borderRadius: 16, marginTop: 24, borderWidth: 1, borderColor: '#bbf7d0' },

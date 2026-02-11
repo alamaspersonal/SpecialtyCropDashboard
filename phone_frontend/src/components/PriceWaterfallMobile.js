@@ -97,7 +97,9 @@ const PriceBlock = ({
     selectedDistrict,
     onDistrictChange,
     weightLbs, 
-    units 
+    units,
+    dateRange,
+    reportCount
 }) => {
     const isCardDark = bg === '#facc15' || bg === '#fdba74';
     const textColor = isCardDark ? 'black' : 'white';
@@ -117,6 +119,22 @@ const PriceBlock = ({
             return { value: (priceValue / units).toFixed(2), unit: 'unit' };
         }
         return null;
+    })();
+
+    // Format date for display
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d)) return dateStr;
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    const dateLabel = (() => {
+        if (!dateRange) return null;
+        if (dateRange.start === dateRange.end) {
+            return formatDate(dateRange.start);
+        }
+        return `${formatDate(dateRange.start)} – ${formatDate(dateRange.end)}`;
     })();
 
     return (
@@ -143,6 +161,22 @@ const PriceBlock = ({
                     <Text style={[styles.pricePerUnit, { color: subTextColor }]}>
                         ${pricePerUnit.value}/{pricePerUnit.unit}
                     </Text>
+                )}
+
+                {/* Date Range & Report Count */}
+                {(dateLabel || reportCount != null) && (
+                    <View style={styles.metadataContainer}>
+                        {dateLabel && (
+                            <Text style={[styles.metadataText, { color: subTextColor }]}>
+                                {dateLabel}
+                            </Text>
+                        )}
+                        {reportCount != null && reportCount > 0 && (
+                            <Text style={[styles.metadataText, { color: subTextColor }]}>
+                                Based on {reportCount} report{reportCount !== 1 ? 's' : ''}
+                            </Text>
+                        )}
+                    </View>
                 )}
 
                 {/* Package Selector */}
@@ -181,7 +215,7 @@ const PriceBlock = ({
     );
 };
 
-export default function PriceWaterfallMobile({ stats, costs, packageData, actions, weightData, originData, districtData }) {
+export default function PriceWaterfallMobile({ stats, costs, packageData, actions, weightData, originData, districtData, dateRanges, reportCounts }) {
     if (!stats) return null;
 
     // Helper to safely format numbers
@@ -215,6 +249,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 onDistrictChange={(v) => actions?.setDistrict('retail', v)}
                 weightLbs={weightData?.retail?.weight_lbs}
                 units={weightData?.retail?.units}
+                dateRange={dateRanges?.retail}
+                reportCount={reportCounts?.retail}
             />
 
             <PriceBlock
@@ -232,6 +268,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 onDistrictChange={(v) => actions?.setDistrict('terminal', v)}
                 weightLbs={weightData?.terminal?.weight_lbs}
                 units={weightData?.terminal?.units}
+                dateRange={dateRanges?.terminal}
+                reportCount={reportCounts?.terminal}
             />
 
             <PriceBlock
@@ -249,6 +287,8 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 onDistrictChange={(v) => actions?.setDistrict('shipping', v)}
                 weightLbs={weightData?.shipping?.weight_lbs}
                 units={weightData?.shipping?.units}
+                dateRange={dateRanges?.shipping}
+                reportCount={reportCounts?.shipping}
             />
 
             {/* Your Cost Block - shown when costs are configured */}
@@ -335,8 +375,22 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '500',
         marginTop: 4,
-        marginBottom: 8,
+        marginBottom: 4,
         textAlign: 'center',
+    },
+    metadataContainer: {
+        alignItems: 'center',
+        marginBottom: 6,
+        paddingTop: 4,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.2)',
+        width: '100%',
+    },
+    metadataText: {
+        fontSize: 10,
+        fontWeight: '400',
+        textAlign: 'center',
+        marginTop: 2,
     },
     noDataText: {
         fontSize: 16,
