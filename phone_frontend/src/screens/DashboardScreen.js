@@ -97,21 +97,16 @@ export default function DashboardScreen({ route, navigation }) {
         const fetchPrices = async () => {
             setLoading(true);
             try {
-                // Determine days parameter based on timeRange
-                const daysParam = timeRange === '7day' ? 7 : timeRange === '30day' ? 30 : null;
-
-                // Prepare filters: Always exclude specific date to rely on latest data or ranges
-                // Prepare filters: Always exclude specific date to rely on latest data or ranges
-                // Also exclude variety to fetch ALL varieties for the commodity, allowing the dropdown to be full
+                // Always fetch all data — time range filtering is done per-market-type in calculateStats
                 const apiFilters = { ...filters };
                 delete apiFilters.date;
                 delete apiFilters.package;
                 delete apiFilters.variety;
 
-                console.log('[DEBUG] Fetching prices with:', { filters: apiFilters, limit: 500, daysParam, timeRange });
+                console.log('[DEBUG] Fetching prices with:', { filters: apiFilters, limit: 500, timeRange });
 
                 // Fetching raw prices with higher limit to get mix
-                const data = await getPrices(apiFilters, 500, daysParam);
+                const data = await getPrices(apiFilters, 500, null);
                 console.log('[DEBUG] Received data length:', data?.length);
                 console.log('[DEBUG] Sample data:', data?.slice(0, 3));
                 
@@ -192,7 +187,7 @@ export default function DashboardScreen({ route, navigation }) {
             }
         };
         fetchPrices();
-    }, [filters, timeRange]);
+    }, [filters]);
 
     // Generate AI Insights — only for daily view, regenerate on filter changes
     const aiCacheKey = `${filters.commodity}|${selectedVariety}|${organicOnly}|${JSON.stringify(selectedOrigins)}|${JSON.stringify(selectedPackages)}`;
@@ -453,20 +448,26 @@ export default function DashboardScreen({ route, navigation }) {
     const calculateStats = () => {
         if (!priceData.length) return null;
 
-        // Filter data by time range
+        // Filter data by time range — each dataset uses its own latest date as anchor
         const filterByTimeRange = (data) => {
+            const dates = data.map(d => new Date(d.report_date)).filter(d => !isNaN(d));
+            if (dates.length === 0) return data;
+            const maxDate = new Date(Math.max(...dates));
+
             if (timeRange === 'daily') {
-                // Get the most recent date in the data
-                const dates = data.map(d => new Date(d.report_date)).filter(d => !isNaN(d));
-                if (dates.length === 0) return data;
-                const maxDate = new Date(Math.max(...dates));
                 return data.filter(d => {
                     const itemDate = new Date(d.report_date);
                     return itemDate.toDateString() === maxDate.toDateString();
                 });
             } else {
-                // 7-day / 30-day mode: backend already filters, so use all data
-                return data;
+                // 7-day / 30-day: N days before THIS dataset's latest date
+                const days = timeRange === '7day' ? 7 : 30;
+                const cutoff = new Date(maxDate);
+                cutoff.setDate(cutoff.getDate() - days);
+                return data.filter(d => {
+                    const itemDate = new Date(d.report_date);
+                    return !isNaN(itemDate) && itemDate >= cutoff;
+                });
             }
         };
 

@@ -132,7 +132,7 @@ def flatten_sections(api_response):
 # Main Logic
 # --------------------------------------------------
 
-def fetch_recent_data(slug_ids, days=45):
+def fetch_recent_data(slug_ids, days=60):
     all_reports = {}
     
     # Calculate date range
