@@ -543,19 +543,8 @@ export default function DashboardScreen({ route, navigation }) {
         
         console.log('[DEBUG] Avg prices - Terminal:', terminalAvg, 'Shipping:', shippingAvg, 'Retail:', retailAvg);
 
-        // Fallback Mock Logic if no real shipping data found
         let isShippingEstimated = false;
-        if (shippingAvg === 0 && terminalAvg > 0) {
-            shippingAvg = terminalAvg * 0.6;
-            isShippingEstimated = true;
-        }
-
-        // Fallback for retail if no data
         let isRetailEstimated = false;
-        if (retailAvg === 0 && terminalAvg > 0) {
-            retailAvg = terminalAvg * 1.4;
-            isRetailEstimated = true;
-        }
 
         // Compute per-market-type date ranges and report counts
         const dateRanges = {
