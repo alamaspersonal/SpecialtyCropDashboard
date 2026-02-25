@@ -367,6 +367,120 @@ export const getPrices = async (filters = {}, limit = 100, days = null) => {
 };
 
 /**
+ * Get the date range (oldest and newest report_date) for a given set of filters.
+ * Uses two efficient single-row queries instead of scanning the full table.
+ * 
+ * @param {Object} filters - Filter criteria (commodity, category, district, etc.)
+ * @returns {Object} { minDate: string|null, maxDate: string|null }
+ */
+export const getDateRange = async (filters = {}) => {
+    try {
+        console.log('[DEBUG supabaseApi] getDateRange called with:', filters);
+
+        const applyFilters = (query) => {
+            if (filters.commodity) query = query.eq('commodity', filters.commodity);
+            if (filters.district) query = query.eq('district', filters.district);
+            return query;
+        };
+
+        // Get oldest date (ascending, limit 1)
+        let minQuery = supabase
+            .from('UnifiedCropPrice')
+            .select('report_date')
+            .not('report_date', 'is', null)
+            .order('report_date', { ascending: true })
+            .limit(1);
+        minQuery = applyFilters(minQuery);
+
+        // Get newest date (descending, limit 1)
+        let maxQuery = supabase
+            .from('UnifiedCropPrice')
+            .select('report_date')
+            .not('report_date', 'is', null)
+            .order('report_date', { ascending: false })
+            .limit(1);
+        maxQuery = applyFilters(maxQuery);
+
+        const [minResult, maxResult] = await Promise.all([minQuery, maxQuery]);
+
+        if (minResult.error) throw minResult.error;
+        if (maxResult.error) throw maxResult.error;
+
+        const minDate = minResult.data?.[0]?.report_date || null;
+        const maxDate = maxResult.data?.[0]?.report_date || null;
+
+        console.log('[DEBUG supabaseApi] Date range result:', { minDate, maxDate });
+        return { minDate, maxDate };
+    } catch (error) {
+        console.error('Error fetching date range:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get all crop prices within a specific date range for the given filters.
+ * Paginates to fetch ALL matching rows (no arbitrary row cap).
+ * Designed for bounded queries — caller should limit to ~1 month windows.
+ * 
+ * @param {Object} filters - Filter criteria (commodity, category, etc.)
+ * @param {string} startDate - ISO date string for the start of the range
+ * @param {string} endDate - ISO date string for the end of the range
+ * @returns {Array} Array of all matching price records
+ */
+export const getPricesByDateRange = async (filters = {}, startDate, endDate) => {
+    try {
+        console.log('[DEBUG supabaseApi] getPricesByDateRange called:', { filters, startDate, endDate });
+
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            let query = supabase
+                .from('UnifiedCropPrice')
+                .select('*')
+                .gte('report_date', startDate)
+                .lte('report_date', endDate)
+                .order('report_date', { ascending: false })
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+
+            // Apply filters (only columns that exist on UnifiedCropPrice)
+            if (filters.commodity) query = query.eq('commodity', filters.commodity);
+            if (filters.variety) query = query.eq('variety', filters.variety);
+            if (filters.district) query = query.eq('district', filters.district);
+            if (filters.package) query = query.eq('package', filters.package);
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allData = [...allData, ...data];
+                if (data.length < pageSize) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            } else {
+                hasMore = false;
+            }
+
+            // Safety limit
+            if (allData.length > 20000) {
+                console.warn('[DEBUG supabaseApi] Reached 20k row safety limit for date range query');
+                break;
+            }
+        }
+
+        console.log('[DEBUG supabaseApi] getPricesByDateRange result: ', allData.length, 'rows');
+        return allData;
+    } catch (error) {
+        console.error('Error fetching prices by date range:', error);
+        throw error;
+    }
+};
+
+/**
  * Get unified prices for charts and analysis.
  * Mirrors: GET /api/v2/prices
  * 

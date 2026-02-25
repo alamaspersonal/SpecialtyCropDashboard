@@ -12,6 +12,8 @@
 export {
     getFilters,
     getPrices,
+    getDateRange,
+    getPricesByDateRange,
     getUnifiedPrices,
     getStats,
     getPriceSummary,

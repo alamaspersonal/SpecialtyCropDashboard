@@ -7,15 +7,19 @@ import {
     ScrollView,
     Modal,
     TextInput,
-    ActivityIndicator
+    ActivityIndicator,
+    Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getPrices } from '../services/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { getDateRange, getPricesByDateRange } from '../services/api';
 import PriceWaterfallMobile from '../components/PriceWaterfallMobile';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../services/favorites';
 import { generateMarketInsights } from '../services/cerebrasApi';
 import { useTheme } from '../context/ThemeContext';
+
+
 
 // Package weight lookup (simplified - ideally fetch from backend)
 const PACKAGE_WEIGHTS = {
@@ -70,9 +74,17 @@ export default function DashboardScreen({ route, navigation }) {
     const [selectedDistricts, setSelectedDistricts] = useState({ terminal: '', shipping: '', retail: '' });
 
     // Time Range Selection
-    const [timeRange, setTimeRange] = useState('daily'); // 'daily' or '7day'
+    const [timeRange, setTimeRange] = useState('daily');
+    const [customStartDate, setCustomStartDate] = useState(() => {
+        const d = new Date(); d.setDate(d.getDate() - 30); return d;
+    });
+    const [customEndDate, setCustomEndDate] = useState(new Date());
+    const [showDateModal, setShowDateModal] = useState(false);
+    const [activeDatePicker, setActiveDatePicker] = useState(null); // 'start' | 'end' | null
 
-    // Top-level Filter Controls
+    // Server-side date bounds for the current filter (oldest/newest date in DB)
+    const [serverDateBounds, setServerDateBounds] = useState({ min: null, max: null });
+
     // Top-level Filter Controls
     const [organicOnly, setOrganicOnly] = useState(initialOrganicOnly || false);
     const [hasOrganicData, setHasOrganicData] = useState(false);
@@ -90,23 +102,54 @@ export default function DashboardScreen({ route, navigation }) {
         commission: '0.50'
     });
 
-
+    // Fetch date bounds from Supabase when filters change
+    useEffect(() => {
+        const fetchDateBounds = async () => {
+            try {
+                const apiFilters = { ...filters };
+                delete apiFilters.date;
+                delete apiFilters.package;
+                delete apiFilters.variety;
+                const bounds = await getDateRange(apiFilters);
+                setServerDateBounds({
+                    min: bounds.minDate ? new Date(bounds.minDate) : null,
+                    max: bounds.maxDate ? new Date(bounds.maxDate) : null,
+                });
+            } catch (err) {
+                console.error('Error fetching date bounds:', err);
+            }
+        };
+        fetchDateBounds();
+    }, [filters]);
 
     useEffect(() => {
         checkFavStatus();
         const fetchPrices = async () => {
             setLoading(true);
             try {
-                // Always fetch all data — time range filtering is done per-market-type in calculateStats
                 const apiFilters = { ...filters };
                 delete apiFilters.date;
                 delete apiFilters.package;
                 delete apiFilters.variety;
 
-                console.log('[DEBUG] Fetching prices with:', { filters: apiFilters, limit: 500, timeRange });
+                let data;
 
-                // Fetching raw prices with higher limit to get mix
-                const data = await getPrices(apiFilters, 500, null);
+                if (timeRange === 'custom' && customStartDate && customEndDate) {
+                    // Custom mode: use date-range endpoint to get ALL data in window
+                    const startISO = customStartDate.toISOString().split('T')[0];
+                    const endISO = customEndDate.toISOString().split('T')[0];
+                    console.log('[DEBUG] Fetching custom range:', { filters: apiFilters, startISO, endISO });
+                    data = await getPricesByDateRange(apiFilters, startISO, endISO);
+                } else {
+                    // Preset mode (Daily/7D/30D): fetch last 90 days from UnifiedCropPrice
+                    const endDate = new Date();
+                    const startDate = new Date();
+                    startDate.setDate(startDate.getDate() - 90);
+                    const startISO = startDate.toISOString().split('T')[0];
+                    const endISO = endDate.toISOString().split('T')[0];
+                    console.log('[DEBUG] Fetching preset range from UnifiedCropPrice:', { filters: apiFilters, startISO, endISO });
+                    data = await getPricesByDateRange(apiFilters, startISO, endISO);
+                }
                 console.log('[DEBUG] Received data length:', data?.length);
                 console.log('[DEBUG] Sample data:', data?.slice(0, 3));
                 
@@ -127,13 +170,8 @@ export default function DashboardScreen({ route, navigation }) {
                 const allVarieties = [...new Set(data.map(d => d.variety).filter(Boolean))].sort();
                 setVarietyOptions(allVarieties);
 
-                // Check if any organic data exists
-                const organicExists = data.some(d => d.organic === 'yes');
-                setHasOrganicData(organicExists);
-                // If no organic data, reset the organic filter
-                if (!organicExists && organicOnly) {
-                    setOrganicOnly(false);
-                }
+                // UnifiedCropPrice has no 'organic' column — organic filtering is not available
+                setHasOrganicData(false);
 
                 // Extract Packages, Origins, and Districts
                 const getUnique = (arr, field) => [...new Set(arr.map(d => d[field]).filter(Boolean))].sort();
@@ -187,7 +225,7 @@ export default function DashboardScreen({ route, navigation }) {
             }
         };
         fetchPrices();
-    }, [filters]);
+    }, [filters, timeRange, customStartDate]);
 
     // Generate AI Insights — only for daily view, regenerate on filter changes
     const aiCacheKey = `${filters.commodity}|${selectedVariety}|${organicOnly}|${JSON.stringify(selectedOrigins)}|${JSON.stringify(selectedPackages)}`;
@@ -454,13 +492,23 @@ export default function DashboardScreen({ route, navigation }) {
             if (dates.length === 0) return data;
             const maxDate = new Date(Math.max(...dates));
 
-            if (timeRange === 'daily') {
+            if (timeRange === 'custom') {
+                // Custom date range — use user-selected start/end
+                const start = new Date(customStartDate);
+                start.setHours(0, 0, 0, 0);
+                const end = new Date(customEndDate);
+                end.setHours(23, 59, 59, 999);
+                return data.filter(d => {
+                    const itemDate = new Date(d.report_date);
+                    return !isNaN(itemDate) && itemDate >= start && itemDate <= end;
+                });
+            } else if (timeRange === 'daily') {
                 return data.filter(d => {
                     const itemDate = new Date(d.report_date);
                     return itemDate.toDateString() === maxDate.toDateString();
                 });
             } else {
-                // 7-day / 30-day: N days before THIS dataset's latest date
+                // Preset ranges: 7-day, 30-day
                 const days = timeRange === '7day' ? 7 : 30;
                 const cutoff = new Date(maxDate);
                 cutoff.setDate(cutoff.getDate() - days);
@@ -507,30 +555,16 @@ export default function DashboardScreen({ route, navigation }) {
             return filtered;
         };
 
-        // Calculate average price from available price fields (matching backend logic)
+        // Calculate average price using price_avg from UnifiedCropPrice
         const calcAvgPrice = (data) => {
             if (!data.length) return 0;
             
-            const priceFields = ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price'];
-            const fieldAvgs = [];
+            const validValues = data
+                .map(d => d.price_avg)
+                .filter(v => v !== null && v !== undefined && !isNaN(v));
             
-            priceFields.forEach(field => {
-                const validValues = data.map(d => d[field]).filter(v => v !== null && v !== undefined && !isNaN(v));
-                if (validValues.length > 0) {
-                    fieldAvgs.push(validValues.reduce((a, b) => a + b, 0) / validValues.length);
-                }
-            });
-            
-            if (fieldAvgs.length === 0) {
-                // Fallback to wtd_avg_price for retail
-                const wtdValues = data.map(d => d.wtd_avg_price).filter(v => v !== null && v !== undefined && !isNaN(v));
-                if (wtdValues.length > 0) {
-                    return wtdValues.reduce((a, b) => a + b, 0) / wtdValues.length;
-                }
-                return 0;
-            }
-            
-            return fieldAvgs.reduce((a, b) => a + b, 0) / fieldAvgs.length;
+            if (validValues.length === 0) return 0;
+            return validValues.reduce((a, b) => a + b, 0) / validValues.length;
         };
 
         const terminalFiltered = filterData(filteredTerminal, 'terminal');
@@ -651,28 +685,57 @@ export default function DashboardScreen({ route, navigation }) {
 
                         {/* Time Range Toggle */}
                         <View style={[styles.timeRangeContainer, { backgroundColor: colors.surfaceElevated }]}>
-                            <TouchableOpacity
-                                style={[styles.timeRangeBtn, timeRange === 'daily' && { backgroundColor: colors.accent }]}
-                                onPress={() => setTimeRange('daily')}
-                            >
-                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === 'daily' && { color: '#0f172a' }]}>Daily</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.timeRangeBtn, timeRange === '7day' && { backgroundColor: colors.accent }]}
-                                onPress={() => setTimeRange('7day')}
-                            >
-                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === '7day' && { color: '#0f172a' }]}>Last 7 Days</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.timeRangeBtn, timeRange === '30day' && { backgroundColor: colors.accent }]}
-                                onPress={() => setTimeRange('30day')}
-                            >
-                                <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === '30day' && { color: '#0f172a' }]}>Last 30 Days</Text>
-                            </TouchableOpacity>
+                            {[{ key: 'daily', label: 'Daily' }, { key: '7day', label: '7 Days' }, { key: '30day', label: '30 Days' }].map(preset => (
+                                <TouchableOpacity
+                                    key={preset.key}
+                                    style={[styles.timeRangeBtn, timeRange === preset.key && { backgroundColor: colors.accent }]}
+                                    onPress={() => setTimeRange(preset.key)}
+                                >
+                                    <Text style={[styles.timeRangeBtnText, { color: colors.textSecondary }, timeRange === preset.key && { color: '#0f172a' }]}>
+                                        {preset.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
 
+                        {/* Custom Date Range Button */}
+                        <TouchableOpacity
+                            style={[
+                                styles.customDateBtn,
+                                {
+                                    backgroundColor: timeRange === 'custom' ? colors.accent + '18' : colors.surfaceElevated,
+                                    borderColor: timeRange === 'custom' ? colors.accent : colors.border,
+                                }
+                            ]}
+                            onPress={() => setShowDateModal(true)}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons
+                                name={timeRange === 'custom' ? 'calendar' : 'calendar-outline'}
+                                size={16}
+                                color={timeRange === 'custom' ? colors.accent : colors.textMuted}
+                            />
+                            <Text style={[
+                                styles.customDateBtnText,
+                                { color: timeRange === 'custom' ? colors.accent : colors.textSecondary }
+                            ]}>
+                                {timeRange === 'custom'
+                                    ? `${customStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — ${customEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                    : 'Custom Range'
+                                }
+                            </Text>
+                            {timeRange === 'custom' && (
+                                <TouchableOpacity
+                                    onPress={(e) => { e.stopPropagation(); setTimeRange('daily'); }}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
+                                    <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                                </TouchableOpacity>
+                            )}
+                        </TouchableOpacity>
+
                         {/* Date Range Display */}
-                        {stats.overallDateRange && (
+                        {timeRange !== 'custom' && stats.overallDateRange && (
                             <View style={[styles.dateRangeContainer, { backgroundColor: colors.surfaceElevated }]}>
                                 <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
                                 <Text style={[styles.dateRangeText, { color: colors.textSecondary }]}>
@@ -683,7 +746,7 @@ export default function DashboardScreen({ route, navigation }) {
                                 </Text>
                             </View>
                         )}
-                        {timeRange !== 'daily' && stats.overallDateRange && (
+                        {timeRange !== 'daily' && timeRange !== 'custom' && stats.overallDateRange && (
                             <Text style={[styles.dateRangeSubtext, { color: colors.textMuted }]}>
                                 {timeRange === '7day' ? '7 days' : '30 days'} before most recent report
                             </Text>
@@ -816,6 +879,157 @@ export default function DashboardScreen({ route, navigation }) {
                     </View>
                 </TouchableOpacity>
             </Modal>
+
+            {/* Custom Date Range Modal */}
+            <Modal visible={showDateModal} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.dateModalContent, { backgroundColor: colors.surface }]}>
+                        <View style={styles.dateModalHeader}>
+                            <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>Select Date Range</Text>
+                            <TouchableOpacity onPress={() => { setShowDateModal(false); setActiveDatePicker(null); }}>
+                                <Ionicons name="close" size={24} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Quick Select Presets (≤ 1 month) */}
+                        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                            {[
+                                { label: 'Last 7 Days', days: 7 },
+                                { label: 'Last 30 Days', days: 30 },
+                            ].map(preset => {
+                                const maxDate = serverDateBounds.max || new Date();
+                                return (
+                                    <TouchableOpacity
+                                        key={preset.label}
+                                        style={[styles.quickPresetChip, { borderColor: colors.border }]}
+                                        onPress={() => {
+                                            const end = new Date(maxDate);
+                                            const start = new Date(maxDate);
+                                            start.setDate(start.getDate() - preset.days);
+                                            // Clamp start to server min
+                                            if (serverDateBounds.min && start < serverDateBounds.min) {
+                                                start.setTime(serverDateBounds.min.getTime());
+                                            }
+                                            setCustomStartDate(start);
+                                            setCustomEndDate(end);
+                                            setActiveDatePicker(null);
+                                        }}
+                                    >
+                                        <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '600' }}>{preset.label}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {/* Data availability hint */}
+                        {serverDateBounds.min && serverDateBounds.max && (
+                            <Text style={{ color: colors.textMuted, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>
+                                Data available: {serverDateBounds.min.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} — {serverDateBounds.max.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}  •  Max 1 month window
+                            </Text>
+                        )}
+
+                        {/* Date Cards */}
+                        <View style={styles.dateCardsRow}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.dateCard,
+                                    { backgroundColor: colors.surfaceElevated, borderColor: activeDatePicker === 'start' ? colors.accent : colors.border }
+                                ]}
+                                onPress={() => setActiveDatePicker(activeDatePicker === 'start' ? null : 'start')}
+                            >
+                                <Text style={[styles.dateCardLabel, { color: colors.textMuted }]}>Start Date</Text>
+                                <Text style={[styles.dateCardValue, { color: colors.text }]}>
+                                    {customStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </Text>
+                            </TouchableOpacity>
+                            <Ionicons name="arrow-forward" size={18} color={colors.textMuted} style={{ marginHorizontal: 8 }} />
+                            <TouchableOpacity
+                                style={[
+                                    styles.dateCard,
+                                    { backgroundColor: colors.surfaceElevated, borderColor: activeDatePicker === 'end' ? colors.accent : colors.border }
+                                ]}
+                                onPress={() => setActiveDatePicker(activeDatePicker === 'end' ? null : 'end')}
+                            >
+                                <Text style={[styles.dateCardLabel, { color: colors.textMuted }]}>End Date</Text>
+                                <Text style={[styles.dateCardValue, { color: colors.text }]}>
+                                    {customEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Native Date Picker */}
+                        {activeDatePicker && (
+                            <View style={styles.datePickerWrapper}>
+                                <DateTimePicker
+                                    value={activeDatePicker === 'start' ? customStartDate : customEndDate}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    maximumDate={activeDatePicker === 'start'
+                                        ? new Date(customEndDate)
+                                        : (() => {
+                                            // End date max = start + 31 days or server max, whichever is earlier
+                                            const maxFromSpan = new Date(customStartDate);
+                                            maxFromSpan.setDate(maxFromSpan.getDate() + 31);
+                                            const serverMax = serverDateBounds.max || new Date();
+                                            return maxFromSpan < serverMax ? maxFromSpan : serverMax;
+                                        })()
+                                    }
+                                    minimumDate={activeDatePicker === 'start'
+                                        ? (serverDateBounds.min || undefined)
+                                        : customStartDate
+                                    }
+                                    onChange={(event, selectedDate) => {
+                                        if (Platform.OS === 'android') {
+                                            setActiveDatePicker(null);
+                                        }
+                                        if (selectedDate) {
+                                            if (activeDatePicker === 'start') {
+                                                setCustomStartDate(selectedDate);
+                                                // Auto-adjust end date to stay within 31-day max span
+                                                const maxEnd = new Date(selectedDate);
+                                                maxEnd.setDate(maxEnd.getDate() + 31);
+                                                const serverMax = serverDateBounds.max || new Date();
+                                                const cappedEnd = maxEnd < serverMax ? maxEnd : serverMax;
+                                                if (customEndDate > cappedEnd) {
+                                                    setCustomEndDate(cappedEnd);
+                                                }
+                                                // If end date is before new start, reset it
+                                                if (customEndDate < selectedDate) {
+                                                    setCustomEndDate(new Date(Math.min(cappedEnd.getTime(), selectedDate.getTime() + 7 * 24 * 60 * 60 * 1000)));
+                                                }
+                                            } else {
+                                                setCustomEndDate(selectedDate);
+                                            }
+                                        }
+                                    }}
+                                    themeVariant={isDark ? 'dark' : 'light'}
+                                    style={{ height: 150 }}
+                                />
+                            </View>
+                        )}
+
+                        {/* Actions */}
+                        <View style={styles.dateModalActions}>
+                            <TouchableOpacity
+                                style={[styles.dateModalCancel, { borderColor: colors.border }]}
+                                onPress={() => { setShowDateModal(false); setActiveDatePicker(null); }}
+                            >
+                                <Text style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 15 }}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.dateModalApply, { backgroundColor: colors.accent }]}
+                                onPress={() => {
+                                    setTimeRange('custom');
+                                    setShowDateModal(false);
+                                    setActiveDatePicker(null);
+                                }}
+                            >
+                                <Text style={{ color: '#0f172a', fontWeight: '700', fontSize: 15 }}>Apply Range</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -885,12 +1099,12 @@ const styles = StyleSheet.create({
     closeButton: { backgroundColor: '#22c55e', padding: 16, borderRadius: 12, marginTop: 16, alignItems: 'center' },
     closeButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
 
-    // Time Range Toggle - Updated to green theme
+    // Time Range Toggle
     timeRangeContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginBottom: 20,
-        gap: 8,
+        marginBottom: 12,
+        gap: 4,
         backgroundColor: '#f1f5f9',
         padding: 4,
         borderRadius: 12,
@@ -902,16 +1116,28 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         backgroundColor: 'transparent',
     },
-    timeRangeBtnActive: {
-        backgroundColor: '#22c55e',
-    },
     timeRangeBtnText: {
         fontSize: 14,
         fontWeight: '600',
         color: '#64748b',
     },
-    timeRangeBtnTextActive: {
-        color: 'white',
+
+    // Custom Date Range Button
+    customDateBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        borderRadius: 10,
+        borderWidth: 1,
+        alignSelf: 'center',
+        marginBottom: 12,
+    },
+    customDateBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
     },
 
     // Variety Selector
@@ -996,5 +1222,75 @@ const styles = StyleSheet.create({
     organicLabel: {
         fontSize: 15,
         fontWeight: '600',
+    },
+
+    // Custom Date Range Modal
+    dateModalContent: {
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
+        padding: 24,
+        maxHeight: '80%',
+    },
+    dateModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    quickPresetChip: {
+        paddingVertical: 7,
+        paddingHorizontal: 14,
+        borderRadius: 20,
+        borderWidth: 1,
+    },
+    dateCardsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
+    dateCard: {
+        flex: 1,
+        padding: 14,
+        borderRadius: 14,
+        borderWidth: 2,
+        alignItems: 'center',
+    },
+    dateCardLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 4,
+    },
+    dateCardValue: {
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    datePickerWrapper: {
+        alignItems: 'center',
+        marginBottom: 16,
+        overflow: 'hidden',
+        borderRadius: 12,
+    },
+    dateModalActions: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 8,
+    },
+    dateModalCancel: {
+        flex: 1,
+        padding: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        alignItems: 'center',
+    },
+    dateModalApply: {
+        flex: 1,
+        padding: 14,
+        borderRadius: 12,
+        alignItems: 'center',
     },
 });
