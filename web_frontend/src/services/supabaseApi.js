@@ -10,7 +10,7 @@
  */
 
 import { supabase } from './supabase';
-import { STATIC_FILTERS } from '../constants/staticFilters';
+import { STATIC_FILTERS, CATEGORY_COMMODITIES } from '../constants/staticFilters';
 
 /**
  * Get distinct filter values for the filter UI.
@@ -44,6 +44,24 @@ export const getFilters = async (currentFilters = {}) => {
         // excludeField: don't apply filter for this field (so user sees all options)
         // applyFilters: which filters to apply (parent/sibling filters)
         const fetchOptionsForField = async (field, applyFilters) => {
+            const activeFilterKeys = Object.keys(applyFilters).filter(k => applyFilters[k]);
+            
+            // OPTIMIZATION: Avoid huge DB scans for completely static top-level relationships
+            if (activeFilterKeys.length === 0) {
+                if (field === 'category') return STATIC_FILTERS.categories;
+                if (field === 'commodity') return STATIC_FILTERS.commodities;
+                if (field === 'district') return STATIC_FILTERS.districts;
+                if (field === 'organic') return STATIC_FILTERS.organics;
+            }
+
+            // OPTIMIZATION: If we only have category, we statically know the exact commodities
+            if (field === 'commodity' && activeFilterKeys.length === 1 && activeFilterKeys[0] === 'category') {
+                const cat = applyFilters.category;
+                if (CATEGORY_COMMODITIES[cat]) {
+                    return [...CATEGORY_COMMODITIES[cat]].sort();
+                }
+            }
+
             let allData = [];
             let page = 0;
             const pageSize = 1000;

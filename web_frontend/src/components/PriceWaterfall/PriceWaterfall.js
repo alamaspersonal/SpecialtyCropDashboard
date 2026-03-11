@@ -12,6 +12,7 @@ function PriceBlock({
     label,
     avgPrice,
     bg,
+    zIndex,
     packageOptions,
     selectedPackage,
     onPackageChange,
@@ -39,9 +40,12 @@ function PriceBlock({
     };
 
     return (
-        <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)]">
+        <div 
+            className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)] relative"
+            style={{ zIndex }}
+        >
             {/* Colored Header */}
-            <div className="px-4 py-2.5" style={{ backgroundColor: bg }}>
+            <div className="rounded-t-[calc(1rem-1px)] px-4 py-2.5" style={{ backgroundColor: bg }}>
                 <span className="text-sm font-semibold text-white">{label}</span>
             </div>
 
@@ -141,12 +145,13 @@ export default function PriceWaterfall({
 
             {/* Price Blocks */}
             <div className="grid gap-4 md:grid-cols-3">
-                {blocks.map((b) => (
+                {blocks.map((b, idx) => (
                     <PriceBlock
                         key={b.key}
                         label={b.label}
                         avgPrice={b.price}
                         bg={b.bg}
+                        zIndex={20 - idx}
                         packageOptions={packageData?.[b.key]?.options}
                         selectedPackage={packageData?.[b.key]?.selected}
                         onPackageChange={(val) => actions?.setPackage?.(b.key, val)}
