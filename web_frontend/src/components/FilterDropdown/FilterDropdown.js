@@ -6,7 +6,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, X } from 'lucide-react';
 
 export default function FilterDropdown({
     label,
@@ -39,12 +39,11 @@ export default function FilterDropdown({
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                 {label}
             </label>
-            <button
+            <div
                 onClick={() => !disabled && setOpen(!open)}
-                disabled={disabled}
-                className={`flex w-full items-center justify-between rounded-xl border bg-[var(--color-surface)] px-4 py-3 text-sm transition-all duration-200
+                className={`flex w-full cursor-pointer items-center justify-between rounded-xl border bg-[var(--color-surface)] px-4 py-3 text-sm transition-all duration-200
                     ${disabled
-                        ? 'cursor-not-allowed border-[var(--color-border)] opacity-50'
+                        ? 'cursor-not-allowed border-[var(--color-border)] opacity-50 pointer-events-none'
                         : open
                             ? 'border-[var(--color-accent)] shadow-[var(--shadow-card-hover)]'
                             : 'border-[var(--color-border)] hover:border-[var(--color-text-muted)] shadow-[var(--shadow-card)]'
@@ -53,18 +52,31 @@ export default function FilterDropdown({
                 <span className={value ? 'font-medium text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)]'}>
                     {value || `Select ${label.toLowerCase()}...`}
                 </span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                     {value && (
-                        <span
-                            className="h-2 w-2 rounded-full"
-                            style={{ backgroundColor: color }}
-                        />
+                        <>
+                            <span
+                                className="h-2 w-2 rounded-full hidden sm:block"
+                                style={{ backgroundColor: color }}
+                            />
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onChange('');
+                                }}
+                                className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-border)] hover:text-[var(--color-text-primary)]"
+                                aria-label={`Clear ${label}`}
+                            >
+                                <X size={14} />
+                            </button>
+                        </>
                     )}
-                    <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                    <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="ml-0.5">
                         <ChevronDown size={16} className="text-[var(--color-text-muted)]" />
                     </motion.div>
                 </div>
-            </button>
+            </div>
 
             <AnimatePresence>
                 {open && options.length > 0 && (

@@ -446,8 +446,8 @@ export const getPricesByDateRange = async (filters = {}, startDate, endDate) => 
                 .range(page * pageSize, (page + 1) * pageSize - 1);
 
             // Apply filters (only columns that exist on UnifiedCropPrice)
+            // Note: 'category' is NOT a column in UnifiedCropPrice — do not filter by it
             if (filters.commodity) query = query.eq('commodity', filters.commodity);
-            if (filters.category) query = query.eq('category', filters.category);
             if (filters.variety) query = query.eq('variety', filters.variety);
             if (filters.district) query = query.eq('district', filters.district);
             if (filters.package) query = query.eq('package', filters.package);

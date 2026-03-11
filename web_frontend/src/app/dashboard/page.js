@@ -9,13 +9,14 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Heart, Sparkles, Clock, BarChart3, GitCompare } from 'lucide-react';
+import { ArrowLeft, Heart, Sparkles, Clock, BarChart3, GitCompare, Filter } from 'lucide-react';
 import { getDateRange, getPricesByDateRange } from '../../services/supabaseApi';
 import { generateMarketInsights } from '../../services/cerebrasApi';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../../services/favorites';
 import PriceWaterfall from '../../components/PriceWaterfall/PriceWaterfall';
 import PriceBarChart from '../../components/PriceBarChart/PriceBarChart';
 import ComparisonContainer from '../../components/ComparisonContainer/ComparisonContainer';
+import DashboardFilters from '../../components/DashboardFilters/DashboardFilters';
 import PageTransition from '../../components/PageTransition/PageTransition';
 import { SkeletonChart, SkeletonText } from '../../components/LoadingSkeleton/LoadingSkeleton';
 
@@ -39,10 +40,9 @@ const PACKAGE_WEIGHTS = {
 };
 
 const TIME_RANGES = [
-    { label: '1W', days: 7 },
-    { label: '2W', days: 14 },
-    { label: '1M', days: 30 },
-    { label: '3M', days: 90 },
+    { label: 'Last Day', days: 1 },
+    { label: '7 Days', days: 7 },
+    { label: '30 Days', days: 30 },
 ];
 
 function DashboardContent() {
@@ -52,6 +52,7 @@ function DashboardContent() {
     const commodity = searchParams.get('commodity') || '';
     const category = searchParams.get('category') || '';
     const variety = searchParams.get('variety') || '';
+    const district = searchParams.get('district') || '';
 
     // State
     const [priceData, setPriceData] = useState([]);
@@ -76,6 +77,7 @@ function DashboardContent() {
 
     // UI State
     const [compareMode, setCompareMode] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
 
     // Date bounds
     const [dateBounds, setDateBounds] = useState({ minDate: null, maxDate: null });
@@ -303,6 +305,17 @@ function DashboardContent() {
                         </div>
                         <div className="flex items-center gap-2">
                             <button
+                                onClick={() => setShowFilters(!showFilters)}
+                                className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200
+                                    ${showFilters
+                                        ? 'bg-[var(--color-surface-elevated)] text-[var(--color-text-primary)] border border-[var(--color-text-muted)]'
+                                        : 'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]'
+                                    }`}
+                            >
+                                <Filter size={14} />
+                                Filters
+                            </button>
+                            <button
                                 onClick={() => setCompareMode(!compareMode)}
                                 className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200
                                     ${compareMode
@@ -326,6 +339,13 @@ function DashboardContent() {
                             </motion.button>
                         </div>
                     </motion.div>
+
+                    {/* Dashboard Inline Filters */}
+                    <DashboardFilters 
+                        currentFilters={{ commodity, category, variety, district, organic: searchParams.get('organic') || '' }} 
+                        isOpen={showFilters} 
+                        onClose={() => setShowFilters(false)} 
+                    />
 
                     {/* Time Range Selector */}
                     <motion.div

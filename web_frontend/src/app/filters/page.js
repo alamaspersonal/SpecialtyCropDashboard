@@ -63,10 +63,12 @@ export default function FiltersPage() {
                 setVariety('');
                 setDistrict('');
                 setOrganic('');
+                setFilterOptions(prev => ({ ...prev, commodities: [], varieties: [] }));
                 break;
             case 'commodity':
                 setCommodity(value);
                 setVariety('');
+                setFilterOptions(prev => ({ ...prev, varieties: [] }));
                 break;
             case 'variety':
                 setVariety(value);
