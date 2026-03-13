@@ -11,12 +11,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Heart, Sparkles, Clock, BarChart3, GitCompare, Filter } from 'lucide-react';
 import { getDateRange, getPricesByDateRange } from '../../services/supabaseApi';
-import { generateMarketInsights } from '../../services/cerebrasApi';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../../services/favorites';
 import PriceWaterfall from '../../components/PriceWaterfall/PriceWaterfall';
 import PriceBarChart from '../../components/PriceBarChart/PriceBarChart';
 import ComparisonContainer from '../../components/ComparisonContainer/ComparisonContainer';
 import DashboardFilters from '../../components/DashboardFilters/DashboardFilters';
+import ExportDropdown from '../../components/ExportDropdown/ExportDropdown';
 import PageTransition from '../../components/PageTransition/PageTransition';
 import { SkeletonChart, SkeletonText } from '../../components/LoadingSkeleton/LoadingSkeleton';
 
@@ -43,6 +43,7 @@ const TIME_RANGES = [
     { label: 'Last Day', days: 1 },
     { label: '7 Days', days: 7 },
     { label: '30 Days', days: 30 },
+    { label: 'Custom', days: 'custom' },
 ];
 
 function DashboardContent() {
@@ -58,6 +59,7 @@ function DashboardContent() {
     const [priceData, setPriceData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [timeRange, setTimeRange] = useState(30);
+    const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
     const [isFavorite, setIsFavorite] = useState(false);
 
     // Sub-filter state per market type
@@ -71,10 +73,6 @@ function DashboardContent() {
     const [shippingDist, setShippingDist] = useState('');
     const [retailDist, setRetailDist] = useState('');
 
-    // AI state
-    const [aiInsights, setAiInsights] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
-
     // UI State
     const [compareMode, setCompareMode] = useState(false);
     const [showFilters, setShowFilters] = useState(false);
@@ -85,20 +83,45 @@ function DashboardContent() {
     // Fetch data
     const fetchData = useCallback(async () => {
         if (!commodity) return;
+
+        // If 'custom' is selected but both dates aren't filled, don't fetch yet
+        if (timeRange === 'custom') {
+            if (!customDateRange.start || !customDateRange.end) {
+                setLoading(false);
+                return;
+            }
+        }
+
         setLoading(true);
         try {
             const bounds = await getDateRange({ commodity, category, variety });
             setDateBounds(bounds);
 
-            if (bounds.maxDate) {
+            let fetchStart, fetchEnd;
+
+            if (timeRange === 'custom' && customDateRange.start && customDateRange.end) {
+                fetchStart = customDateRange.start;
+                fetchEnd = customDateRange.end;
+                
+                // Fetch directly with explicit bounds
+                const data = await getPricesByDateRange(
+                    { commodity, category, variety },
+                    fetchStart,
+                    fetchEnd
+                );
+                setPriceData(data || []);
+            } else if (bounds.maxDate) {
                 const endDate = new Date(bounds.maxDate);
                 const startDate = new Date(endDate);
                 startDate.setDate(startDate.getDate() - timeRange);
 
+                fetchStart = startDate.toISOString().split('T')[0];
+                fetchEnd = endDate.toISOString().split('T')[0];
+
                 const data = await getPricesByDateRange(
                     { commodity, category, variety },
-                    startDate.toISOString().split('T')[0],
-                    endDate.toISOString().split('T')[0]
+                    fetchStart,
+                    fetchEnd
                 );
                 setPriceData(data || []);
             }
@@ -106,7 +129,7 @@ function DashboardContent() {
             console.error('Error fetching data:', e);
         }
         setLoading(false);
-    }, [commodity, category, variety, timeRange]);
+    }, [commodity, category, variety, timeRange, customDateRange]);
 
     useEffect(() => {
         fetchData();
@@ -118,43 +141,6 @@ function DashboardContent() {
             setIsFavorite(checkIsFavorite(commodity));
         }
     }, [commodity]);
-
-    // Fetch AI insights
-    const fetchAI = useCallback(async () => {
-        if (!commodity || priceData.length === 0) return;
-        setAiLoading(true);
-        try {
-            const shippingData = {};
-            const terminalData = {};
-
-            priceData.forEach(row => {
-                const type = (row.market_type || '').toLowerCase();
-                const comments = row.market_tone_comments;
-                if (!comments) return;
-
-                if (type.includes('shipping')) {
-                    if (!shippingData.commodity) shippingData.commodity = [];
-                    shippingData.commodity.push(comments);
-                } else if (type.includes('terminal')) {
-                    if (!terminalData.commodity) terminalData.commodity = [];
-                    terminalData.commodity.push(comments);
-                }
-            });
-
-            const insight = await generateMarketInsights(commodity, shippingData, terminalData);
-            setAiInsights(insight);
-        } catch (e) {
-            console.error('Error fetching AI:', e);
-            setAiInsights('AI insights unavailable.');
-        }
-        setAiLoading(false);
-    }, [commodity, priceData]);
-
-    useEffect(() => {
-        if (priceData.length > 0) {
-            fetchAI();
-        }
-    }, [priceData, fetchAI]);
 
     // Toggle favorite
     const toggleFavorite = () => {
@@ -221,10 +207,12 @@ function DashboardContent() {
     const weightData = {};
     const dateRanges = {};
     const reportCounts = {};
+    const filteredDataByType = { terminal: [], shipping: [], retail: [] };
 
     marketTypes.forEach(type => {
         const base = getBaseData(type);
         const filtered = filterData(base, type);
+        filteredDataByType[type] = filtered;
 
         stats[type] = calcAvgPrice(filtered);
         packageData[type] = {
@@ -326,6 +314,13 @@ function DashboardContent() {
                                 <GitCompare size={14} />
                                 Compare
                             </button>
+                            <ExportDropdown
+                                combinedData={[...filteredDataByType.terminal, ...filteredDataByType.shipping, ...filteredDataByType.retail]}
+                                terminalData={filteredDataByType.terminal}
+                                shippingData={filteredDataByType.shipping}
+                                retailData={filteredDataByType.retail}
+                                commodityName={commodity}
+                            />
                             <motion.button
                                 onClick={toggleFavorite}
                                 whileTap={{ scale: 0.9 }}
@@ -352,7 +347,7 @@ function DashboardContent() {
                         initial={{ opacity: 0, y: 15 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.4, delay: 0.05 }}
-                        className="mb-6 flex items-center gap-3"
+                        className="mb-6 flex flex-wrap items-center gap-3"
                     >
                         <Clock size={14} className="text-[var(--color-text-muted)]" />
                         <div className="flex gap-1 rounded-xl bg-[var(--color-surface-elevated)] p-1">
@@ -377,15 +372,43 @@ function DashboardContent() {
                                 </button>
                             ))}
                         </div>
+                        
+                        {/* Custom Date Inputs */}
+                        <AnimatePresence>
+                            {timeRange === 'custom' && (
+                                <motion.div
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, width: 0, overflow: 'hidden' }}
+                                    className="flex items-center gap-2"
+                                >
+                                    <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-sm shadow-sm transition-colors focus-within:border-[var(--color-accent)]">
+                                        <input 
+                                            type="date" 
+                                            className="bg-transparent text-[var(--color-text-primary)] outline-none [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
+                                            value={customDateRange.start}
+                                            min={dateBounds.minDate ? new Date(dateBounds.minDate).toISOString().split('T')[0] : undefined}
+                                            max={customDateRange.end || (dateBounds.maxDate ? new Date(dateBounds.maxDate).toISOString().split('T')[0] : undefined)}
+                                            onChange={(e) => setCustomDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                        />
+                                        <span className="text-[var(--color-text-muted)]">to</span>
+                                        <input 
+                                            type="date" 
+                                            className="bg-transparent text-[var(--color-text-primary)] outline-none [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
+                                            value={customDateRange.end}
+                                            min={customDateRange.start || (dateBounds.minDate ? new Date(dateBounds.minDate).toISOString().split('T')[0] : undefined)}
+                                            max={dateBounds.maxDate ? new Date(dateBounds.maxDate).toISOString().split('T')[0] : undefined}
+                                            onChange={(e) => setCustomDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                        />
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </motion.div>
 
                     {loading ? (
-                        <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+                        <div className="space-y-6">
                             <SkeletonChart />
-                            <div className="space-y-4">
-                                <SkeletonText lines={5} />
-                                <SkeletonText lines={3} />
-                            </div>
                         </div>
                     ) : (
                         <motion.div
@@ -393,10 +416,8 @@ function DashboardContent() {
                             animate={{ opacity: 1 }}
                             transition={{ duration: 0.3, delay: 0.1 }}
                         >
-                            {/* Main Content — responsive layout */}
-                            <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-                                {/* Charts Column */}
-                                <div className="space-y-6">
+                            {/* Main Content */}
+                            <div className="space-y-6">
                                     <AnimatePresence mode="wait">
                                         {compareMode ? (
                                             <motion.section
@@ -407,10 +428,18 @@ function DashboardContent() {
                                                 transition={{ duration: 0.25 }}
                                                 className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)]"
                                             >
-                                                <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
-                                                    <GitCompare size={16} className="text-[var(--color-accent)]" />
-                                                    Price Bridge Comparison
-                                                </h2>
+                                                <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                    <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
+                                                        <GitCompare size={16} className="text-[var(--color-accent)]" />
+                                                        Price Bridge Comparison
+                                                    </h2>
+                                                    {dateBounds.minDate && (
+                                                        <p className="text-xs text-[var(--color-text-muted)] bg-[var(--color-surface-elevated)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] inline-flex items-center justify-center">
+                                                            Data: {new Date(dateBounds.minDate).toLocaleDateString()} — {new Date(dateBounds.maxDate).toLocaleDateString()}
+                                                            <span className="ml-1.5 font-semibold text-[var(--color-text-secondary)]">· {priceData.length} records</span>
+                                                        </p>
+                                                    )}
+                                                </div>
                                                 <ComparisonContainer
                                                     filters={{ commodity, category, variety }}
                                                 />
@@ -424,10 +453,18 @@ function DashboardContent() {
                                                 transition={{ duration: 0.25 }}
                                                 className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)]"
                                             >
-                                                <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
-                                                    <BarChart3 size={16} className="text-[var(--color-accent)]" />
-                                                    Price Overview
-                                                </h2>
+                                                <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                    <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
+                                                        <BarChart3 size={16} className="text-[var(--color-accent)]" />
+                                                        Price Overview
+                                                    </h2>
+                                                    {dateBounds.minDate && (
+                                                        <p className="text-xs text-[var(--color-text-muted)] bg-[var(--color-surface-elevated)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] inline-flex items-center justify-center">
+                                                            Data: {new Date(dateBounds.minDate).toLocaleDateString()} — {new Date(dateBounds.maxDate).toLocaleDateString()}
+                                                            <span className="ml-1.5 font-semibold text-[var(--color-text-secondary)]">· {priceData.length} records</span>
+                                                        </p>
+                                                    )}
+                                                </div>
                                                 <PriceWaterfall
                                                     stats={stats}
                                                     packageData={packageData}
@@ -441,39 +478,6 @@ function DashboardContent() {
                                             </motion.section>
                                         )}
                                     </AnimatePresence>
-                                </div>
-
-                                {/* Sidebar — AI Insights */}
-                                <aside className="space-y-4">
-                                    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)]">
-                                        <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
-                                            <Sparkles size={16} className="text-amber-500" />
-                                            AI Market Insights
-                                        </h2>
-                                        {aiLoading ? (
-                                            <div className="flex items-center gap-3 py-4">
-                                                <div className="spinner" />
-                                                <span className="text-sm text-[var(--color-text-muted)]">Generating insights...</span>
-                                            </div>
-                                        ) : aiInsights ? (
-                                            <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-secondary)]">
-                                                {aiInsights}
-                                            </div>
-                                        ) : (
-                                            <p className="py-4 text-center text-sm text-[var(--color-text-muted)]">No insights available.</p>
-                                        )}
-                                    </div>
-
-                                    {/* Date Range Info */}
-                                    {dateBounds.minDate && (
-                                        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-3.5 shadow-[var(--shadow-card)]">
-                                            <p className="text-xs text-[var(--color-text-muted)]">
-                                                Data: {new Date(dateBounds.minDate).toLocaleDateString()} — {new Date(dateBounds.maxDate).toLocaleDateString()}
-                                                <span className="ml-1 font-semibold text-[var(--color-text-secondary)]">· {priceData.length} records</span>
-                                            </p>
-                                        </div>
-                                    )}
-                                </aside>
                             </div>
                         </motion.div>
                     )}

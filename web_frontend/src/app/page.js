@@ -101,10 +101,12 @@ export default function HomePage() {
         <PageTransition>
             <div className="min-h-[calc(100dvh-var(--header-height))]">
                 {/* Hero Section */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-green-50 pb-8 pt-12 sm:pb-12 sm:pt-16 [html[data-theme='dark']_&]:from-slate-900 [html[data-theme='dark']_&]:via-slate-800 [html[data-theme='dark']_&]:to-emerald-950">
+                <div className="relative bg-gradient-to-br from-emerald-50 via-white to-green-50 pb-8 pt-12 sm:pb-12 sm:pt-16 [html[data-theme='dark']_&]:from-slate-900 [html[data-theme='dark']_&]:via-slate-800 [html[data-theme='dark']_&]:to-emerald-950">
                     {/* Background decoration */}
-                    <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[var(--color-accent)] opacity-5 blur-3xl" />
-                    <div className="pointer-events-none absolute -left-10 bottom-0 h-48 w-48 rounded-full bg-emerald-400 opacity-5 blur-3xl" />
+                    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                        <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[var(--color-accent)] opacity-5 blur-3xl" />
+                        <div className="absolute -left-10 bottom-0 h-48 w-48 rounded-full bg-emerald-400 opacity-5 blur-3xl" />
+                    </div>
 
                     <div className="relative mx-auto max-w-[var(--max-content)] px-4 sm:px-6 lg:px-8">
                         {/* Greeting */}
