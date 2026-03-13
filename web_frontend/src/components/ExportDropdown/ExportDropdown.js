@@ -10,7 +10,8 @@ export default function ExportDropdown({
     terminalData = [],
     shippingData = [],
     retailData = [],
-    commodityName = 'Data'
+    commodityName = 'Data',
+    filters = { terminal: {}, shipping: {}, retail: {} }
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
@@ -29,7 +30,7 @@ export default function ExportDropdown({
 
     const hasAnyData = combinedData.length > 0;
 
-    const handleExport = (dataseet, suffix) => {
+    const handleExport = (dataseet, suffix, marketFilters) => {
         if (!dataseet || dataseet.length === 0) return;
         
         setIsExporting(true);
@@ -39,7 +40,17 @@ export default function ExportDropdown({
         setTimeout(() => {
             const dateStr = new Date().toISOString().split('T')[0];
             const safeName = commodityName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-            const filename = `${safeName}_${suffix}_${dateStr}`;
+            
+            // Build filter string for the filename
+            let filterParts = [];
+            if (marketFilters) {
+                if (marketFilters.pkg) filterParts.push(marketFilters.pkg.replace(/[^a-z0-9]/gi, '_').toLowerCase());
+                if (marketFilters.org) filterParts.push(marketFilters.org.replace(/[^a-z0-9]/gi, '_').toLowerCase());
+                if (marketFilters.dist) filterParts.push(marketFilters.dist.replace(/[^a-z0-9]/gi, '_').toLowerCase());
+            }
+            
+            const filterSuffix = filterParts.length > 0 ? `_${filterParts.join('_')}` : '';
+            const filename = `${safeName}_${suffix}${filterSuffix}_${dateStr}`;
             
             exportToCSV(dataseet, filename);
             
@@ -55,6 +66,7 @@ export default function ExportDropdown({
             label: 'Export All Data (Combined)',
             data: combinedData,
             suffix: 'combined',
+            filters: null, // combined doesn't have a single filter schema
             icon: <FileDown size={14} className="text-[var(--color-accent)]" />,
             disabled: !hasAnyData
         },
@@ -62,6 +74,7 @@ export default function ExportDropdown({
             label: 'Export Terminal Data',
             data: terminalData,
             suffix: 'terminal',
+            filters: filters.terminal,
             icon: <Download size={14} className="opacity-70" />,
             disabled: terminalData.length === 0
         },
@@ -69,6 +82,7 @@ export default function ExportDropdown({
             label: 'Export Retail Data',
             data: retailData,
             suffix: 'retail',
+            filters: filters.retail,
             icon: <Download size={14} className="opacity-70" />,
             disabled: retailData.length === 0
         },
@@ -76,6 +90,7 @@ export default function ExportDropdown({
             label: 'Export Shipping Data',
             data: shippingData,
             suffix: 'shipping',
+            filters: filters.shipping,
             icon: <Download size={14} className="opacity-70" />,
             disabled: shippingData.length === 0
         }
@@ -123,7 +138,7 @@ export default function ExportDropdown({
                             {exportOptions.map((option, idx) => (
                                 <button
                                     key={option.suffix}
-                                    onClick={() => handleExport(option.data, option.suffix)}
+                                    onClick={() => handleExport(option.data, option.suffix, option.filters)}
                                     disabled={option.disabled}
                                     className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm transition-colors
                                         ${option.disabled 

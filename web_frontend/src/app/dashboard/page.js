@@ -320,6 +320,11 @@ function DashboardContent() {
                                 shippingData={filteredDataByType.shipping}
                                 retailData={filteredDataByType.retail}
                                 commodityName={commodity}
+                                filters={{
+                                    terminal: { pkg: terminalPkg, org: terminalOrg, dist: terminalDist },
+                                    shipping: { pkg: shippingPkg, org: shippingOrg, dist: shippingDist },
+                                    retail: { pkg: retailPkg, org: retailOrg, dist: retailDist }
+                                }}
                             />
                             <motion.button
                                 onClick={toggleFavorite}
