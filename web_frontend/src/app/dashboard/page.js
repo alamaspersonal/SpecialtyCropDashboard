@@ -502,6 +502,7 @@ function DashboardContent() {
                                                 </div>
                                                 <ComparisonContainer
                                                     filters={{ commodity, category, variety }}
+                                                    dateBounds={dateBounds}
                                                 />
                                             </motion.section>
                                         ) : (
