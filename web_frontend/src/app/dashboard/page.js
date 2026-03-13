@@ -198,6 +198,29 @@ function DashboardContent() {
         return PACKAGE_WEIGHTS[normalized] || { weight_lbs: null, units: null };
     };
 
+    // State getters for helper logic
+    const getFilterState = (type) => {
+        if (type === 'terminal') return { pkg: terminalPkg, org: terminalOrg, dist: terminalDist };
+        if (type === 'shipping') return { pkg: shippingPkg, org: shippingOrg, dist: shippingDist };
+        return { pkg: retailPkg, org: retailOrg, dist: retailDist };
+    };
+
+    const setFilterState = (type, key, val) => {
+        if (type === 'terminal') {
+            if (key === 'pkg') setTerminalPkg(val);
+            if (key === 'org') setTerminalOrg(val);
+            if (key === 'dist') setTerminalDist(val);
+        } else if (type === 'shipping') {
+            if (key === 'pkg') setShippingPkg(val);
+            if (key === 'org') setShippingOrg(val);
+            if (key === 'dist') setShippingDist(val);
+        } else {
+            if (key === 'pkg') setRetailPkg(val);
+            if (key === 'org') setRetailOrg(val);
+            if (key === 'dist') setRetailDist(val);
+        }
+    };
+
     // Calculate stats for each market type
     const marketTypes = ['terminal', 'shipping', 'retail'];
     const stats = {};
@@ -211,22 +234,34 @@ function DashboardContent() {
 
     marketTypes.forEach(type => {
         const base = getBaseData(type);
+        const { pkg: currentPkg, org: currentOrg, dist: currentDist } = getFilterState(type);
+
+        // Calculate available options dynamically based on *other* active filters
+        const baseForPkg = base.filter(d => (!currentOrg || d.origin === currentOrg) && (!currentDist || d.district === currentDist));
+        const baseForOrg = base.filter(d => (!currentPkg || d.package === currentPkg) && (!currentDist || d.district === currentDist));
+        const baseForDist = base.filter(d => (!currentPkg || d.package === currentPkg) && (!currentOrg || d.origin === currentOrg));
+
+        const pkgOptions = getUnique(baseForPkg, 'package');
+        const orgOptions = getUnique(baseForOrg, 'origin');
+        const distOptions = getUnique(baseForDist, 'district');
+
+        packageData[type] = {
+            options: pkgOptions,
+            selected: currentPkg,
+        };
+        originData[type] = {
+            options: orgOptions,
+            selected: currentOrg,
+        };
+        districtData[type] = {
+            options: distOptions,
+            selected: currentDist,
+        };
+
         const filtered = filterData(base, type);
         filteredDataByType[type] = filtered;
 
         stats[type] = calcAvgPrice(filtered);
-        packageData[type] = {
-            options: getUnique(base, 'package'),
-            selected: type === 'terminal' ? terminalPkg : type === 'shipping' ? shippingPkg : retailPkg,
-        };
-        originData[type] = {
-            options: getUnique(base, 'origin'),
-            selected: type === 'terminal' ? terminalOrg : type === 'shipping' ? shippingOrg : retailOrg,
-        };
-        districtData[type] = {
-            options: getUnique(base, 'district'),
-            selected: type === 'terminal' ? terminalDist : type === 'shipping' ? shippingDist : retailDist,
-        };
 
         const selectedPkg = packageData[type].selected;
         weightData[type] = lookupWeight(selectedPkg);
@@ -234,22 +269,42 @@ function DashboardContent() {
         reportCounts[type] = filtered.length;
     });
 
+    const updateFilter = (type, changedKey, newVal) => {
+        const base = getBaseData(type);
+        const current = getFilterState(type);
+        
+        // Define the proposed fully new state assuming nothing was invalidated yet
+        const proposed = { ...current, [changedKey]: newVal };
+
+        // Test if the other filters are still valid under this *new* state dynamically
+        const validateField = (field, key) => {
+            if (!proposed[key]) return; // It's empty anyway, so it's valid
+            const testBase = base.filter(d => 
+                (key === 'pkg' || !proposed.pkg || d.package === proposed.pkg) &&
+                (key === 'org' || !proposed.org || d.origin === proposed.org) &&
+                (key === 'dist' || !proposed.dist || d.district === proposed.dist)
+            );
+            // If the filtered dataset based on proposed state has no rows containing this specific prior choice, clear it
+            const hasDataWithPriorSelection = testBase.some(d => d[field] === proposed[key]);
+            if (!hasDataWithPriorSelection) {
+                proposed[key] = ''; // Invalid choice under new constraints, reset it
+            }
+        };
+
+        if (changedKey !== 'pkg') validateField('package', 'pkg');
+        if (changedKey !== 'org') validateField('origin', 'org');
+        if (changedKey !== 'dist') validateField('district', 'dist');
+
+        // Apply whatever the final valid state ended up being
+        setFilterState(type, 'pkg', proposed.pkg);
+        setFilterState(type, 'org', proposed.org);
+        setFilterState(type, 'dist', proposed.dist);
+    };
+
     const actions = {
-        setPackage: (type, val) => {
-            if (type === 'terminal') setTerminalPkg(val);
-            else if (type === 'shipping') setShippingPkg(val);
-            else setRetailPkg(val);
-        },
-        setOrigin: (type, val) => {
-            if (type === 'terminal') setTerminalOrg(val);
-            else if (type === 'shipping') setShippingOrg(val);
-            else setRetailOrg(val);
-        },
-        setDistrict: (type, val) => {
-            if (type === 'terminal') setTerminalDist(val);
-            else if (type === 'shipping') setShippingDist(val);
-            else setRetailDist(val);
-        },
+        setPackage: (type, val) => updateFilter(type, 'pkg', val),
+        setOrigin: (type, val) => updateFilter(type, 'org', val),
+        setDistrict: (type, val) => updateFilter(type, 'dist', val),
     };
 
     if (!commodity) {
