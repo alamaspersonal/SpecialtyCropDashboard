@@ -206,68 +206,16 @@ export const getCommoditiesWithCompleteData = async () => {
             return apiCache.completeCommodities;
         }
 
-        console.log('[DEBUG] Fetching commodities with complete market data...');
+        console.log('[DEBUG] Fetching complete market data from commodity_metadata...');
         
-        // Paginate to get ALL commodity + market_type combinations
-        // Supabase has a default limit of 1000 rows per request
-        let allData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-        
-        while (hasMore) {
-            const { data, error } = await supabase
-                .from('CropPrice')
-                .select('commodity, market_type')
-                .range(page * pageSize, (page + 1) * pageSize - 1);
+        const { data, error } = await supabase
+            .from('commodity_metadata')
+            .select('commodity')
+            .eq('has_complete_data', true);
             
-            if (error) throw error;
-            
-            if (data && data.length > 0) {
-                allData = [...allData, ...data];
-                if (data.length < pageSize) {
-                    hasMore = false;
-                } else {
-                    page++;
-                }
-            } else {
-                hasMore = false;
-            }
-            
-            // Safety limit to prevent infinite loops
-            if (allData.length > 100000) {
-                console.warn('[DEBUG] Reached safety limit of 100k rows');
-                break;
-            }
-        }
+        if (error) throw error;
         
-        console.log('[DEBUG] Total rows fetched:', allData.length);
-        
-        // Log all unique market_type values to understand the data
-        const allMarketTypes = new Set(allData.map(r => r.market_type).filter(Boolean));
-        console.log('[DEBUG] All unique market_type values:', [...allMarketTypes]);
-        
-        // Group by commodity and collect market types
-        const commodityMarketTypes = {};
-        allData.forEach(row => {
-            if (!row.commodity || !row.market_type) return;
-            if (!commodityMarketTypes[row.commodity]) {
-                commodityMarketTypes[row.commodity] = new Set();
-            }
-            // Normalize market type (check if it contains the key words)
-            const mt = row.market_type.toLowerCase();
-            if (mt.includes('shipping')) commodityMarketTypes[row.commodity].add('shipping');
-            if (mt.includes('terminal')) commodityMarketTypes[row.commodity].add('terminal');
-            if (mt.includes('retail')) commodityMarketTypes[row.commodity].add('retail');
-        });
-        
-        // Filter to commodities with all 3 market types
-        const completeCommodities = new Set();
-        for (const [commodity, types] of Object.entries(commodityMarketTypes)) {
-            if (types.has('shipping') && types.has('terminal') && types.has('retail')) {
-                completeCommodities.add(commodity);
-            }
-        }
+        const completeCommodities = new Set(data?.map(row => row.commodity).filter(Boolean) || []);
         
         console.log('[DEBUG] Commodities with complete data:', completeCommodities.size);
         console.log('[DEBUG] Complete commodities list:', [...completeCommodities].slice(0, 10));
@@ -294,13 +242,12 @@ export const getCommoditiesWithOrganicData = async () => {
             return apiCache.organicCommodities;
         }
 
-        console.log('[DEBUG] Fetching commodities with organic data...');
+        console.log('[DEBUG] Fetching organic data from commodity_metadata...');
         
-        // Query for distinct commodities where organic = 'yes' or 'Yes' or 'Y'
         const { data, error } = await supabase
-            .from('unique_filters')
+            .from('commodity_metadata')
             .select('commodity')
-            .or('organic.eq.yes,organic.eq.Yes,organic.eq.Y');
+            .eq('has_organic_data', true);
         
         if (error) throw error;
         

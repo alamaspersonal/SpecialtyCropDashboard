@@ -235,6 +235,7 @@ def format_for_unified_crop_price(df):
             'offerings_comments': row.get('offerings_comments') if pd.notna(row.get('offerings_comments')) else None,
             'reporter_comment': get_field(row, 'reporter_comment', 'rep_cmt') if pd.notna(get_field(row, 'reporter_comment', 'rep_cmt')) else None,
             'commodity_comments': row.get('commodity_comments') if pd.notna(row.get('commodity_comments')) else None,
+            'organic': normalize_organic(row.get('organic')),
         }
         records.append(record)
     
