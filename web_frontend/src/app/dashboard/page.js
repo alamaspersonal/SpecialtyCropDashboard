@@ -6,7 +6,7 @@
  * cascading sub-filters, favorites toggle, and cost calculations.
  */
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Heart, Sparkles, Clock, BarChart3, GitCompare, Filter } from 'lucide-react';
@@ -153,30 +153,15 @@ function DashboardContent() {
         }
     };
 
-    // Helper functions
-    const getBaseData = (type) => {
+    // Pure helper functions
+    const getBaseData = useCallback((type) => {
         return priceData.filter(d => {
             const mt = (d.market_type || '').toLowerCase();
-            if (type === 'terminal') return mt.includes('terminal');
-            if (type === 'shipping') return mt.includes('shipping');
-            if (type === 'retail') return mt.includes('retail');
-            return false;
+            return mt.includes(type);
         });
-    };
+    }, [priceData]);
 
     const getUnique = (arr, field) => [...new Set(arr.map(d => d[field]).filter(Boolean))].sort();
-
-    const filterData = (data, type) => {
-        let filtered = data;
-        const pkg = type === 'terminal' ? terminalPkg : type === 'shipping' ? shippingPkg : retailPkg;
-        const org = type === 'terminal' ? terminalOrg : type === 'shipping' ? shippingOrg : retailOrg;
-        const dist = type === 'terminal' ? terminalDist : type === 'shipping' ? shippingDist : retailDist;
-
-        if (pkg) filtered = filtered.filter(d => d.package === pkg);
-        if (org) filtered = filtered.filter(d => d.origin === org);
-        if (dist) filtered = filtered.filter(d => d.district === dist);
-        return filtered;
-    };
 
     const calcAvgPrice = (data) => {
         const validPrices = data
@@ -198,7 +183,6 @@ function DashboardContent() {
         return PACKAGE_WEIGHTS[normalized] || { weight_lbs: null, units: null };
     };
 
-    // State getters for helper logic
     const getFilterState = (type) => {
         if (type === 'terminal') return { pkg: terminalPkg, org: terminalOrg, dist: terminalDist };
         if (type === 'shipping') return { pkg: shippingPkg, org: shippingOrg, dist: shippingDist };
@@ -221,56 +205,56 @@ function DashboardContent() {
         }
     };
 
-    // Calculate stats for each market type
-    const marketTypes = ['terminal', 'shipping', 'retail'];
-    const stats = {};
-    const packageData = {};
-    const originData = {};
-    const districtData = {};
-    const weightData = {};
-    const dateRanges = {};
-    const reportCounts = {};
-    const filteredDataByType = { terminal: [], shipping: [], retail: [] };
-
-    marketTypes.forEach(type => {
-        const base = getBaseData(type);
-        const { pkg: currentPkg, org: currentOrg, dist: currentDist } = getFilterState(type);
-
-        // Calculate available options dynamically based on *other* active filters
-        const baseForPkg = base.filter(d => (!currentOrg || d.origin === currentOrg) && (!currentDist || d.district === currentDist));
-        const baseForOrg = base.filter(d => (!currentPkg || d.package === currentPkg) && (!currentDist || d.district === currentDist));
-        const baseForDist = base.filter(d => (!currentPkg || d.package === currentPkg) && (!currentOrg || d.origin === currentOrg));
+    const computeMarketData = (base, pkg, org, dist) => {
+        const baseForPkg = base.filter(d => (!org || d.origin === org) && (!dist || d.district === dist));
+        const baseForOrg = base.filter(d => (!pkg || d.package === pkg) && (!dist || d.district === dist));
+        const baseForDist = base.filter(d => (!pkg || d.package === pkg) && (!org || d.origin === org));
 
         const pkgOptions = getUnique(baseForPkg, 'package');
         const orgOptions = getUnique(baseForOrg, 'origin');
         const distOptions = getUnique(baseForDist, 'district');
 
-        packageData[type] = {
-            options: pkgOptions,
-            selected: currentPkg,
-        };
-        originData[type] = {
-            options: orgOptions,
-            selected: currentOrg,
-        };
-        districtData[type] = {
-            options: distOptions,
-            selected: currentDist,
-        };
+        let filtered = base;
+        if (pkg) filtered = filtered.filter(d => d.package === pkg);
+        if (org) filtered = filtered.filter(d => d.origin === org);
+        if (dist) filtered = filtered.filter(d => d.district === dist);
 
-        const filtered = filterData(base, type);
-        filteredDataByType[type] = filtered;
+        return {
+            packageData: { options: pkgOptions, selected: pkg },
+            originData: { options: orgOptions, selected: org },
+            districtData: { options: distOptions, selected: dist },
+            filtered,
+            stats: calcAvgPrice(filtered),
+            weightData: lookupWeight(pkg),
+            dateRanges: getDateRangeFromData(filtered),
+            reportCounts: filtered.length
+        };
+    };
 
-        stats[type] = calcAvgPrice(filtered);
+    const terminalBase = useMemo(() => getBaseData('terminal'), [getBaseData]);
+    const shippingBase = useMemo(() => getBaseData('shipping'), [getBaseData]);
+    const retailBase = useMemo(() => getBaseData('retail'), [getBaseData]);
 
-        const selectedPkg = packageData[type].selected;
-        weightData[type] = lookupWeight(selectedPkg);
-        dateRanges[type] = getDateRangeFromData(filtered);
-        reportCounts[type] = filtered.length;
-    });
+    const terminalMemo = useMemo(() => computeMarketData(terminalBase, terminalPkg, terminalOrg, terminalDist), 
+        [terminalBase, terminalPkg, terminalOrg, terminalDist]);
+        
+    const shippingMemo = useMemo(() => computeMarketData(shippingBase, shippingPkg, shippingOrg, shippingDist), 
+        [shippingBase, shippingPkg, shippingOrg, shippingDist]);
+        
+    const retailMemo = useMemo(() => computeMarketData(retailBase, retailPkg, retailOrg, retailDist), 
+        [retailBase, retailPkg, retailOrg, retailDist]);
+
+    const stats = { terminal: terminalMemo.stats, shipping: shippingMemo.stats, retail: retailMemo.stats };
+    const packageData = { terminal: terminalMemo.packageData, shipping: shippingMemo.packageData, retail: retailMemo.packageData };
+    const originData = { terminal: terminalMemo.originData, shipping: shippingMemo.originData, retail: retailMemo.originData };
+    const districtData = { terminal: terminalMemo.districtData, shipping: shippingMemo.districtData, retail: retailMemo.districtData };
+    const weightData = { terminal: terminalMemo.weightData, shipping: shippingMemo.weightData, retail: retailMemo.weightData };
+    const dateRanges = { terminal: terminalMemo.dateRanges, shipping: shippingMemo.dateRanges, retail: retailMemo.dateRanges };
+    const reportCounts = { terminal: terminalMemo.reportCounts, shipping: shippingMemo.reportCounts, retail: retailMemo.reportCounts };
+    const filteredDataByType = { terminal: terminalMemo.filtered, shipping: shippingMemo.filtered, retail: retailMemo.filtered };
 
     const updateFilter = (type, changedKey, newVal) => {
-        const base = getBaseData(type);
+        const base = type === 'terminal' ? terminalBase : type === 'shipping' ? shippingBase : retailBase;
         const current = getFilterState(type);
         
         // Define the proposed fully new state assuming nothing was invalidated yet

@@ -12,6 +12,13 @@
 import { supabase } from './supabase';
 import { STATIC_FILTERS, CATEGORY_COMMODITIES } from '../constants/staticFilters';
 
+// Simple API response cache for filter endpoints to prevent redundant network requests
+const apiCache = {
+    filters: new Map(),
+    completeCommodities: null,
+    organicCommodities: null
+};
+
 /**
  * Get distinct filter values for the filter UI.
  * Mirrors: GET /api/filters
@@ -36,6 +43,12 @@ export const getFilters = async (currentFilters = {}) => {
         if (!hasActiveFilters) {
             console.log('[DEBUG] No active filters, returning STATIC_FILTERS');
             return STATIC_FILTERS;
+        }
+
+        const cacheKey = JSON.stringify(currentFilters || {});
+        if (apiCache.filters.has(cacheKey)) {
+            console.log('[DEBUG] Returning cached filters for:', cacheKey);
+            return apiCache.filters.get(cacheKey);
         }
 
         console.log('[DEBUG] Active filters detected, querying Supabase:', currentFilters);
@@ -69,7 +82,7 @@ export const getFilters = async (currentFilters = {}) => {
 
             while (hasMore) {
                 let query = supabase
-                    .from('CropPrice')
+                    .from('unique_filters')
                     .select(field)
                     .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -171,6 +184,7 @@ export const getFilters = async (currentFilters = {}) => {
             organics: organics.length,
         });
 
+        apiCache.filters.set(cacheKey, result);
         return result;
 
     } catch (error) {
@@ -187,6 +201,11 @@ export const getFilters = async (currentFilters = {}) => {
  */
 export const getCommoditiesWithCompleteData = async () => {
     try {
+        if (apiCache.completeCommodities) {
+            console.log('[DEBUG] Returning cached complete commodities');
+            return apiCache.completeCommodities;
+        }
+
         console.log('[DEBUG] Fetching commodities with complete market data...');
         
         // Paginate to get ALL commodity + market_type combinations
@@ -252,6 +271,8 @@ export const getCommoditiesWithCompleteData = async () => {
         
         console.log('[DEBUG] Commodities with complete data:', completeCommodities.size);
         console.log('[DEBUG] Complete commodities list:', [...completeCommodities].slice(0, 10));
+        
+        apiCache.completeCommodities = completeCommodities;
         return completeCommodities;
         
     } catch (error) {
@@ -268,11 +289,16 @@ export const getCommoditiesWithCompleteData = async () => {
  */
 export const getCommoditiesWithOrganicData = async () => {
     try {
+        if (apiCache.organicCommodities) {
+            console.log('[DEBUG] Returning cached organic commodities');
+            return apiCache.organicCommodities;
+        }
+
         console.log('[DEBUG] Fetching commodities with organic data...');
         
         // Query for distinct commodities where organic = 'yes' or 'Yes' or 'Y'
         const { data, error } = await supabase
-            .from('CropPrice')
+            .from('unique_filters')
             .select('commodity')
             .or('organic.eq.yes,organic.eq.Yes,organic.eq.Y');
         
@@ -285,6 +311,8 @@ export const getCommoditiesWithOrganicData = async () => {
         
         console.log('[DEBUG] Commodities with organic data:', organicCommodities.size);
         console.log('[DEBUG] Organic commodities list:', [...organicCommodities].slice(0, 10));
+        
+        apiCache.organicCommodities = organicCommodities;
         return organicCommodities;
         
     } catch (error) {
