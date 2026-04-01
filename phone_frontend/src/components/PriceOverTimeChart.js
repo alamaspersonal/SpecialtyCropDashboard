@@ -17,14 +17,16 @@ import {
     StyleSheet,
     TouchableOpacity,
     ActivityIndicator,
-    Dimensions,
     Modal,
     FlatList,
+    ScrollView,
+    Dimensions,
 } from 'react-native';
 import { CartesianChart, Line } from 'victory-native';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import usePriceTimeSeries from '../hooks/usePriceTimeSeries';
+import ExpandableBottomSheet from './ExpandableBottomSheet';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_HEIGHT = 260;
@@ -119,43 +121,10 @@ function FilterChipRow({ options, selectedValue, onSelect, label, colors, enable
     );
 }
 
-// ── Tooltip Metric Display ──
-function TooltipMetric({ label, color, price, meta, colors }) {
-    if (!meta) return null;
-    
-    // Sort and format packages (e.g., "1/2 carton(5), 40 lb flat(2)")
-    const pkgEntries = Object.entries(meta.packagesCount || {}).sort((a, b) => b[1] - a[1]);
-    const pkgStr = pkgEntries.map(([k, v]) => `${k}(${v})`).join(', ');
-    
-    // Sort and format origins
-    const orgEntries = Object.entries(meta.originsCount || {}).sort((a, b) => b[1] - a[1]);
-    const orgStr = orgEntries.map(([k, v]) => `${k}(${v})`).join(', ');
-
-    // Sort and format varieties
-    const varEntries = Object.entries(meta.varietiesCount || {}).sort((a, b) => b[1] - a[1]);
-    const varStr = varEntries.map(([k, v]) => `${k}(${v})`).join(', ');
-
-    return (
-        <View style={{ marginBottom: 8, borderLeftWidth: 3, borderLeftColor: color, paddingLeft: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: color, marginRight: 8 }}>
-                    {label}: ${Number(price).toFixed(2)}
-                </Text>
-                <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                    {meta.pointCount} {meta.pointCount === 1 ? 'reading' : 'readings'}
-                </Text>
-            </View>
-            {(pkgStr.length > 0 || orgStr.length > 0 || varStr.length > 0) && (
-                <Text style={{ fontSize: 11, color: colors.textSecondary, lineHeight: 16 }} numberOfLines={4}>
-                    {varStr ? `Varieties: ${varStr}\n` : ''}{orgStr ? `Origins: ${orgStr}\n` : ''}{pkgStr ? `Packages: ${pkgStr}` : ''}
-                </Text>
-            )}
-        </View>
-    );
-}
+// Dependencies removed as they are housed in ExpandableBottomSheet.js
 
 // ── Main Component ──────────────────────────────────────────────
-export default function PriceOverTimeChart({ filters, organicOnly, selectedVariety }) {
+export default function PriceOverTimeChart({ filters, organicOnly, selectedVariety, varietyOptions, onSelectVariety }) {
     const { colors, isDark } = useTheme();
 
     // ── Hook: data + filters + time range ──
@@ -234,7 +203,46 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
 
     // ── Active tooltip data (set via lookup when user presses chart) ──
     const [activeTooltip, setActiveTooltip] = useState(null);
+    const [detailsModalVisible, setDetailsModalVisible] = useState(false);
     const displayTooltip = activeTooltip || (chartData.length > 0 ? chartData[chartData.length - 1] : null);
+
+    // ── Apple Stocks-style stats ──
+    const headerStats = useMemo(() => {
+        if (!chartData || chartData.length < 2) return null;
+        
+        const possibleKeys = ['retail', 'terminal', 'shipping'];
+        let bestKey = null;
+        let maxValidPoints = 1;
+        
+        for (const key of possibleKeys) {
+            if (seriesVisibility[key] && series[key].length > 0) {
+                const validPoints = chartData.filter(d => d[key] != null);
+                if (validPoints.length > maxValidPoints) {
+                    bestKey = key;
+                    maxValidPoints = validPoints.length;
+                }
+            }
+        }
+
+        if (!bestKey) return null;
+
+        const validPoints = chartData.filter(d => d[bestKey] != null);
+        const firstPrice = validPoints[0][bestKey];
+        const lastPrice = validPoints[validPoints.length - 1][bestKey];
+        
+        const netChange = lastPrice - firstPrice;
+        const pctChange = firstPrice > 0 ? (netChange / firstPrice) * 100 : 0;
+        
+        const isPositive = netChange >= 0;
+        const color = isPositive ? '#22c55e' : '#ef4444'; // Green or Red
+        const sign = isPositive ? '+' : '';
+
+        return {
+            net: `${sign}$${Math.abs(netChange).toFixed(2)}`,
+            pct: `${sign}${Math.abs(pctChange).toFixed(1)}%`,
+            color: color,
+        };
+    }, [chartData, seriesVisibility, series]);
 
     // ── Format month label for display (YYYY-MM → 'Mar 2024') ──
     const formatMonthLabel = (monthStr) => {
@@ -296,7 +304,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
     }, []);
 
     const handleTouchEnd = useCallback(() => {
-        setActiveTooltip(null);
+        // intentionally left blank to keep tooltip active
     }, []);
 
     // ── Loading state ──
@@ -325,12 +333,19 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         <View style={[styles.container, { backgroundColor: colors.surfaceElevated }]}>
             {/* Header */}
             <View style={styles.header}>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Price Over Time</Text>
-                {dateSpan.min && dateSpan.max && (
-                    <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
-                        {new Date(dateSpan.min).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} — {new Date(dateSpan.max).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                    </Text>
-                )}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <View>
+                        {headerStats ? (
+                            <Text style={[styles.headerSubtitle, { color: headerStats.color, fontWeight: '700', fontSize: 16 }]}>
+                                {headerStats.net} ({headerStats.pct}) Past {selectedRange === 'All' ? 'All Time' : selectedRange}
+                            </Text>
+                        ) : dateSpan.min && dateSpan.max ? (
+                            <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
+                                {new Date(dateSpan.min).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} — {new Date(dateSpan.max).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                            </Text>
+                        ) : null}
+                    </View>
+                </View>
             </View>
 
             {/* Time Range Selector */}
@@ -355,25 +370,6 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 ))}
             </View>
 
-            {/* Tooltip Display — defaults to latest point if none active */}
-            {displayTooltip && (
-                <View style={[styles.tooltipContainer, { backgroundColor: isDark ? colors.background : '#f8fafc' }]}>
-                    <Text style={[styles.tooltipDate, { color: colors.text }]}>
-                        {formatMonthLabel(displayTooltip.date)}
-                    </Text>
-                    <View style={styles.tooltipMetrics}>
-                        {seriesVisibility.retail && displayTooltip.retail != null && (
-                            <TooltipMetric label="Retail" color={SERIES_CONFIG.retail.color} price={displayTooltip.retail} meta={displayTooltip.retailMeta} colors={colors} />
-                        )}
-                        {seriesVisibility.terminal && displayTooltip.terminal != null && (
-                            <TooltipMetric label="Terminal" color={SERIES_CONFIG.terminal.color} price={displayTooltip.terminal} meta={displayTooltip.terminalMeta} colors={colors} />
-                        )}
-                        {seriesVisibility.shipping && displayTooltip.shipping != null && (
-                            <TooltipMetric label="Shipping" color={SERIES_CONFIG.shipping.color} price={displayTooltip.shipping} meta={displayTooltip.shippingMeta} colors={colors} />
-                        )}
-                    </View>
-                </View>
-            )}
 
             {/* Chart with touch overlay for tooltip */}
             {activeYKeys.length > 0 ? (
@@ -444,14 +440,14 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                     />
                 </View>
             ) : chartData.length === 0 ? (
-                <View style={{ height: CHART_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ flex: 1, minHeight: 260, justifyContent: 'center', alignItems: 'center' }}>
                     <Ionicons name="analytics-outline" size={48} color={colors.textMuted} style={{ marginBottom: 12 }} />
                     <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center' }}>
                         No price history available for this selection.
                     </Text>
                 </View>
             ) : (
-                <View style={{ height: CHART_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ flex: 1, minHeight: 260, justifyContent: 'center', alignItems: 'center' }}>
                     <Text style={{ color: colors.textMuted, fontSize: 14 }}>Enable a data series to view the chart</Text>
                 </View>
             )}
@@ -486,8 +482,17 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 })}
             </View>
 
-            {/* Always Visible Filter Chips */}
+            {/* Fixed Filter Chips (Variety, Package, Origin) stuck under the chart */}
             <View style={[styles.filterChipsRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 }]}>
+                {varietyOptions && varietyOptions.length > 0 && onSelectVariety && (
+                    <FilterChipRow
+                        label="Variety"
+                        options={varietyOptions}
+                        selectedValue={selectedVariety}
+                        onSelect={onSelectVariety}
+                        colors={colors}
+                    />
+                )}
                 <FilterChipRow
                     label="Package"
                     options={filterOptions.packages}
@@ -505,6 +510,15 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                     enabledOptions={filterOptions.originsWithData}
                 />
             </View>
+
+            {/* Custom Swipeable Bottom Sheet */}
+            <ExpandableBottomSheet
+                displayTooltip={displayTooltip}
+                seriesVisibility={seriesVisibility}
+                seriesConfig={SERIES_CONFIG}
+                colors={colors}
+                formatMonthLabel={formatMonthLabel}
+            />
         </View>
     );
 }
@@ -513,9 +527,14 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
 
 const styles = StyleSheet.create({
     container: {
+        flex: 1,
+        // Increase minHeight substantially so chart and bottom sheet fit
+        minHeight: 500,
         borderRadius: 16,
         overflow: 'hidden',
         marginTop: 8,
+        // Add huge bottom padding so chart elements don't get covered by minimized bottom sheet
+        paddingBottom: 85,
     },
     header: {
         paddingHorizontal: 16,
@@ -586,7 +605,8 @@ const styles = StyleSheet.create({
 
     // Chart
     chartWrapper: {
-        height: CHART_HEIGHT,
+        flex: 1,
+        minHeight: 260,
         paddingHorizontal: 8,
         position: 'relative',
     },

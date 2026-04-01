@@ -186,6 +186,11 @@ export default function DashboardScreen({ route, navigation }) {
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     };
 
+    const ScrollOrView = viewMode === 'chart' ? View : ScrollView;
+    const scrollProps = viewMode === 'chart' 
+        ? { style: [styles.scrollContent, { flex: 1, paddingBottom: 0, paddingHorizontal: 0, paddingTop: 16 }] } 
+        : { contentContainerStyle: styles.scrollContent };
+
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header */}
@@ -213,56 +218,71 @@ export default function DashboardScreen({ route, navigation }) {
                 </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollOrView {...scrollProps}>
                 {loading ? (
                     <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 50 }} />
                 ) : stats ? (
                     <>
-                        <Text style={[styles.subtitle, { color: colors.text }]}>{filters.commodity || 'Commodity'}</Text>
-
-                        {/* Variety Dropdown */}
-                        <TouchableOpacity
-                            style={[styles.varietySelector, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
-                            onPress={() => setShowVarietyModal(true)}
-                        >
-                            <Text style={[styles.varietySelectorLabel, { color: colors.textSecondary }]}>Variety:</Text>
-                            <Text style={[styles.varietySelectorValue, { color: colors.text }]}>
-                                {selectedVariety || 'All Varieties'}
-                            </Text>
-                            <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
-                        </TouchableOpacity>
-
-                        {/* Organic Checkbox */}
-                        <TouchableOpacity
-                            style={[
-                                styles.organicCheckbox,
-                                {
-                                    backgroundColor: !hasOrganicData
-                                        ? colors.surfaceElevated
-                                        : organicOnly
-                                            ? '#dcfce7'
-                                            : colors.surfaceElevated,
-                                    opacity: hasOrganicData ? 1 : 0.5
-                                }
-                            ]}
-                            onPress={() => hasOrganicData && setOrganicOnly(!organicOnly)}
-                            disabled={!hasOrganicData}
-                            activeOpacity={hasOrganicData ? 0.7 : 1}
-                        >
-                            <View style={[
-                                styles.checkbox,
-                                organicOnly && hasOrganicData && styles.checkboxChecked,
-                                !hasOrganicData && styles.checkboxDisabled
-                            ]}>
-                                {organicOnly && hasOrganicData && <Ionicons name="checkmark" size={14} color="white" />}
+                        {viewMode === 'chart' ? (
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 }}>
+                                <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text }}>{filters.commodity || 'Commodity'}</Text>
+                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                    <TouchableOpacity style={{ paddingVertical: 6, paddingHorizontal: 12, backgroundColor: organicOnly ? '#dcfce7' : colors.surfaceElevated, borderRadius: 8, borderWidth: 1, borderColor: organicOnly ? '#86efac' : colors.border, opacity: hasOrganicData ? 1 : 0.5 }} onPress={() => hasOrganicData && setOrganicOnly(!organicOnly)} disabled={!hasOrganicData}>
+                                        <Text style={{ fontSize: 13, fontWeight: '700', color: organicOnly ? '#166534' : colors.textMuted }}>
+                                            Org
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
-                            <Text style={[
-                                styles.organicLabel,
-                                { color: !hasOrganicData ? colors.textMuted : organicOnly ? '#166534' : colors.text }
-                            ]}>
-                                {hasOrganicData ? 'Organic Only' : 'Organic Only (No Data)'}
-                            </Text>
-                        </TouchableOpacity>
+                        ) : (
+                            <>
+                                <Text style={[styles.subtitle, { color: colors.text }]}>{filters.commodity || 'Commodity'}</Text>
+
+                                {/* Variety Dropdown */}
+                                <TouchableOpacity
+                                    style={[styles.varietySelector, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
+                                    onPress={() => setShowVarietyModal(true)}
+                                >
+                                    <Text style={[styles.varietySelectorLabel, { color: colors.textSecondary }]}>Variety:</Text>
+                                    <Text style={[styles.varietySelectorValue, { color: colors.text }]}>
+                                        {selectedVariety || 'All Varieties'}
+                                    </Text>
+                                    <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+                                </TouchableOpacity>
+
+                                {/* Organic Checkbox */}
+                                <TouchableOpacity
+                                    style={[
+                                        styles.organicCheckbox,
+                                        {
+                                            backgroundColor: !hasOrganicData
+                                                ? colors.surfaceElevated
+                                                : organicOnly
+                                                    ? '#dcfce7'
+                                                    : colors.surfaceElevated,
+                                            opacity: hasOrganicData ? 1 : 0.5
+                                        }
+                                    ]}
+                                    onPress={() => hasOrganicData && setOrganicOnly(!organicOnly)}
+                                    disabled={!hasOrganicData}
+                                    activeOpacity={hasOrganicData ? 0.7 : 1}
+                                >
+                                    <View style={[
+                                        styles.checkbox,
+                                        organicOnly && hasOrganicData && styles.checkboxChecked,
+                                        !hasOrganicData && styles.checkboxDisabled
+                                    ]}>
+                                        {organicOnly && hasOrganicData && <Ionicons name="checkmark" size={14} color="white" />}
+                                    </View>
+                                    <Text style={[
+                                        styles.organicLabel,
+                                        { color: !hasOrganicData ? colors.textMuted : organicOnly ? '#166534' : colors.text }
+                                    ]}>
+                                        {hasOrganicData ? 'Organic Only' : 'Organic Only (No Data)'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
 
                         {/* ── Normal Mode: single waterfall ── */}
                         {viewMode === 'waterfall' && (
@@ -360,6 +380,8 @@ export default function DashboardScreen({ route, navigation }) {
                                     filters={filters}
                                     organicOnly={organicOnly}
                                     selectedVariety={selectedVariety}
+                                    varietyOptions={varietyOptions}
+                                    onSelectVariety={setSelectedVariety}
                                 />
                             </ErrorBoundary>
                         )}
@@ -373,28 +395,30 @@ export default function DashboardScreen({ route, navigation }) {
                             />
                         )}
 
-                        {/* AI Market Insights — shown in both modes */}
-                        <View style={[styles.notesContainer, { backgroundColor: isDark ? colors.surfaceElevated : '#dcfce7', borderColor: isDark ? colors.border : '#bbf7d0' }]}>
-                            <View style={styles.notesTitleRow}>
-                                <Ionicons name="sparkles" size={18} color={isDark ? colors.accent : '#166534'} />
-                                <Text style={[styles.notesTitle, { color: isDark ? colors.accent : '#166534' }]}>AI Market Insights</Text>
-                            </View>
-                            {aiLoading ? (
-                                <View style={styles.aiLoadingContainer}>
-                                    <ActivityIndicator size="small" color={colors.accent} />
-                                    <Text style={[styles.aiLoadingText, { color: isDark ? colors.textSecondary : '#166534' }]}>Analyzing market data...</Text>
+                        {/* AI Market Insights — shown in waterfall and compare modes */}
+                        {viewMode !== 'chart' && (
+                            <View style={[styles.notesContainer, { backgroundColor: isDark ? colors.surfaceElevated : '#dcfce7', borderColor: isDark ? colors.border : '#bbf7d0' }]}>
+                                <View style={styles.notesTitleRow}>
+                                    <Ionicons name="sparkles" size={18} color={isDark ? colors.accent : '#166534'} />
+                                    <Text style={[styles.notesTitle, { color: isDark ? colors.accent : '#166534' }]}>AI Market Insights</Text>
                                 </View>
-                            ) : (
-                                <Text style={[styles.noteItem, { color: isDark ? colors.text : '#14532d' }]}>
-                                    {aiInsights || marketNotes || 'Market analysis loading...'}
-                                </Text>
-                            )}
-                        </View>
+                                {aiLoading ? (
+                                    <View style={styles.aiLoadingContainer}>
+                                        <ActivityIndicator size="small" color={colors.accent} />
+                                        <Text style={[styles.aiLoadingText, { color: isDark ? colors.textSecondary : '#166534' }]}>Analyzing market data...</Text>
+                                    </View>
+                                ) : (
+                                    <Text style={[styles.noteItem, { color: isDark ? colors.text : '#14532d' }]}>
+                                        {aiInsights || marketNotes || 'Market analysis loading...'}
+                                    </Text>
+                                )}
+                            </View>
+                        )}
                     </>
                 ) : (
                     <Text style={[styles.noDataText, { color: colors.textSecondary }]}>No data available for this selection.</Text>
                 )}
-            </ScrollView>
+            </ScrollOrView>
 
             {/* Cost Configuration Modal */}
             <Modal visible={showCostModal} animationType="slide" transparent>
