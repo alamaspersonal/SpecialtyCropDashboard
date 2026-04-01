@@ -35,7 +35,7 @@ function getUnique(arr, field) {
 
 /**
  * Aggregate raw rows into monthly averages per market type.
- * Each output item: { date: 'YYYY-MM', price: number }
+ * Each output item: { date: 'YYYY-MM', price: number, pointCount: number, packagesCount: Object, originsCount: Object, varietiesCount: Object }
  */
 function aggregateMonthlyAverages(rows) {
     const byMonth = {};
@@ -43,14 +43,28 @@ function aggregateMonthlyAverages(rows) {
         if (!row.report_date || row.price_avg == null) continue;
         const dateKey = row.report_date.split('T')[0];
         const monthKey = dateKey.substring(0, 7); // 'YYYY-MM'
-        if (!byMonth[monthKey]) byMonth[monthKey] = { sum: 0, count: 0 };
+        if (!byMonth[monthKey]) {
+            byMonth[monthKey] = { sum: 0, count: 0, packages: {}, origins: {}, varieties: {} };
+        }
         byMonth[monthKey].sum += row.price_avg;
         byMonth[monthKey].count += 1;
+        
+        const pkg = row.package || 'Unknown';
+        const org = row.origin || 'Unknown';
+        const v = row.variety || 'Unknown';
+        
+        byMonth[monthKey].packages[pkg] = (byMonth[monthKey].packages[pkg] || 0) + 1;
+        byMonth[monthKey].origins[org] = (byMonth[monthKey].origins[org] || 0) + 1;
+        byMonth[monthKey].varieties[v] = (byMonth[monthKey].varieties[v] || 0) + 1;
     }
     return Object.entries(byMonth)
-        .map(([date, { sum, count }]) => ({
+        .map(([date, data]) => ({
             date,
-            price: Math.round((sum / count) * 100) / 100,
+            price: Math.round((data.sum / data.count) * 100) / 100,
+            pointCount: data.count,
+            packagesCount: data.packages,
+            originsCount: data.origins,
+            varietiesCount: data.varieties,
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
 }

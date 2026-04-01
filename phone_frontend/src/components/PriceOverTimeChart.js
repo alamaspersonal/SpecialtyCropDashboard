@@ -119,6 +119,41 @@ function FilterChipRow({ options, selectedValue, onSelect, label, colors, enable
     );
 }
 
+// ── Tooltip Metric Display ──
+function TooltipMetric({ label, color, price, meta, colors }) {
+    if (!meta) return null;
+    
+    // Sort and format packages (e.g., "1/2 carton(5), 40 lb flat(2)")
+    const pkgEntries = Object.entries(meta.packagesCount || {}).sort((a, b) => b[1] - a[1]);
+    const pkgStr = pkgEntries.map(([k, v]) => `${k}(${v})`).join(', ');
+    
+    // Sort and format origins
+    const orgEntries = Object.entries(meta.originsCount || {}).sort((a, b) => b[1] - a[1]);
+    const orgStr = orgEntries.map(([k, v]) => `${k}(${v})`).join(', ');
+
+    // Sort and format varieties
+    const varEntries = Object.entries(meta.varietiesCount || {}).sort((a, b) => b[1] - a[1]);
+    const varStr = varEntries.map(([k, v]) => `${k}(${v})`).join(', ');
+
+    return (
+        <View style={{ marginBottom: 8, borderLeftWidth: 3, borderLeftColor: color, paddingLeft: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: color, marginRight: 8 }}>
+                    {label}: ${Number(price).toFixed(2)}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                    {meta.pointCount} {meta.pointCount === 1 ? 'reading' : 'readings'}
+                </Text>
+            </View>
+            {(pkgStr.length > 0 || orgStr.length > 0 || varStr.length > 0) && (
+                <Text style={{ fontSize: 11, color: colors.textSecondary, lineHeight: 16 }} numberOfLines={4}>
+                    {varStr ? `Varieties: ${varStr}\n` : ''}{orgStr ? `Origins: ${orgStr}\n` : ''}{pkgStr ? `Packages: ${pkgStr}` : ''}
+                </Text>
+            )}
+        </View>
+    );
+}
+
 // ── Main Component ──────────────────────────────────────────────
 export default function PriceOverTimeChart({ filters, organicOnly, selectedVariety }) {
     const { colors, isDark } = useTheme();
@@ -144,11 +179,6 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         shipping: true,
     });
 
-    // ── Filters collapsed state ──
-    const [filtersExpanded, setFiltersExpanded] = useState(false);
-
-
-
     // ── Merge series into a single data array for CartesianChart ──
     // Victory Native needs a flat array with a shared xKey.
     const chartData = useMemo(() => {
@@ -162,16 +192,24 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         if (dates.length === 0) return [];
 
         // Build lookup maps
-        const retailMap = Object.fromEntries(series.retail.map(d => [d.date, d.price]));
-        const terminalMap = Object.fromEntries(series.terminal.map(d => [d.date, d.price]));
-        const shippingMap = Object.fromEntries(series.shipping.map(d => [d.date, d.price]));
+        const retailMap = Object.fromEntries(series.retail.map(d => [d.date, d]));
+        const terminalMap = Object.fromEntries(series.terminal.map(d => [d.date, d]));
+        const shippingMap = Object.fromEntries(series.shipping.map(d => [d.date, d]));
 
-        return dates.map(date => ({
-            date,
-            retail: retailMap[date] ?? null,
-            terminal: terminalMap[date] ?? null,
-            shipping: shippingMap[date] ?? null,
-        }));
+        return dates.map(date => {
+            const r = retailMap[date];
+            const t = terminalMap[date];
+            const s = shippingMap[date];
+            return {
+                date,
+                retail: r ? r.price : null,
+                terminal: t ? t.price : null,
+                shipping: s ? s.price : null,
+                retailMeta: r || null,
+                terminalMeta: t || null,
+                shippingMeta: s || null,
+            };
+        });
     }, [series]);
 
     // ── Determine which yKeys to use based on visibility + data ──
@@ -196,6 +234,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
 
     // ── Active tooltip data (set via lookup when user presses chart) ──
     const [activeTooltip, setActiveTooltip] = useState(null);
+    const displayTooltip = activeTooltip || (chartData.length > 0 ? chartData[chartData.length - 1] : null);
 
     // ── Format month label for display (YYYY-MM → 'Mar 2024') ──
     const formatMonthLabel = (monthStr) => {
@@ -249,6 +288,9 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 retail: row.retail,
                 terminal: row.terminal,
                 shipping: row.shipping,
+                retailMeta: row.retailMeta,
+                terminalMeta: row.terminalMeta,
+                shippingMeta: row.shippingMeta,
             });
         }
     }, []);
@@ -313,27 +355,21 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 ))}
             </View>
 
-            {/* Tooltip Display — reads from regular React state */}
-            {activeTooltip && (
-                <View style={[styles.tooltipBar, { backgroundColor: isDark ? colors.background : '#f8fafc' }]}>
+            {/* Tooltip Display — defaults to latest point if none active */}
+            {displayTooltip && (
+                <View style={[styles.tooltipContainer, { backgroundColor: isDark ? colors.background : '#f8fafc' }]}>
                     <Text style={[styles.tooltipDate, { color: colors.text }]}>
-                        {formatMonthLabel(activeTooltip.date)}
+                        {formatMonthLabel(displayTooltip.date)}
                     </Text>
-                    <View style={styles.tooltipPrices}>
-                        {seriesVisibility.retail && activeTooltip.retail != null && (
-                            <Text style={[styles.tooltipPrice, { color: SERIES_CONFIG.retail.color }]}>
-                                R: ${Number(activeTooltip.retail).toFixed(2)}
-                            </Text>
+                    <View style={styles.tooltipMetrics}>
+                        {seriesVisibility.retail && displayTooltip.retail != null && (
+                            <TooltipMetric label="Retail" color={SERIES_CONFIG.retail.color} price={displayTooltip.retail} meta={displayTooltip.retailMeta} colors={colors} />
                         )}
-                        {seriesVisibility.terminal && activeTooltip.terminal != null && (
-                            <Text style={[styles.tooltipPrice, { color: SERIES_CONFIG.terminal.color }]}>
-                                T: ${Number(activeTooltip.terminal).toFixed(2)}
-                            </Text>
+                        {seriesVisibility.terminal && displayTooltip.terminal != null && (
+                            <TooltipMetric label="Terminal" color={SERIES_CONFIG.terminal.color} price={displayTooltip.terminal} meta={displayTooltip.terminalMeta} colors={colors} />
                         )}
-                        {seriesVisibility.shipping && activeTooltip.shipping != null && (
-                            <Text style={[styles.tooltipPrice, { color: SERIES_CONFIG.shipping.color }]}>
-                                S: ${Number(activeTooltip.shipping).toFixed(2)}
-                            </Text>
+                        {seriesVisibility.shipping && displayTooltip.shipping != null && (
+                            <TooltipMetric label="Shipping" color={SERIES_CONFIG.shipping.color} price={displayTooltip.shipping} meta={displayTooltip.shippingMeta} colors={colors} />
                         )}
                     </View>
                 </View>
@@ -450,42 +486,25 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 })}
             </View>
 
-            {/* Collapsible Filter Chips */}
-            <TouchableOpacity
-                style={[styles.filterToggle, { borderTopColor: colors.border }]}
-                onPress={() => setFiltersExpanded(!filtersExpanded)}
-            >
-                <Ionicons name="options-outline" size={16} color={colors.textMuted} />
-                <Text style={[styles.filterToggleText, { color: colors.textSecondary }]}>
-                    Filters {(selectedPackage || selectedOrigin) ? '(active)' : ''}
-                </Text>
-                <Ionicons
-                    name={filtersExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={14}
-                    color={colors.textMuted}
+            {/* Always Visible Filter Chips */}
+            <View style={[styles.filterChipsRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 }]}>
+                <FilterChipRow
+                    label="Package"
+                    options={filterOptions.packages}
+                    selectedValue={selectedPackage}
+                    onSelect={actions.setSelectedPackage}
+                    colors={colors}
+                    enabledOptions={filterOptions.packagesWithData}
                 />
-            </TouchableOpacity>
-
-            {filtersExpanded && (
-                <View style={styles.filterChipsRow}>
-                    <FilterChipRow
-                        label="Package"
-                        options={filterOptions.packages}
-                        selectedValue={selectedPackage}
-                        onSelect={actions.setSelectedPackage}
-                        colors={colors}
-                        enabledOptions={filterOptions.packagesWithData}
-                    />
-                    <FilterChipRow
-                        label="Origin"
-                        options={filterOptions.origins}
-                        selectedValue={selectedOrigin}
-                        onSelect={actions.setSelectedOrigin}
-                        colors={colors}
-                        enabledOptions={filterOptions.originsWithData}
-                    />
-                </View>
-            )}
+                <FilterChipRow
+                    label="Origin"
+                    options={filterOptions.origins}
+                    selectedValue={selectedOrigin}
+                    onSelect={actions.setSelectedOrigin}
+                    colors={colors}
+                    enabledOptions={filterOptions.originsWithData}
+                />
+            </View>
         </View>
     );
 }
@@ -549,27 +568,20 @@ const styles = StyleSheet.create({
     },
 
     // Tooltip
-    tooltipBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+    tooltipContainer: {
         paddingHorizontal: 16,
-        paddingVertical: 6,
+        paddingVertical: 10,
         marginHorizontal: 16,
         borderRadius: 8,
-        marginBottom: 4,
+        marginBottom: 8,
     },
     tooltipDate: {
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    tooltipPrices: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    tooltipPrice: {
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '700',
+        marginBottom: 8,
+    },
+    tooltipMetrics: {
+        flexDirection: 'column',
     },
 
     // Chart
@@ -612,18 +624,6 @@ const styles = StyleSheet.create({
     },
 
     // Filter Chips
-    filterToggle: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        paddingVertical: 10,
-        borderTopWidth: 1,
-    },
-    filterToggleText: {
-        fontSize: 13,
-        fontWeight: '500',
-    },
     filterChipsRow: {
         flexDirection: 'row',
         gap: 8,
