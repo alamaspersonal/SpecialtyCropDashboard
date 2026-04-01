@@ -10,7 +10,7 @@
  *   - Collapsible filter chips
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -21,8 +21,7 @@ import {
     Modal,
     FlatList,
 } from 'react-native';
-import { CartesianChart, Line, useChartPressState } from 'victory-native';
-import { Circle, useFont } from '@shopify/react-native-skia';
+import { CartesianChart, Line } from 'victory-native';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import usePriceTimeSeries from '../hooks/usePriceTimeSeries';
@@ -37,48 +36,10 @@ const SERIES_CONFIG = {
     shipping: { color: '#f97316', label: 'Shipping' },
 };
 
-// ── Tooltip component (rendered in Skia canvas) ──
-function ChartTooltip({ state, seriesVisibility }) {
-    // Show a dot at the pressed position for each visible series
-    const dots = [];
-    if (seriesVisibility.retail && state.y.retail) {
-        dots.push(
-            <Circle
-                key="retail"
-                cx={state.x.position}
-                cy={state.y.retail.position}
-                r={6}
-                color={SERIES_CONFIG.retail.color}
-            />
-        );
-    }
-    if (seriesVisibility.terminal && state.y.terminal) {
-        dots.push(
-            <Circle
-                key="terminal"
-                cx={state.x.position}
-                cy={state.y.terminal.position}
-                r={6}
-                color={SERIES_CONFIG.terminal.color}
-            />
-        );
-    }
-    if (seriesVisibility.shipping && state.y.shipping) {
-        dots.push(
-            <Circle
-                key="shipping"
-                cx={state.x.position}
-                cy={state.y.shipping.position}
-                r={6}
-                color={SERIES_CONFIG.shipping.color}
-            />
-        );
-    }
-    return <>{dots}</>;
-}
+// Removed ChartTooltip (no longer used since we use touch overlay)
 
 // ── Filter Chip Row ──
-function FilterChipRow({ options, selectedValue, onSelect, label, colors }) {
+function FilterChipRow({ options, selectedValue, onSelect, label, colors, enabledOptions }) {
     const [modalVisible, setModalVisible] = useState(false);
 
     if (!options || options.length === 0) return null;
@@ -113,23 +74,33 @@ function FilterChipRow({ options, selectedValue, onSelect, label, colors }) {
                             style={styles.optionsList}
                             renderItem={({ item }) => {
                                 const isSelected = (item === 'All' && !selectedValue) || item === selectedValue;
+                                // 'All' is always enabled; others check enabledOptions set
+                                const hasData = item === 'All' || !enabledOptions || enabledOptions.has(item);
                                 return (
                                     <TouchableOpacity
                                         style={[
                                             styles.optionItem,
                                             { borderBottomColor: colors.border },
                                             isSelected && { backgroundColor: colors.accent + '18' },
+                                            !hasData && { opacity: 0.35 },
                                         ]}
                                         onPress={() => {
+                                            if (!hasData) return; // Don't allow selecting options with no data
                                             onSelect(item === 'All' ? '' : item);
                                             setModalVisible(false);
                                         }}
+                                        activeOpacity={hasData ? 0.7 : 1}
                                     >
-                                        <Text style={[
-                                            styles.optionText,
-                                            { color: colors.text },
-                                            isSelected && { color: colors.accent, fontWeight: '600' },
-                                        ]}>{item}</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 8 }}>
+                                            <Text style={[
+                                                styles.optionText,
+                                                { color: hasData ? colors.text : colors.textMuted },
+                                                isSelected && { color: colors.accent, fontWeight: '600' },
+                                            ]}>{item}</Text>
+                                            {!hasData && (
+                                                <Text style={{ fontSize: 11, color: colors.textMuted, fontStyle: 'italic' }}>No data</Text>
+                                            )}
+                                        </View>
                                         {isSelected && <Ionicons name="checkmark" size={18} color={colors.accent} />}
                                     </TouchableOpacity>
                                 );
@@ -176,11 +147,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
     // ── Filters collapsed state ──
     const [filtersExpanded, setFiltersExpanded] = useState(false);
 
-    // ── Chart press state for crosshair ──
-    const { state: pressState, isActive: isPressing } = useChartPressState({
-        x: '',
-        y: { retail: 0, terminal: 0, shipping: 0 },
-    });
+
 
     // ── Merge series into a single data array for CartesianChart ──
     // Victory Native needs a flat array with a shared xKey.
@@ -227,37 +194,68 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         setSeriesVisibility(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
-    // ── Tooltip summary text ──
-    const tooltipInfo = useMemo(() => {
-        if (!isPressing) return null;
-        return {
-            date: pressState.x.value,
-            retail: pressState.y.retail?.value,
-            terminal: pressState.y.terminal?.value,
-            shipping: pressState.y.shipping?.value,
-        };
-    }, [isPressing, pressState]);
+    // ── Active tooltip data (set via lookup when user presses chart) ──
+    const [activeTooltip, setActiveTooltip] = useState(null);
 
     // ── Format month label for display (YYYY-MM → 'Mar 2024') ──
     const formatMonthLabel = (monthStr) => {
-        if (!monthStr || monthStr.length < 7) return monthStr || '';
-        // monthStr is 'YYYY-MM'
-        const [year, month] = monthStr.split('-');
+        if (monthStr == null) return '';
+        const str = String(monthStr);
+        if (str.length < 7 || !str.includes('-')) return str;
+        const parts = str.split('-');
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const monthIdx = parseInt(month, 10) - 1;
-        if (monthIdx < 0 || monthIdx > 11) return monthStr;
-        return `${monthNames[monthIdx]} ${year}`;
+        const monthIdx = parseInt(parts[1], 10) - 1;
+        if (monthIdx < 0 || monthIdx > 11) return str;
+        return `${monthNames[monthIdx]} ${parts[0]}`;
     };
 
     // ── X-axis label formatter (abbreviate for space) ──
     const formatXLabel = (monthStr) => {
-        if (!monthStr || monthStr.length < 7) return monthStr || '';
-        const [year, month] = monthStr.split('-');
+        if (monthStr == null) return '';
+        const str = String(monthStr);
+        if (str.length < 7 || !str.includes('-')) return str;
+        const parts = str.split('-');
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const monthIdx = parseInt(month, 10) - 1;
-        if (monthIdx < 0 || monthIdx > 11) return monthStr;
-        return `${monthNames[monthIdx]} '${year.slice(2)}`;
+        const monthIdx = parseInt(parts[1], 10) - 1;
+        if (monthIdx < 0 || monthIdx > 11) return str;
+        return `${monthNames[monthIdx]} '${parts[0].slice(2)}`;
     };
+
+    // ── Look up tooltip data by touch position ──
+    const chartDataRef = useRef(chartData);
+    useEffect(() => { chartDataRef.current = chartData; }, [chartData]);
+
+    const chartLayoutRef = useRef({ x: 0, width: 0 });
+
+    const handleTouchEvent = useCallback((evt) => {
+        const touchX = evt.nativeEvent.locationX;
+        const { width } = chartLayoutRef.current;
+        if (width <= 0 || chartDataRef.current.length === 0) return;
+
+        // Chart has ~8px padding on each side from paddingHorizontal
+        const chartPadding = 8;
+        const chartWidth = width - chartPadding * 2;
+        const relativeX = touchX - chartPadding;
+        const fraction = Math.max(0, Math.min(1, relativeX / chartWidth));
+
+        // Map fraction to nearest data index
+        const dataLen = chartDataRef.current.length;
+        const index = Math.round(fraction * (dataLen - 1));
+        const row = chartDataRef.current[index];
+
+        if (row) {
+            setActiveTooltip({
+                date: row.date,
+                retail: row.retail,
+                terminal: row.terminal,
+                shipping: row.shipping,
+            });
+        }
+    }, []);
+
+    const handleTouchEnd = useCallback(() => {
+        setActiveTooltip(null);
+    }, []);
 
     // ── Loading state ──
     if (loading) {
@@ -276,18 +274,6 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 <Ionicons name="alert-circle" size={24} color="#ef4444" />
                 <Text style={[styles.errorText, { color: isDark ? '#fca5a5' : '#dc2626' }]}>
                     Failed to load price history.
-                </Text>
-            </View>
-        );
-    }
-
-    // ── Empty state ──
-    if (chartData.length === 0) {
-        return (
-            <View style={[styles.container, { backgroundColor: colors.surfaceElevated }]}>
-                <Ionicons name="analytics-outline" size={32} color={colors.textMuted} />
-                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                    No price history available for this selection.
                 </Text>
             </View>
         );
@@ -327,40 +313,47 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 ))}
             </View>
 
-            {/* Tooltip Display */}
-            {isPressing && tooltipInfo && (
+            {/* Tooltip Display — reads from regular React state */}
+            {activeTooltip && (
                 <View style={[styles.tooltipBar, { backgroundColor: isDark ? colors.background : '#f8fafc' }]}>
                     <Text style={[styles.tooltipDate, { color: colors.text }]}>
-                        {tooltipInfo.date ? formatMonthLabel(tooltipInfo.date) : ''}
+                        {formatMonthLabel(activeTooltip.date)}
                     </Text>
                     <View style={styles.tooltipPrices}>
-                        {seriesVisibility.retail && tooltipInfo.retail != null && (
+                        {seriesVisibility.retail && activeTooltip.retail != null && (
                             <Text style={[styles.tooltipPrice, { color: SERIES_CONFIG.retail.color }]}>
-                                R: ${Number(tooltipInfo.retail).toFixed(2)}
+                                R: ${Number(activeTooltip.retail).toFixed(2)}
                             </Text>
                         )}
-                        {seriesVisibility.terminal && tooltipInfo.terminal != null && (
+                        {seriesVisibility.terminal && activeTooltip.terminal != null && (
                             <Text style={[styles.tooltipPrice, { color: SERIES_CONFIG.terminal.color }]}>
-                                T: ${Number(tooltipInfo.terminal).toFixed(2)}
+                                T: ${Number(activeTooltip.terminal).toFixed(2)}
                             </Text>
                         )}
-                        {seriesVisibility.shipping && tooltipInfo.shipping != null && (
+                        {seriesVisibility.shipping && activeTooltip.shipping != null && (
                             <Text style={[styles.tooltipPrice, { color: SERIES_CONFIG.shipping.color }]}>
-                                S: ${Number(tooltipInfo.shipping).toFixed(2)}
+                                S: ${Number(activeTooltip.shipping).toFixed(2)}
                             </Text>
                         )}
                     </View>
                 </View>
             )}
 
-            {/* Chart */}
+            {/* Chart with touch overlay for tooltip */}
             {activeYKeys.length > 0 ? (
-                <View style={styles.chartWrapper}>
+                <View
+                    style={styles.chartWrapper}
+                    onLayout={(e) => {
+                        chartLayoutRef.current = {
+                            x: e.nativeEvent.layout.x,
+                            width: e.nativeEvent.layout.width,
+                        };
+                    }}
+                >
                     <CartesianChart
                         data={chartData}
                         xKey="date"
                         yKeys={activeYKeys}
-                        chartPressState={pressState}
                         axisOptions={{
                             formatXLabel,
                             tickCount: { x: 4, y: 5 },
@@ -400,15 +393,26 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                                         animate={{ type: 'timing', duration: 300 }}
                                     />
                                 )}
-                                {isPressing && (
-                                    <ChartTooltip
-                                        state={pressState}
-                                        seriesVisibility={seriesVisibility}
-                                    />
-                                )}
                             </>
                         )}
                     </CartesianChart>
+                    {/* Transparent touch overlay for scrubbing */}
+                    <View
+                        style={styles.touchOverlay}
+                        onStartShouldSetResponder={() => true}
+                        onMoveShouldSetResponder={() => true}
+                        onResponderGrant={handleTouchEvent}
+                        onResponderMove={handleTouchEvent}
+                        onResponderRelease={handleTouchEnd}
+                        onResponderTerminate={handleTouchEnd}
+                    />
+                </View>
+            ) : chartData.length === 0 ? (
+                <View style={{ height: CHART_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
+                    <Ionicons name="analytics-outline" size={48} color={colors.textMuted} style={{ marginBottom: 12 }} />
+                    <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center' }}>
+                        No price history available for this selection.
+                    </Text>
                 </View>
             ) : (
                 <View style={{ height: CHART_HEIGHT, justifyContent: 'center', alignItems: 'center' }}>
@@ -470,6 +474,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                         selectedValue={selectedPackage}
                         onSelect={actions.setSelectedPackage}
                         colors={colors}
+                        enabledOptions={filterOptions.packagesWithData}
                     />
                     <FilterChipRow
                         label="Origin"
@@ -477,6 +482,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                         selectedValue={selectedOrigin}
                         onSelect={actions.setSelectedOrigin}
                         colors={colors}
+                        enabledOptions={filterOptions.originsWithData}
                     />
                 </View>
             )}
@@ -570,6 +576,12 @@ const styles = StyleSheet.create({
     chartWrapper: {
         height: CHART_HEIGHT,
         paddingHorizontal: 8,
+        position: 'relative',
+    },
+    touchOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 10,
+        elevation: 10,
     },
 
     // Toggle Pills

@@ -113,50 +113,8 @@ export default function usePriceTimeSeries(filters, options = {}) {
         setSelectedOrigin('');
     }, [filters.commodity]);
 
-    // ── Cascading filter options (only show options that exist in filtered data) ──
-    const filterOptions = useMemo(() => {
-        if (!rawData.length) return { packages: [], origins: [], varieties: [] };
-
-        // Base data: apply organic + variety filters (top-level)
-        let baseData = rawData;
-        if (organicOnly) {
-            baseData = baseData.filter(d => d.organic === 'yes');
-        }
-        if (selectedVariety) {
-            baseData = baseData.filter(d => d.variety === selectedVariety);
-        }
-
-        // Package options: filtered by current origin selection
-        const dataForPackages = selectedOrigin
-            ? baseData.filter(d => d.origin === selectedOrigin)
-            : baseData;
-
-        // Origin options: filtered by current package selection
-        const dataForOrigins = selectedPackage
-            ? baseData.filter(d => d.package === selectedPackage)
-            : baseData;
-
-        return {
-            packages: getUnique(dataForPackages, 'package'),
-            origins: getUnique(dataForOrigins, 'origin'),
-            varieties: getUnique(baseData, 'variety'),
-        };
-    }, [rawData, organicOnly, selectedVariety, selectedPackage, selectedOrigin]);
-
-    // ── Auto-clear stale filter selections ──
-    useEffect(() => {
-        if (selectedPackage && !filterOptions.packages.includes(selectedPackage)) {
-            setSelectedPackage('');
-        }
-    }, [filterOptions.packages, selectedPackage]);
-
-    useEffect(() => {
-        if (selectedOrigin && !filterOptions.origins.includes(selectedOrigin)) {
-            setSelectedOrigin('');
-        }
-    }, [filterOptions.origins, selectedOrigin]);
-
     // ── Compute date span for conditional preset visibility ──
+    // MUST be before timeFilteredData since it depends on dateSpan.max
     const dateSpan = useMemo(() => {
         if (!rawData.length) return { min: null, max: null, spanDays: 0 };
         const dates = rawData
@@ -171,6 +129,84 @@ export default function usePriceTimeSeries(filters, options = {}) {
         );
         return { min, max, spanDays };
     }, [rawData]);
+
+    // ── Compute time-range-filtered base for filter options ──
+    // This ensures filter options only show values that exist within the selected time window
+    const timeFilteredData = useMemo(() => {
+        if (!rawData.length) return [];
+
+        let filtered = rawData;
+
+        // Apply organic + variety (top-level filters)
+        if (organicOnly) {
+            filtered = filtered.filter(d => d.organic === 'yes');
+        }
+        if (selectedVariety) {
+            filtered = filtered.filter(d => d.variety === selectedVariety);
+        }
+
+        // Apply time range cutoff
+        if (selectedRange !== 'All' && dateSpan.max) {
+            const preset = RANGE_PRESETS.find(p => p.key === selectedRange);
+            if (preset && preset.days !== Infinity) {
+                const cutoff = new Date(dateSpan.max);
+                cutoff.setDate(cutoff.getDate() - preset.days);
+                const cutoffStr = cutoff.toISOString().split('T')[0];
+                filtered = filtered.filter(d => {
+                    const dateKey = d.report_date?.split('T')[0];
+                    return dateKey && dateKey >= cutoffStr;
+                });
+            }
+        }
+
+        return filtered;
+    }, [rawData, organicOnly, selectedVariety, selectedRange, dateSpan.max]);
+
+    // ── Full filter options (always from rawData — never disappear) ──
+    const allOptions = useMemo(() => {
+        if (!rawData.length) return { packages: [], origins: [], varieties: [] };
+        return {
+            packages: getUnique(rawData, 'package'),
+            origins: getUnique(rawData, 'origin'),
+            varieties: getUnique(rawData, 'variety'),
+        };
+    }, [rawData]);
+
+    // ── Which options actually have chart data (time-range + cross-filter aware) ──
+    const filterOptions = useMemo(() => {
+        // Data available for packages: time-filtered + current origin
+        const dataForPackages = selectedOrigin
+            ? timeFilteredData.filter(d => d.origin === selectedOrigin)
+            : timeFilteredData;
+
+        // Data available for origins: time-filtered + current package
+        const dataForOrigins = selectedPackage
+            ? timeFilteredData.filter(d => d.package === selectedPackage)
+            : timeFilteredData;
+
+        return {
+            // Full lists (always shown)
+            packages: allOptions.packages,
+            origins: allOptions.origins,
+            varieties: allOptions.varieties,
+            // Sets of options that have chart data (for enable/disable)
+            packagesWithData: new Set(getUnique(dataForPackages, 'package')),
+            originsWithData: new Set(getUnique(dataForOrigins, 'origin')),
+        };
+    }, [allOptions, timeFilteredData, selectedPackage, selectedOrigin]);
+
+    // ── Auto-clear stale selections (only if option doesn't exist at all) ──
+    useEffect(() => {
+        if (selectedPackage && !allOptions.packages.includes(selectedPackage)) {
+            setSelectedPackage('');
+        }
+    }, [allOptions.packages, selectedPackage]);
+
+    useEffect(() => {
+        if (selectedOrigin && !allOptions.origins.includes(selectedOrigin)) {
+            setSelectedOrigin('');
+        }
+    }, [allOptions.origins, selectedOrigin]);
 
     // ── Available range presets (only those with enough data) ──
     const availableRanges = useMemo(() => {

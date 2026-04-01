@@ -100,6 +100,7 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
                 delete apiFilters.date;
                 delete apiFilters.package;
                 delete apiFilters.variety;
+                delete apiFilters.category;
                 const bounds = await getDateRange(apiFilters);
                 setServerDateBounds({
                     min: bounds.minDate ? new Date(bounds.minDate) : null,
@@ -122,6 +123,7 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
                 delete apiFilters.date;
                 delete apiFilters.package;
                 delete apiFilters.variety;
+                delete apiFilters.category;
 
                 let data;
 
