@@ -18,7 +18,8 @@ export {
     getStats,
     getPriceSummary,
     getCommoditiesWithCompleteData,
-    getCommoditiesWithOrganicData
+    getCommoditiesWithOrganicData,
+    getTimeSeriesData
 } from './supabaseApi';
 
 // Re-export hooks for new components

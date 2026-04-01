@@ -447,7 +447,6 @@ export const getPricesByDateRange = async (filters = {}, startDate, endDate) => 
 
             // Apply filters (only columns that exist on UnifiedCropPrice)
             if (filters.commodity) query = query.eq('commodity', filters.commodity);
-            if (filters.category) query = query.eq('category', filters.category);
             if (filters.variety) query = query.eq('variety', filters.variety);
             if (filters.district) query = query.eq('district', filters.district);
             if (filters.package) query = query.eq('package', filters.package);
@@ -681,3 +680,64 @@ export const getPriceSummary = async (options = {}) => {
         throw error;
     }
 };
+
+/**
+ * Get full time-series price data for a commodity.
+ * Fetches ALL rows from UnifiedCropPrice for the given commodity
+ * (paginated), returning the fields needed for chart aggregation.
+ *
+ * Designed for the Price Over Time chart.
+ *
+ * @param {string} commodity - Required commodity name
+ * @param {Object} filters - Optional { district, organic }
+ * @returns {Array} Array of { report_date, market_type, price_avg, package, origin, variety, organic }
+ */
+export const getTimeSeriesData = async (commodity, filters = {}) => {
+    try {
+        console.log('[DEBUG supabaseApi] getTimeSeriesData called:', { commodity, filters });
+
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            let query = supabase
+                .from('UnifiedCropPrice')
+                .select('report_date, market_type, price_avg, package, origin, variety, organic')
+                .eq('commodity', commodity)
+                .not('report_date', 'is', null)
+                .order('report_date', { ascending: true })
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+
+            if (filters.district) query = query.eq('district', filters.district);
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allData = [...allData, ...data];
+                if (data.length < pageSize) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            } else {
+                hasMore = false;
+            }
+
+            // Safety limit
+            if (allData.length > 50000) {
+                console.warn('[DEBUG supabaseApi] getTimeSeriesData: reached 50k safety limit');
+                break;
+            }
+        }
+
+        console.log('[DEBUG supabaseApi] getTimeSeriesData result:', allData.length, 'rows');
+        return allData;
+    } catch (error) {
+        console.error('Error fetching time series data:', error);
+        throw error;
+    }
+};
+

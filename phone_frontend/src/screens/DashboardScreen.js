@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import PriceWaterfallMobile from '../components/PriceWaterfallMobile';
 import ComparisonContainer from '../components/ComparisonContainer';
+import PriceOverTimeChart from '../components/PriceOverTimeChart';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../services/favorites';
 import { generateMarketInsights } from '../services/cerebrasApi';
@@ -28,7 +29,8 @@ export default function DashboardScreen({ route, navigation }) {
 
     // ── UI-level state (not data-engine) ──
     const [isFavorite, setIsFavorite] = useState(false);
-    const [compareMode, setCompareMode] = useState(false);
+    const [viewMode, setViewMode] = useState('waterfall'); // 'waterfall' | 'chart' | 'compare'
+    const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
     // AI Insights State
     const [aiInsights, setAiInsights] = useState('');
@@ -193,16 +195,20 @@ export default function DashboardScreen({ route, navigation }) {
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Price Dashboard</Text>
                 <View style={{ flexDirection: 'row', gap: 16 }}>
-                    {/* Compare Toggle */}
-                    <TouchableOpacity onPress={() => setCompareMode(!compareMode)}>
+                    {/* Chart Toggle */}
+                    <TouchableOpacity onPress={() => setViewMode(viewMode === 'chart' ? 'waterfall' : 'chart')}>
                         <Ionicons
-                            name={compareMode ? 'git-compare' : 'git-compare-outline'}
+                            name={viewMode === 'chart' ? 'analytics' : 'analytics-outline'}
                             size={24}
-                            color={compareMode ? colors.accent : colors.textMuted}
+                            color={viewMode === 'chart' ? colors.accent : colors.textMuted}
                         />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={toggleFavorite}>
                         <Ionicons name={isFavorite ? "star" : "star-outline"} size={24} color={isFavorite ? '#eab308' : colors.textMuted} />
+                    </TouchableOpacity>
+                    {/* Overflow Menu */}
+                    <TouchableOpacity onPress={() => setShowOverflowMenu(true)}>
+                        <Ionicons name="ellipsis-horizontal" size={24} color={colors.textMuted} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -259,7 +265,7 @@ export default function DashboardScreen({ route, navigation }) {
                         </TouchableOpacity>
 
                         {/* ── Normal Mode: single waterfall ── */}
-                        {!compareMode && (
+                        {viewMode === 'waterfall' && (
                             <>
                                 {/* Time Range Toggle */}
                                 <View style={[styles.timeRangeContainer, { backgroundColor: colors.surfaceElevated }]}>
@@ -347,8 +353,19 @@ export default function DashboardScreen({ route, navigation }) {
                             </>
                         )}
 
+                        {/* ── Chart Mode: Price Over Time ── */}
+                        {viewMode === 'chart' && (
+                            <ErrorBoundary>
+                                <PriceOverTimeChart
+                                    filters={filters}
+                                    organicOnly={organicOnly}
+                                    selectedVariety={selectedVariety}
+                                />
+                            </ErrorBoundary>
+                        )}
+
                         {/* ── Comparison Mode: Price Bridge ── */}
-                        {compareMode && (
+                        {viewMode === 'compare' && (
                             <ComparisonContainer
                                 filters={filters}
                                 organicOnly={organicOnly}
@@ -602,6 +619,44 @@ export default function DashboardScreen({ route, navigation }) {
                     </View>
                 </View>
             </Modal>
+
+            {/* Overflow Menu Modal */}
+            <Modal visible={showOverflowMenu} animationType="fade" transparent>
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowOverflowMenu(false)}
+                >
+                    <View style={[styles.overflowMenu, { backgroundColor: colors.surface }]}>
+                        <TouchableOpacity
+                            style={[styles.overflowItem, { borderBottomColor: colors.border }]}
+                            onPress={() => {
+                                setShowOverflowMenu(false);
+                                setViewMode('compare');
+                            }}
+                        >
+                            <Ionicons name="git-compare-outline" size={20} color={colors.text} />
+                            <Text style={[styles.overflowItemText, { color: colors.text }]}>Compare Periods</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.overflowItem, { borderBottomColor: colors.border }]}
+                            onPress={() => {
+                                setShowOverflowMenu(false);
+                                setShowCostModal(true);
+                            }}
+                        >
+                            <Ionicons name="calculator-outline" size={20} color={colors.text} />
+                            <Text style={[styles.overflowItemText, { color: colors.text }]}>Configure Costs</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.overflowCancel}
+                            onPress={() => setShowOverflowMenu(false)}
+                        >
+                            <Text style={[styles.overflowCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -709,4 +764,29 @@ const styles = StyleSheet.create({
     dateModalActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
     dateModalCancel: { flex: 1, padding: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
     dateModalApply: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center' },
+    overflowMenu: {
+        width: '80%',
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    overflowItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+    },
+    overflowItemText: {
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    overflowCancel: {
+        paddingVertical: 16,
+        alignItems: 'center',
+    },
+    overflowCancelText: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
 });
