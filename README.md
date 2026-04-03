@@ -1,57 +1,154 @@
 # Specialty Crop Dashboard
 
-A comprehensive dashboard to display specialty crop pricing data, featuring a web interface, a Progressive Web App (PWA), and a native mobile app with Supabase integration.
+A dashboard for USDA specialty crop pricing data, featuring a React Native mobile app, a Next.js web app, and a Python data pipeline backed by Supabase.
 
-## Project Structure
+## Data Flow
+
+```
+USDA MARS API  -->  backend_update (Python)  -->  Supabase  -->  phone_frontend / web_frontend
+                    (fetch, format, upload)       (CropPrice,    (React Native / Next.js)
+                                                   UnifiedCropPrice)
+```
+
+---
+
+## File Structure & Functionality Tree
 
 ```
 SpecialtyCropDashboard/
-├── backend/                    # FastAPI server (Python)
-│   ├── main.py                 # API endpoints
-│   ├── database.py             # SQLAlchemy models (CropPrice, UnifiedCropPrice)
-│   ├── data_ingestion.py       # Import CSV data to database
-│   └── .env                    # Local environment config
 │
-├── backend_update/             # Daily data update pipeline
-│   ├── update_daily.py         # Main orchestration script
-│   ├── get_recent_data.py      # Fetch data from USDA API
-│   ├── format_data.py          # Format data for database schemas
-│   ├── overwrite_supabse.py    # Upload to Supabase cloud
-│   └── .env                    # API keys (USDA, Supabase)
+├── phone_frontend/                     # React Native mobile app (Expo 54)
+│   ├── App.js                          # Root: SafeAreaProvider > QueryClientProvider > ThemeProvider > Navigator
+│   ├── index.js                        # Expo entry point (registerRootComponent)
+│   ├── app.json                        # Expo config (portrait, new arch enabled)
+│   ├── package.json                    # Dependencies & Jest config
+│   ├── babel.config.js                 # babel-preset-expo + reanimated plugin
+│   ├── jest.setup.js                   # Mocks: Supabase, AsyncStorage, env vars
+│   ├── .env                            # EXPO_PUBLIC_SUPABASE_URL, _KEY, CEREBRAS_API_KEY
+│   ├── assets/                         # App icons, splash screen
+│   ├── android/ & ios/                 # Native project files
+│   └── src/
+│       ├── screens/
+│       │   ├── OnboardingScreen.js     # First-launch name input, saves to AsyncStorage
+│       │   ├── HomeScreen.js           # Watchlist (favorites), search bar, profile link
+│       │   ├── FiltersScreen.js        # Category/commodity/variety dropdowns, organic & complete-data toggles
+│       │   ├── DashboardScreen.js      # Main dashboard — 3 view modes: waterfall, chart, compare
+│       │   │                             Manages time range, variety, organic filters
+│       │   │                             Triggers AI insights via Cerebras API
+│       │   ├── AccountScreen.js        # Profile image, name edit, dark mode toggle
+│       │   └── WelcomeScreen.js        # Static welcome/about screen
+│       │
+│       ├── components/
+│       │   ├── PriceWaterfallMobile.js # Waterfall bars for terminal/shipping/retail prices
+│       │   ├── PriceOverTimeChart.js   # Time-series line chart (Victory Native)
+│       │   ├── PriceBridgeChart.js     # Price bridge visualization (bar chart decomposition)
+│       │   ├── ComparisonContainer.js  # Period A vs B comparison wrapper
+│       │   ├── PriceBarChart.js        # Generic price bar chart component
+│       │   ├── PriceCard.js            # Single price display card
+│       │   ├── FilterDropdown.js       # Reusable dropdown selector
+│       │   ├── WatchlistAccordionItem.js # Expandable watchlist row on HomeScreen
+│       │   ├── ExpandableBottomSheet.js  # Gesture-driven bottom sheet (reanimated)
+│       │   ├── ErrorBoundary.js        # React error boundary for chart crash isolation
+│       │   └── __tests__/
+│       │       └── WaterfallComparison.test.js
+│       │
+│       ├── hooks/
+│       │   ├── useWaterfallData.js     # Core data hook: fetch, partition by market type,
+│       │   │                             cascading sub-filters (pkg/origin/district per type),
+│       │   │                             stat calculation, package weight lookup
+│       │   ├── usePriceTimeSeries.js   # Full commodity history, monthly aggregation,
+│       │   │                             time range presets (3M/6M/1Y/2Y/All), sub-filters
+│       │   └── usePriceBridge.js       # Parallel fetch for 2 date ranges, runs priceBridge engine
+│       │
+│       ├── services/
+│       │   ├── supabase.js             # Supabase client init (AsyncStorage session)
+│       │   ├── supabaseApi.js          # All DB queries: getFilters, getPrices, getStats,
+│       │   │                             getUnifiedPrices, getTimeSeriesData, getDateRange,
+│       │   │                             getPricesByDateRange, getPriceSummary,
+│       │   │                             getCommoditiesWithCompleteData/OrganicData
+│       │   ├── useQueries.js           # TanStack Query hooks (caching, offline support)
+│       │   ├── api.js                  # Re-exports from supabaseApi + useQueries
+│       │   ├── cerebrasApi.js          # Cerebras AI market insights (llama3.1-8b)
+│       │   ├── favorites.js            # AsyncStorage watchlist CRUD
+│       │   ├── userStorage.js          # AsyncStorage user prefs (name, onboarding, profile image)
+│       │   └── __tests__/
+│       │       └── supabaseApi.test.js
+│       │
+│       ├── shared/
+│       │   ├── priceBridge.js          # Platform-agnostic price bridge decomposition:
+│       │   │                             Price Level + Package Mix + Origin Mix + Residual
+│       │   └── __tests__/
+│       │       └── priceBridge.test.js
+│       │
+│       ├── constants/
+│       │   └── staticFilters.js        # Pre-computed filter options (generated by extract_filters.py)
+│       │                                 STATIC_FILTERS, CATEGORY_COMMODITIES, COMMODITY_TO_CATEGORY
+│       │
+│       └── context/
+│           └── ThemeContext.js          # Dark/light theme with AsyncStorage persistence
 │
-├── phone_frontend/             # React Native mobile app (Expo)
-│   ├── App.js                  # App entry with React Query provider
+├── backend_update/                     # Python data pipeline
+│   ├── update_daily.py                 # Orchestrator: fetch -> format -> upload (run this)
+│   ├── get_recent_data.py              # Fetches last 60 days from USDA MARS API
+│   │                                     Slug IDs: 2306, 2307, 2308, 2309, 2390, 2391, 3324
+│   │                                     Flattens nested JSON sections -> CSV
+│   ├── format_data.py                  # CSV -> CropPrice & UnifiedCropPrice schemas
+│   │                                     Normalizes: categories, organic, title case, price_avg
+│   ├── overwrite_supabse.py            # Clears + batch-uploads to Supabase (service role key)
+│   ├── extract_filters.py              # Generates staticFilters.js for phone_frontend
+│   ├── upload_recent_slugs.py          # Alt upload from sibling SpecialtyCropPrices project
+│   ├── requirements.txt                # requests, pandas, python-dotenv, supabase
+│   ├── .env                            # SUPABASE_URL, SUPABASE_SECRET_KEY, USDA_API_KEY
+│   └── APP_CROP_DATA/                  # Downloaded CSV files ({slug}_recent.csv)
+│
+├── backend/                            # Original FastAPI backend (superseded by Supabase)
+│   ├── main.py                         # FastAPI endpoints (/api/filters, /api/prices, etc.)
+│   ├── database.py                     # SQLAlchemy models + SQLite engine
+│   ├── db_models.py                    # Pydantic schemas
+│   ├── data_ingestion.py               # CSV -> SQLite importer
+│   ├── populate_db.py                  # DB population script
+│   ├── requirements.txt                # fastapi, uvicorn, sqlalchemy, pydantic
+│   └── various debug/fix scripts       # check_dates, debug_retail, find_missing_packages, etc.
+│
+├── web_frontend/                       # Next.js 16 web app
 │   ├── src/
-│   │   ├── screens/            # App screens
-│   │   │   ├── HomeScreen.js
-│   │   │   ├── FiltersScreen.js
-│   │   │   └── DashboardScreen.js
-│   │   ├── components/         # Reusable UI components
-│   │   └── services/           # Data layer
-│   │       ├── supabase.js     # Supabase client config
-│   │       ├── supabaseApi.js  # API functions (getFilters, getPrices, etc.)
-│   │       ├── useQueries.js   # React Query hooks for caching
-│   │       └── api.js          # Unified exports
-│   └── .env                    # Supabase credentials
+│   │   ├── app/                        # Next.js App Router pages
+│   │   ├── components/                 # React components (Recharts-based charts)
+│   │   ├── services/                   # Supabase queries (mirrors phone_frontend pattern)
+│   │   ├── hooks/                      # Data hooks
+│   │   ├── shared/                     # priceBridge.js (shared with phone_frontend)
+│   │   ├── constants/                  # Static filter data
+│   │   ├── context/                    # Theme context
+│   │   └── utils/                      # Utility functions
+│   ├── package.json                    # next, react, recharts, tailwindcss, framer-motion
+│   └── .env.local                      # NEXT_PUBLIC_SUPABASE_URL, _KEY
 │
-├── frontend/                   # React web app (Vite + Tailwind)
+├── APP_CROP_DATA/                      # Top-level CSV data (from USDA API)
+├── specialty_crop_data/                # Historical report CSVs
+├── scripts/
+│   └── analyze_market_notes.py         # CLI tool: analyze market note patterns in Supabase
+├── analyze_cats.py                     # Category analysis utility
+├── specialty_crop.db                   # SQLite database (original backend)
+├── SpecialtyCropLogo.png               # Project logo assets
+├── SpecialtyCropLogoTransparent.png
 │
-├── APP_CROP_DATA/              # Downloaded CSV data from USDA API
-│
-└── specialty_crop.db           # Local SQLite database
+└── .github/
+    └── workflows/
+        └── daily_update.yml            # GitHub Actions: runs update_daily.py at 21:30 UTC daily
 ```
 
 ---
 
 ## Quick Start
 
-### 1. Run the Daily Update Pipeline
+### 1. Run the Daily Data Update
 
 Fetches fresh data from USDA and uploads to Supabase:
 
 ```bash
 cd backend_update
-python3 update_daily.py
+pip install -r requirements.txt
+python update_daily.py
 ```
 
 ### 2. Run the Mobile App
@@ -59,107 +156,55 @@ python3 update_daily.py
 ```bash
 cd phone_frontend
 npm install
-npm run ios  # or: npx expo start
+npx expo start          # Expo Go
+npm run ios             # iOS simulator
+npm run android         # Android emulator
 ```
 
 The mobile app connects directly to Supabase (no backend server needed).
 
----
-
-## Backend (FastAPI) - Optional
-
-The FastAPI backend is optional if using Supabase directly. Run it for local development:
+### 3. Run the Web App
 
 ```bash
-cd backend
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-API available at `http://YOUR_LOCAL_IP:8000`
-
----
-
-## Mobile App Details
-
-### Data Flow
-
-```
-USDA API → backend_update → Supabase → Phone App
-```
-
-### Services Layer (`phone_frontend/src/services/`)
-
-| File             | Purpose                                         |
-| ---------------- | ----------------------------------------------- |
-| `supabase.js`    | Supabase client initialization                  |
-| `supabaseApi.js` | API functions mirroring FastAPI endpoints       |
-| `useQueries.js`  | React Query hooks for caching & offline support |
-| `api.js`         | Unified exports for backward compatibility      |
-
-### Offline Support
-
-The app uses TanStack Query (React Query) for:
-
-- **Caching**: Data cached for 30 minutes
-- **Offline mode**: Returns cached data when network unavailable
-- **Background refresh**: Updates data silently when online
-
----
-
-## Daily Update Pipeline (`backend_update/`)
-
-| File                   | Purpose                                 |
-| ---------------------- | --------------------------------------- |
-| `update_daily.py`      | Main script - run this for updates      |
-| `get_recent_data.py`   | Fetches last 30 days from USDA MARS API |
-| `format_data.py`       | Transforms CSV to database schemas      |
-| `overwrite_supabse.py` | Clears and uploads to Supabase tables   |
-
-**Required `.env` variables:**
-
-```
-USDA_API_KEY=your_key_here
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SECRET_KEY=your_secret_key
-```
-
----
-
-## Web Frontend (React)
-
-```bash
-cd frontend
+cd web_frontend
 npm install
-npm run dev -- --host 0.0.0.0
+npm run dev
 ```
-
-Access at `http://localhost:5173` or install as PWA on mobile.
 
 ---
 
 ## Database Tables (Supabase)
 
-| Table              | Description                           |
-| ------------------ | ------------------------------------- |
-| `CropPrice`        | Full price data with all USDA fields  |
-| `UnifiedCropPrice` | Simplified schema for charts/analysis |
+| Table              | Purpose                                                  |
+| ------------------ | -------------------------------------------------------- |
+| `CropPrice`        | Full USDA data: all price fields, market notes, comments |
+| `UnifiedCropPrice` | Simplified: `price_avg`, used for charts and time-series |
+
+Both tables share: `report_date`, `market_type`, `commodity`, `variety`, `package`, `district`, `origin`, `organic`.
 
 ---
 
-## Network Setup
+## Key Features
 
-For mobile/PWA to connect to local backend:
-
-1. Find your IP: `ipconfig getifaddr en0`
-2. Ensure phone and computer on same WiFi
-3. Update `API_URL` in `phone_frontend/src/services/api.js` if using local backend
+- **Waterfall View**: Terminal/Shipping/Retail price breakdown with per-type sub-filters (package, origin, district)
+- **Price Over Time**: Monthly aggregated line chart with 3M/6M/1Y/2Y/All presets
+- **Price Bridge Comparison**: Decomposes price changes between two periods into Price Level, Package Mix, Origin Mix, and Residual effects
+- **AI Market Insights**: Cerebras-powered summaries from USDA market notes
+- **Offline Support**: TanStack Query caching + static filter fallbacks
+- **Dark Mode**: System-aware with manual override, persisted to AsyncStorage
 
 ---
 
-## Security Notes
+## Environment Variables
 
-- Enable **Row Level Security (RLS)** on Supabase tables for production
-- Never commit `.env` files (they're in `.gitignore`)
-- Use `EXPO_PUBLIC_` prefix for client-safe env vars
+| Location               | Variables                                                          |
+| ---------------------- | ------------------------------------------------------------------ |
+| `phone_frontend/.env`  | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_KEY`, `EXPO_PUBLIC_CEREBRAS_API_KEY` |
+| `backend_update/.env`  | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `USDA_API_KEY`              |
+| `web_frontend/.env.local` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_KEY`          |
+
+---
+
+## CI/CD
+
+GitHub Actions runs the data pipeline daily at 21:30 UTC (1:30 PM PST). Requires repository secrets: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `USDA_API_KEY`.
