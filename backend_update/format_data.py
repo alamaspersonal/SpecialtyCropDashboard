@@ -161,7 +161,7 @@ def calculate_price_avg(df):
     """
     field_avgs = []
     
-    for field in ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price']:
+    for field in ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price', 'wtd_avg_price']:
         if field in df.columns:
             non_null = df[field].dropna()
             if len(non_null) > 0:
@@ -171,7 +171,7 @@ def calculate_price_avg(df):
         return None
     
     # Average the field averages (divide by count of fields with data, not always 4)
-    return int(sum(field_avgs) / len(field_avgs))
+    return round(sum(field_avgs) / len(field_avgs), 2)
 
 
 def format_for_unified_crop_price(df):
@@ -205,11 +205,11 @@ def format_for_unified_crop_price(df):
         
         # Calculate price_avg for this single row
         prices = []
-        for field in ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price']:
+        for field in ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price', 'wtd_avg_price']:
             val = clean_price(row.get(field))
             if val is not None:
                 prices.append(val)
-        price_avg = int(sum(prices) / len(prices)) if prices else None
+        price_avg = round(sum(prices) / len(prices), 2) if prices else None
         
         # Handle origin logic: for retail, origin is often in 'region' column
         market_type_val = row.get('market_type')

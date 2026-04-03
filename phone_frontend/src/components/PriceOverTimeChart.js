@@ -22,11 +22,14 @@ import {
     ScrollView,
     Dimensions,
 } from 'react-native';
-import { CartesianChart, Line } from 'victory-native';
+import { CartesianChart, StackedBar } from 'victory-native';
+import { useFont } from '@shopify/react-native-skia';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import usePriceTimeSeries from '../hooks/usePriceTimeSeries';
 import ExpandableBottomSheet from './ExpandableBottomSheet';
+import { ScrollView as GestureHandlerScrollView } from 'react-native-gesture-handler'; // Optional if needed, but we can stick to react-native's ScrollView
+
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_HEIGHT = 260;
@@ -52,14 +55,14 @@ function FilterChipRow({ options, selectedValue, onSelect, label, colors, enable
     return (
         <>
             <TouchableOpacity
-                style={[styles.filterChip, { backgroundColor: colors.surfaceElevated, borderColor: selectedValue ? colors.accent : colors.border }]}
+                style={[styles.filterChip, { backgroundColor: '#1e293b', borderColor: selectedValue ? '#38bdf8' : '#334155', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3, elevation: 5 }]}
                 onPress={() => setModalVisible(true)}
             >
-                <Text style={[styles.filterChipLabel, { color: colors.textMuted }]}>{label}</Text>
-                <Text style={[styles.filterChipValue, { color: selectedValue ? colors.accent : colors.text }]} numberOfLines={1}>
+                <Text style={[styles.filterChipLabel, { color: '#94a3b8' }]}>{label}</Text>
+                <Text style={[styles.filterChipValue, { color: selectedValue ? '#38bdf8' : '#f8fafc' }]} numberOfLines={1}>
                     {truncated}
                 </Text>
-                <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
+                <Ionicons name="chevron-down" size={12} color="#94a3b8" />
             </TouchableOpacity>
 
             <Modal visible={modalVisible} transparent animationType="fade">
@@ -126,6 +129,7 @@ function FilterChipRow({ options, selectedValue, onSelect, label, colors, enable
 // ── Main Component ──────────────────────────────────────────────
 export default function PriceOverTimeChart({ filters, organicOnly, selectedVariety, varietyOptions, onSelectVariety }) {
     const { colors, isDark } = useTheme();
+    const robotoFont = useFont(require('../../assets/fonts/Roboto-Regular.ttf'), 11);
 
     // ── Hook: data + filters + time range ──
     const {
@@ -203,6 +207,8 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
 
     // ── Active tooltip data (set via lookup when user presses chart) ──
     const [activeTooltip, setActiveTooltip] = useState(null);
+    const [activeIndex, setActiveIndex] = useState(null);
+    const [isScrubbing, setIsScrubbing] = useState(false); // Disable scroll while scrubbing
     const [detailsModalVisible, setDetailsModalVisible] = useState(false);
     const displayTooltip = activeTooltip || (chartData.length > 0 ? chartData[chartData.length - 1] : null);
 
@@ -262,17 +268,28 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         const str = String(monthStr);
         if (str.length < 7 || !str.includes('-')) return str;
         const parts = str.split('-');
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
+        const monthFirstLetters = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
         const monthIdx = parseInt(parts[1], 10) - 1;
         if (monthIdx < 0 || monthIdx > 11) return str;
-        return `${monthNames[monthIdx]} '${parts[0].slice(2)}`;
+        
+        // Show the full year for January as a major division
+        if (monthIdx === 0) {
+            return parts[0];
+        }
+        
+        // Otherwise, just the first letter (e.g. J, F, M)
+        return monthFirstLetters[monthIdx];
     };
 
     // ── Look up tooltip data by touch position ──
     const chartDataRef = useRef(chartData);
     useEffect(() => { chartDataRef.current = chartData; }, [chartData]);
 
+
     const chartLayoutRef = useRef({ x: 0, width: 0 });
+    const pointsRef = useRef({});
+
 
     const handleTouchEvent = useCallback((evt) => {
         const touchX = evt.nativeEvent.locationX;
@@ -290,8 +307,11 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         const index = Math.round(fraction * (dataLen - 1));
         const row = chartDataRef.current[index];
 
+
         if (row) {
+            setActiveIndex(index);
             setActiveTooltip({
+
                 date: row.date,
                 retail: row.retail,
                 terminal: row.terminal,
@@ -301,9 +321,15 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 shippingMeta: row.shippingMeta,
             });
         }
-    }, []);
+    }, [isScrubbing]); // Make sure this hook uses latest if it depended on it, but isScrubbing dependency is safe
+
+    const handleTouchStart = useCallback((evt) => {
+        setIsScrubbing(true);
+        handleTouchEvent(evt);
+    }, [handleTouchEvent]);
 
     const handleTouchEnd = useCallback(() => {
+        setIsScrubbing(false);
         // intentionally left blank to keep tooltip active
     }, []);
 
@@ -331,7 +357,8 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
 
     return (
         <View style={[styles.container, { backgroundColor: colors.surfaceElevated }]}>
-            {/* Header */}
+            <View style={{ flex: 1 }}>
+                {/* Header */}
             <View style={styles.header}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <View>
@@ -374,7 +401,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
             {/* Chart with touch overlay for tooltip */}
             {activeYKeys.length > 0 ? (
                 <View
-                    style={styles.chartWrapper}
+                    style={[styles.chartWrapper, { backgroundColor: '#0f172a', borderRadius: 16 }]}
                     onLayout={(e) => {
                         chartLayoutRef.current = {
                             x: e.nativeEvent.layout.x,
@@ -387,53 +414,128 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                         xKey="date"
                         yKeys={activeYKeys}
                         axisOptions={{
+                            font: robotoFont,
                             formatXLabel,
-                            tickCount: { x: 4, y: 5 },
-                            labelColor: colors.textMuted,
+                            formatYLabel: (v) => `$${v}`,
+                            tickCount: { x: 12, y: 5 },
+                            labelColor: '#94a3b8',
+                            lineColor: '#334155', // Subtle grid color for dark background
                         }}
-                        domainPadding={{ top: 20, bottom: 10 }}
+                        domainPadding={{ top: 20, bottom: 0, left: 15, right: 15 }}
                     >
-                        {({ points }) => (
-                            <>
-                                {seriesVisibility.retail && points.retail && (
-                                    <Line
-                                        points={points.retail}
-                                        color={SERIES_CONFIG.retail.color}
-                                        strokeWidth={2.5}
-                                        connectMissingData={true}
-                                        curveType="natural"
-                                        animate={{ type: 'timing', duration: 300 }}
-                                    />
-                                )}
-                                {seriesVisibility.terminal && points.terminal && (
-                                    <Line
-                                        points={points.terminal}
-                                        color={SERIES_CONFIG.terminal.color}
-                                        strokeWidth={2.5}
-                                        connectMissingData={true}
-                                        curveType="natural"
-                                        animate={{ type: 'timing', duration: 300 }}
-                                    />
-                                )}
-                                {seriesVisibility.shipping && points.shipping && (
-                                    <Line
-                                        points={points.shipping}
-                                        color={SERIES_CONFIG.shipping.color}
-                                        strokeWidth={2.5}
-                                        connectMissingData={true}
-                                        curveType="natural"
-                                        animate={{ type: 'timing', duration: 300 }}
-                                    />
-                                )}
-                            </>
-                        )}
+                        {({ points, chartBounds }) => {
+                            // Sync points to ref for the crosshair overlay below
+                            pointsRef.current = points;
+                            
+                            const activePoints = [];
+                            const activeColors = [];
+                            
+                            if (seriesVisibility.retail && points.retail) {
+                                activePoints.push(points.retail);
+                                activeColors.push(SERIES_CONFIG.retail.color);
+                            }
+                            if (seriesVisibility.terminal && points.terminal) {
+                                activePoints.push(points.terminal);
+                                activeColors.push(SERIES_CONFIG.terminal.color);
+                            }
+                            if (seriesVisibility.shipping && points.shipping) {
+                                activePoints.push(points.shipping);
+                                activeColors.push(SERIES_CONFIG.shipping.color);
+                            }
+
+                            return (
+                                <>
+                                    {activePoints.length > 0 && (
+                                        <StackedBar
+                                            chartBounds={chartBounds}
+                                            points={activePoints}
+                                            colors={activeColors}
+                                            barWidth={8}
+                                            barOptions={() => ({
+                                                roundedCorners: { topLeft: 2, topRight: 2, bottomLeft: 2, bottomRight: 2 }
+                                            })}
+                                            animate={{ type: 'timing', duration: 300 }}
+                                        />
+                                    )}
+                                </>
+                            );
+                        }}
                     </CartesianChart>
+
+                    {/* Active Crosshair & Price Badges Overlay */}
+                    {activeIndex !== null && pointsRef.current && (
+                        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                            {/* Vertical Line */}
+                            {(() => {
+                                const activePoint = pointsRef.current.retail?.[activeIndex] || 
+                                                    pointsRef.current.terminal?.[activeIndex] || 
+                                                    pointsRef.current.shipping?.[activeIndex];
+                                if (!activePoint) return null;
+                                const xPos = activePoint.x + 7;
+                                const isRightEdge = xPos > SCREEN_WIDTH - 120;
+                                const dataRow = chartData[activeIndex];
+                                
+                                return (
+                                    <>
+                                        <View style={{
+                                            position: 'absolute', left: xPos, top: 0, bottom: 0,
+                                            width: 1, backgroundColor: colors.textSecondary, opacity: 0.5
+                                        }} />
+                                        
+                                        {/* Series Nodes */}
+                                        {['retail', 'terminal', 'shipping'].map(key => {
+                                            if (!seriesVisibility[key]) return null;
+                                            const p = pointsRef.current[key]?.[activeIndex];
+                                            if (!p) return null;
+                                            return (
+                                                <View key={key} style={{
+                                                    position: 'absolute', left: p.x + 3, top: p.y - 4.5,
+                                                    width: 9, height: 9, borderRadius: 4.5,
+                                                    backgroundColor: SERIES_CONFIG[key].color,
+                                                    borderWidth: 2, borderColor: colors.surfaceElevated
+                                                }} />
+                                            );
+                                        })}
+                                        
+                                        {/* Floating Badge */}
+                                        <View style={{
+                                            position: 'absolute',
+                                            left: isRightEdge ? xPos - 85 : xPos + 8,
+                                            top: 20,
+                                            backgroundColor: colors.surfaceElevated,
+                                            paddingHorizontal: 8, paddingVertical: 6,
+                                            borderRadius: 8, borderWidth: 1, borderColor: colors.border,
+                                            shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+                                            shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
+                                        }}>
+                                            {seriesVisibility.retail && dataRow.retail != null && (
+                                                <Text style={{ fontSize: 10, fontWeight: '700', color: SERIES_CONFIG.retail.color, marginBottom: 2 }}>
+                                                    Ret: ${dataRow.retail.toFixed(2)}
+                                                </Text>
+                                            )}
+                                            {seriesVisibility.terminal && dataRow.terminal != null && (
+                                                <Text style={{ fontSize: 10, fontWeight: '700', color: SERIES_CONFIG.terminal.color, marginBottom: 2 }}>
+                                                    Ter: ${dataRow.terminal.toFixed(2)}
+                                                </Text>
+                                            )}
+                                            {seriesVisibility.shipping && dataRow.shipping != null && (
+                                                <Text style={{ fontSize: 10, fontWeight: '700', color: SERIES_CONFIG.shipping.color }}>
+                                                    Shi: ${dataRow.shipping.toFixed(2)}
+                                                </Text>
+                                            )}
+                                        </View>
+                                    </>
+                                );
+                            })()}
+                        </View>
+                    )}
+
                     {/* Transparent touch overlay for scrubbing */}
                     <View
                         style={styles.touchOverlay}
                         onStartShouldSetResponder={() => true}
                         onMoveShouldSetResponder={() => true}
-                        onResponderGrant={handleTouchEvent}
+                        onResponderGrant={handleTouchStart}
                         onResponderMove={handleTouchEvent}
                         onResponderRelease={handleTouchEnd}
                         onResponderTerminate={handleTouchEnd}
@@ -452,8 +554,10 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 </View>
             )}
 
-            {/* Series Toggle Pills */}
-            <View style={styles.toggleRow}>
+            {/* Static Filters Section (Always bounds correctly above the bottom sheet) */}
+            <View style={styles.filtersBottomArea}>
+                {/* Series Toggle Pills */}
+                <View style={styles.toggleRow}>
                 {Object.entries(SERIES_CONFIG).map(([key, config]) => {
                     if (!seriesHasData[key]) return null;
                     const isActive = seriesVisibility[key];
@@ -484,6 +588,18 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
 
             {/* Fixed Filter Chips (Variety, Package, Origin) stuck under the chart */}
             <View style={[styles.filterChipsRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 }]}>
+                {(selectedVariety || selectedPackage || selectedOrigin) && (
+                    <TouchableOpacity 
+                        style={{ alignSelf: 'flex-end', marginBottom: 4, paddingHorizontal: 12 }}
+                        onPress={() => {
+                            if (onSelectVariety) onSelectVariety('');
+                            if (actions.setSelectedPackage) actions.setSelectedPackage('');
+                            if (actions.setSelectedOrigin) actions.setSelectedOrigin('');
+                        }}
+                    >
+                        <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 12 }}>Clear Filters</Text>
+                    </TouchableOpacity>
+                )}
                 {varietyOptions && varietyOptions.length > 0 && onSelectVariety && (
                     <FilterChipRow
                         label="Variety"
@@ -510,6 +626,8 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                     enabledOptions={filterOptions.originsWithData}
                 />
             </View>
+            </View>
+            </View>
 
             {/* Custom Swipeable Bottom Sheet */}
             <ExpandableBottomSheet
@@ -528,13 +646,13 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        // Increase minHeight substantially so chart and bottom sheet fit
-        minHeight: 500,
         borderRadius: 16,
         overflow: 'hidden',
         marginTop: 8,
-        // Add huge bottom padding so chart elements don't get covered by minimized bottom sheet
-        paddingBottom: 85,
+        // Remove paddingBottom: 85 and minHeight from here as it messes with absolute positioning of the bottom sheet
+    },
+    filtersBottomArea: {
+        paddingBottom: 85, // Guarantees ExpandableBottomSheet never obstructs these controls
     },
     header: {
         paddingHorizontal: 16,
@@ -606,7 +724,7 @@ const styles = StyleSheet.create({
     // Chart
     chartWrapper: {
         flex: 1,
-        minHeight: 260,
+        minHeight: 150, // Let it compress fluidly on smaller devices
         paddingHorizontal: 8,
         position: 'relative',
     },

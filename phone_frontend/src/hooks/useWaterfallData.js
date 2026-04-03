@@ -361,7 +361,7 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
 
         const calcAvgPrice = (data) => {
             if (!data.length) return 0;
-            const validValues = data.map(d => d.price_avg).filter(v => v !== null && v !== undefined && !isNaN(v));
+            const validValues = data.map(d => parseFloat(d.price_avg)).filter(v => v !== null && v !== undefined && !isNaN(v));
             if (validValues.length === 0) return 0;
             return validValues.reduce((a, b) => a + b, 0) / validValues.length;
         };

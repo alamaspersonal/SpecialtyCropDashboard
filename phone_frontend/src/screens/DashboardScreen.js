@@ -195,11 +195,23 @@ export default function DashboardScreen({ route, navigation }) {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.surfaceElevated }]}>
-                    <Ionicons name="arrow-back" size={24} color={colors.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Price Dashboard</Text>
-                <View style={{ flexDirection: 'row', gap: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 12 }}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.surfaceElevated, marginRight: 12 }]}>
+                        <Ionicons name="arrow-back" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                    <Text style={[styles.headerTitle, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>
+                        {filters.commodity || 'Price Dashboard'}
+                    </Text>
+                    {hasOrganicData && (
+                        <TouchableOpacity 
+                            style={{ marginLeft: 8, paddingVertical: 4, paddingHorizontal: 6, backgroundColor: organicOnly ? '#dcfce7' : colors.surfaceElevated, borderRadius: 6, borderWidth: 1, borderColor: organicOnly ? '#86efac' : colors.border }} 
+                            onPress={() => setOrganicOnly(!organicOnly)}
+                        >
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: organicOnly ? '#166534' : colors.textMuted }}>Org</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                     {/* Chart Toggle */}
                     <TouchableOpacity onPress={() => setViewMode(viewMode === 'chart' ? 'waterfall' : 'chart')}>
                         <Ionicons
@@ -223,18 +235,7 @@ export default function DashboardScreen({ route, navigation }) {
                     <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 50 }} />
                 ) : stats ? (
                     <>
-                        {viewMode === 'chart' ? (
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 }}>
-                                <Text style={{ fontSize: 20, fontWeight: '800', color: colors.text }}>{filters.commodity || 'Commodity'}</Text>
-                                <View style={{ flexDirection: 'row', gap: 8 }}>
-                                    <TouchableOpacity style={{ paddingVertical: 6, paddingHorizontal: 12, backgroundColor: organicOnly ? '#dcfce7' : colors.surfaceElevated, borderRadius: 8, borderWidth: 1, borderColor: organicOnly ? '#86efac' : colors.border, opacity: hasOrganicData ? 1 : 0.5 }} onPress={() => hasOrganicData && setOrganicOnly(!organicOnly)} disabled={!hasOrganicData}>
-                                        <Text style={{ fontSize: 13, fontWeight: '700', color: organicOnly ? '#166534' : colors.textMuted }}>
-                                            Org
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        ) : (
+                        {viewMode === 'chart' ? null : (
                             <>
                                 <Text style={[styles.subtitle, { color: colors.text }]}>{filters.commodity || 'Commodity'}</Text>
 

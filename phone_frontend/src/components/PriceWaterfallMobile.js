@@ -148,18 +148,22 @@ const PriceBlock = ({
                 <View style={styles.priceContainer}>
                     {hasData ? (
                         <>
-                            <Text style={[styles.priceSubLabel, { color: subTextColor }]}>Avg Price</Text>
-                            <Text style={[styles.blockPrice, { color: textColor }]}>${avgPrice}</Text>
+                            <Text style={[styles.priceSubLabel, { color: subTextColor }]}>
+                                {pricePerUnit ? `Price / ${pricePerUnit.unit}` : 'Avg Price'}
+                            </Text>
+                            <Text style={[styles.blockPrice, { color: textColor }]}>
+                                ${pricePerUnit ? pricePerUnit.value : avgPrice}
+                            </Text>
                         </>
                     ) : (
                         <Text style={[styles.noDataText, { color: subTextColor }]}>No Price Data</Text>
                     )}
                 </View>
 
-                {/* Price per unit */}
-                {pricePerUnit && (
+                {/* Price per package (former main price) */}
+                {pricePerUnit && hasData && (
                     <Text style={[styles.pricePerUnit, { color: subTextColor }]}>
-                        ${pricePerUnit.value}/{pricePerUnit.unit}
+                        ${avgPrice} per package
                     </Text>
                 )}
 

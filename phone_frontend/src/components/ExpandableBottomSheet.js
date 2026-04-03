@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, PanResponder, Dimensions, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Animated, PanResponder, Dimensions, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -16,11 +16,11 @@ function DetailedMetricCard({ label, color, price, meta, colors }) {
         if (!entries || entries.length === 0) return null;
         return (
             <View style={{ marginBottom: 12 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 4 }}>{title}</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#f8fafc', marginBottom: 4 }}>{title}</Text>
                 {entries.map(([k, v]) => (
                     <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2, paddingLeft: 8 }}>
-                        <Text style={{ fontSize: 13, color: colors.textSecondary }}>{k}</Text>
-                        <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '500' }}>{v}</Text>
+                        <Text style={{ fontSize: 13, color: '#cbd5e1' }}>{k}</Text>
+                        <Text style={{ fontSize: 13, color: '#cbd5e1', fontWeight: '500' }}>{v}</Text>
                     </View>
                 ))}
             </View>
@@ -28,15 +28,15 @@ function DetailedMetricCard({ label, color, price, meta, colors }) {
     };
 
     return (
-        <View style={{ marginBottom: 16, backgroundColor: colors.surfaceElevated, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <View style={{ marginBottom: 16, backgroundColor: '#1e293b', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#334155' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderBottomColor: '#334155' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: color, marginRight: 8 }} />
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>{label}</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#f8fafc' }}>{label}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                     <Text style={{ fontSize: 16, fontWeight: '700', color: color }}>${Number(price).toFixed(2)}</Text>
-                    <Text style={{ fontSize: 12, color: colors.textMuted }}>{meta.pointCount} readings</Text>
+                    <Text style={{ fontSize: 12, color: '#94a3b8' }}>{meta.pointCount} readings</Text>
                 </View>
             </View>
             <View style={{ padding: 12 }}>
@@ -86,14 +86,15 @@ export default function ExpandableBottomSheet({
             onPanResponderRelease: (_, gestureState) => {
                 panY.flattenOffset();
                 if (gestureState.dy > SCROLL_THRESHOLD) {
-                    // Swiped down
                     setExpanded(false);
                 } else if (gestureState.dy < -SCROLL_THRESHOLD) {
-                    // Swiped up
                     setExpanded(true);
                 } else {
-                    // Snap back
-                    resetPositionAnim.start();
+                    if (Math.abs(gestureState.dx) < 5 && Math.abs(gestureState.dy) < 5) {
+                        setExpanded(prev => !prev);
+                    } else {
+                        resetPositionAnim.start();
+                    }
                 }
             },
         })
@@ -134,23 +135,23 @@ export default function ExpandableBottomSheet({
     }
 
     return (
-        <Animated.View style={[styles.container, { backgroundColor: colors.surfaceElevated, borderTopColor: colors.border }, animatedStyle]}>
+        <Animated.View style={[styles.container, { backgroundColor: '#0f172a', borderTopColor: '#334155' }, animatedStyle]}>
             {/* Drag Handle & Minimized Header */}
             <View {...panResponder.panHandlers} style={styles.headerArea}>
-                <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
+                <View style={[styles.dragHandle, { backgroundColor: '#475569' }]} />
                 <View style={styles.minimizedContent}>
-                    <Text style={[styles.dateText, { color: colors.text }]}>{formatMonthLabel(displayTooltip.date)}</Text>
+                    <Text style={[styles.dateText, { color: '#f8fafc' }]}>{formatMonthLabel(displayTooltip.date)}</Text>
                     {expanded ? (
-                        <Text style={[styles.swipeText, { color: colors.textMuted }]}>Swipe down to minimize view</Text>
+                        <Text style={[styles.swipeText, { color: '#94a3b8' }]}>Swipe down to minimize view</Text>
                     ) : (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                             {selectedKey && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: primaryColor }} />}
                             <Text style={[styles.priceText, { color: primaryColor }]}>{primaryPriceStr}</Text>
-                            <Text style={[styles.readingText, { color: colors.textMuted }]}>{primaryReadingStr}</Text>
+                            <Text style={[styles.readingText, { color: '#94a3b8' }]}>{primaryReadingStr}</Text>
                         </View>
                     )}
                 </View>
-                {!expanded && <Ionicons name="chevron-up" size={20} color={colors.textSecondary} style={{ position: 'absolute', right: 24, top: 32 }} />}
+                {!expanded && <Ionicons name="chevron-up" size={20} color="#94a3b8" style={{ position: 'absolute', right: 24, top: 32 }} />}
             </View>
 
             {/* Expanded Scrollable Details */}

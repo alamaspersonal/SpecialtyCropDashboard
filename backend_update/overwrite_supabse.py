@@ -59,8 +59,9 @@ def clear_table(client: Client, table_name: str):
         print(f"  ✘ Error clearing {table_name}: {e}")
         raise
 
+import time
 
-def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_size: int = 500):
+def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_size: int = 200):
     """
     Upload a DataFrame to a Supabase table.
     
@@ -87,9 +88,9 @@ def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_si
             # Handle float NaN values
             if isinstance(value, float) and (pd.isna(value) or value != value):  # value != value checks for NaN
                 clean_record[key] = None
-            # Convert price_avg to int (Supabase expects bigint)
+            # Convert price_avg to accurately keep decimals (if DB column supports numeric/float)
             elif key == 'price_avg' and value is not None:
-                clean_record[key] = int(value)
+                clean_record[key] = round(float(value), 2)
             else:
                 clean_record[key] = value
         records.append(clean_record)
@@ -104,6 +105,7 @@ def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_si
             client.table(table_name).insert(batch).execute()
             total_uploaded += len(batch)
             print(f"  Progress: {total_uploaded}/{len(records)} records uploaded")
+            time.sleep(0.1)
         except Exception as e:
             print(f"  ✘ Error uploading batch to {table_name}: {e}")
             raise
