@@ -86,6 +86,7 @@ const DropdownSelector = ({ label, options, selectedValue, onValueChange, isCard
 const PriceBlock = ({ 
     label, 
     avgPrice, 
+    priorAvgPrice,
     bg, 
     packageOptions, 
     selectedPackage, 
@@ -99,6 +100,7 @@ const PriceBlock = ({
     weightLbs, 
     units,
     dateRange,
+    priorDateRange,
     reportCount
 }) => {
     const isCardDark = bg === '#facc15' || bg === '#fdba74';
@@ -137,6 +139,32 @@ const PriceBlock = ({
         return `${formatDate(dateRange.start)} – ${formatDate(dateRange.end)}`;
     })();
 
+    const priorPriceValue = parseFloat(priorAvgPrice) || 0;
+    const diffNode = (() => {
+        if (!pricePerUnit || priorPriceValue <= 0) return null;
+        let priorUnitValue = 0;
+        if (weightLbs && weightLbs > 0) {
+            priorUnitValue = priorPriceValue / weightLbs;
+        } else if (units && units > 0) {
+            priorUnitValue = priorPriceValue / units;
+        }
+        if (priorUnitValue <= 0) return null;
+        
+        const diff = parseFloat(pricePerUnit.value) - priorUnitValue;
+        if (diff === 0 || isNaN(diff)) return null;
+        
+        const diffAbs = Math.abs(diff);
+        const percent = ((diffAbs / priorUnitValue) * 100).toFixed(0);
+        const isPos = diff > 0;
+        const color = isPos ? (isCardDark ? '#065f46' : '#a7f3d0') : (isCardDark ? '#991b1b' : '#fecaca');
+        const arrow = isPos ? '▲' : '▼';
+        
+        const dateStr = priorDateRange && priorDateRange.end ? formatDate(priorDateRange.end) : null;
+        const dateText = dateStr ? ` on ${dateStr}` : '';
+        
+        return { text: `${arrow} ${percent}% from last observation${dateText}`, color };
+    })();
+
     return (
         <View style={styles.blockRow}>
             <View style={[styles.card, { backgroundColor: bg }]}>
@@ -159,6 +187,13 @@ const PriceBlock = ({
                         <Text style={[styles.noDataText, { color: subTextColor }]}>No Price Data</Text>
                     )}
                 </View>
+
+                {/* Timeline Differential Ticker */}
+                {diffNode && (
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: diffNode.color, marginBottom: 4 }}>
+                        {diffNode.text}
+                    </Text>
+                )}
 
                 {/* Price per package (former main price) */}
                 {pricePerUnit && hasData && (
@@ -241,6 +276,7 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
             <PriceBlock
                 label="National Retail"
                 avgPrice={formatPrice(stats.retail_avg)}
+                priorAvgPrice={stats.prior_retail_avg}
                 bg="#d946ef"
                 packageOptions={packageData?.retail}
                 selectedPackage={actions?.selectedPackages?.retail}
@@ -254,12 +290,14 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 weightLbs={weightData?.retail?.weight_lbs}
                 units={weightData?.retail?.units}
                 dateRange={dateRanges?.retail}
+                priorDateRange={stats?.priorDateRanges?.retail}
                 reportCount={reportCounts?.retail}
             />
 
             <PriceBlock
                 label="Terminal Market"
                 avgPrice={formatPrice(stats.terminal_avg)}
+                priorAvgPrice={stats.prior_terminal_avg}
                 bg="#0ea5e9"
                 packageOptions={packageData?.terminal}
                 selectedPackage={actions?.selectedPackages?.terminal}
@@ -273,12 +311,14 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 weightLbs={weightData?.terminal?.weight_lbs}
                 units={weightData?.terminal?.units}
                 dateRange={dateRanges?.terminal}
+                priorDateRange={stats?.priorDateRanges?.terminal}
                 reportCount={reportCounts?.terminal}
             />
 
             <PriceBlock
                 label="Shipping Point"
                 avgPrice={formatPrice(stats.shipping_avg)}
+                priorAvgPrice={stats.prior_shipping_avg}
                 bg="#fdba74"
                 packageOptions={packageData?.shipping}
                 selectedPackage={actions?.selectedPackages?.shipping}
@@ -292,6 +332,7 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 weightLbs={weightData?.shipping?.weight_lbs}
                 units={weightData?.shipping?.units}
                 dateRange={dateRanges?.shipping}
+                priorDateRange={stats?.priorDateRanges?.shipping}
                 reportCount={reportCounts?.shipping}
             />
 

@@ -331,6 +331,49 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             }
         };
 
+        const filterByPriorTimeRange = (data) => {
+            const dates = data.map(d => new Date(d.report_date)).filter(d => !isNaN(d));
+            if (dates.length === 0) return [];
+            const maxDate = new Date(Math.max(...dates));
+
+            if (timeRange === 'custom') {
+                return [];
+            } else if (timeRange === 'daily') {
+                const previousDates = dates.filter(d => d.toDateString() !== maxDate.toDateString());
+                if (previousDates.length === 0) return [];
+                const priorMaxDate = new Date(Math.max(...previousDates));
+                return data.filter(d => {
+                    const itemDate = new Date(d.report_date);
+                    return itemDate.toDateString() === priorMaxDate.toDateString();
+                });
+            } else {
+                const days = timeRange === '7day' ? 7 : 30;
+                let currentStart = new Date(maxDate);
+                currentStart.setDate(currentStart.getDate() - days);
+                currentStart.setHours(0,0,0,0);
+                
+                const previousDates = dates.filter(d => {
+                    let itemDate = new Date(d);
+                    itemDate.setHours(0,0,0,0);
+                    return itemDate < currentStart;
+                });
+                
+                if (previousDates.length === 0) return [];
+                const priorMaxDate = new Date(Math.max(...previousDates));
+                
+                let priorStart = new Date(priorMaxDate);
+                priorStart.setDate(priorStart.getDate() - days);
+                priorStart.setHours(0,0,0,0);
+                
+                return data.filter(d => {
+                    const itemDate = new Date(d.report_date);
+                    if (isNaN(itemDate)) return false;
+                    itemDate.setHours(0,0,0,0);
+                    return itemDate >= priorStart && itemDate <= priorMaxDate;
+                });
+            }
+        };
+
         let baseTerminal = terminalData;
         let baseShipping = shippingData;
         let baseRetail = retailData;
@@ -351,6 +394,10 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
         const filteredShipping = filterByTimeRange(baseShipping);
         const filteredRetail = filterByTimeRange(baseRetail);
 
+        const priorFilteredTerminal = filterByPriorTimeRange(baseTerminal);
+        const priorFilteredShipping = filterByPriorTimeRange(baseShipping);
+        const priorFilteredRetail = filterByPriorTimeRange(baseRetail);
+
         const filterData = (data, type) => {
             let filtered = data;
             if (selectedPackages[type]) filtered = filtered.filter(d => d.package === selectedPackages[type]);
@@ -370,6 +417,10 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
         const shippingFiltered = filterData(filteredShipping, 'shipping');
         const retailFiltered = filterData(filteredRetail, 'retail');
 
+        const priorTerminalFiltered = filterData(priorFilteredTerminal, 'terminal');
+        const priorShippingFiltered = filterData(priorFilteredShipping, 'shipping');
+        const priorRetailFiltered = filterData(priorFilteredRetail, 'retail');
+
         const getDateRangeFromData = (data) => {
             const dates = data.map(d => d.report_date).filter(Boolean).sort();
             if (dates.length === 0) return null;
@@ -380,6 +431,11 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             terminal: getDateRangeFromData(terminalFiltered),
             shipping: getDateRangeFromData(shippingFiltered),
             retail: getDateRangeFromData(retailFiltered),
+        };
+        const priorDateRanges = {
+            terminal: getDateRangeFromData(priorTerminalFiltered),
+            shipping: getDateRangeFromData(priorShippingFiltered),
+            retail: getDateRangeFromData(priorRetailFiltered),
         };
         const reportCounts = {
             terminal: terminalFiltered.length,
@@ -397,10 +453,14 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             terminal_avg: calcAvgPrice(terminalFiltered),
             shipping_avg: calcAvgPrice(shippingFiltered),
             retail_avg: calcAvgPrice(retailFiltered),
+            prior_terminal_avg: calcAvgPrice(priorTerminalFiltered),
+            prior_shipping_avg: calcAvgPrice(priorShippingFiltered),
+            prior_retail_avg: calcAvgPrice(priorRetailFiltered),
             is_shipping_estimated: false,
             is_retail_estimated: false,
             timeRange,
             dateRanges,
+            priorDateRanges,
             reportCounts,
             overallDateRange,
         };
