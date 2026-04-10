@@ -83,13 +83,13 @@ const DropdownSelector = ({ label, options, selectedValue, onValueChange, isCard
     );
 };
 
-const PriceBlock = ({ 
-    label, 
-    avgPrice, 
+const PriceBlock = ({
+    label,
+    avgPrice,
     priorAvgPrice,
-    bg, 
-    packageOptions, 
-    selectedPackage, 
+    bg,
+    packageOptions,
+    selectedPackage,
     onPackageChange,
     originOptions,
     selectedOrigin,
@@ -97,11 +97,13 @@ const PriceBlock = ({
     districtOptions,
     selectedDistrict,
     onDistrictChange,
-    weightLbs, 
+    weightLbs,
     units,
     dateRange,
     priorDateRange,
-    reportCount
+    timeRange,
+    reportCount,
+    cpiAdjusted,
 }) => {
     const isCardDark = bg === '#facc15' || bg === '#fdba74';
     const textColor = isCardDark ? 'black' : 'white';
@@ -141,7 +143,7 @@ const PriceBlock = ({
 
     const priorPriceValue = parseFloat(priorAvgPrice) || 0;
     const diffNode = (() => {
-        if (!pricePerUnit || priorPriceValue <= 0) return null;
+        if (timeRange === 'custom' || !pricePerUnit || priorPriceValue <= 0) return null;
         let priorUnitValue = 0;
         if (weightLbs && weightLbs > 0) {
             priorUnitValue = priorPriceValue / weightLbs;
@@ -159,10 +161,19 @@ const PriceBlock = ({
         const color = isPos ? (isCardDark ? '#065f46' : '#a7f3d0') : (isCardDark ? '#991b1b' : '#fecaca');
         const arrow = isPos ? '▲' : '▼';
         
-        const dateStr = priorDateRange && priorDateRange.end ? formatDate(priorDateRange.end) : null;
-        const dateText = dateStr ? ` on ${dateStr}` : '';
+        const isPeriod = timeRange === '7day' || timeRange === '30day';
+        const dateStr = (() => {
+            if (!priorDateRange || !priorDateRange.end) return null;
+            if (isPeriod && priorDateRange.start && priorDateRange.start !== priorDateRange.end) {
+                return ` on ${formatDate(priorDateRange.start)} to ${formatDate(priorDateRange.end)}`;
+            }
+            return ` on ${formatDate(priorDateRange.end)}`;
+        })();
+
+        const observationWord = isPeriod ? 'observations' : 'observation';
+        const dateText = dateStr || '';
         
-        return { text: `${arrow} ${percent}% from last observation${dateText}`, color };
+        return { text: `${arrow} ${percent}% from last ${observationWord}${dateText}`, color };
     })();
 
     return (
@@ -182,6 +193,11 @@ const PriceBlock = ({
                             <Text style={[styles.blockPrice, { color: textColor }]}>
                                 ${pricePerUnit ? pricePerUnit.value : avgPrice}
                             </Text>
+                            {cpiAdjusted && (
+                                <Text style={{ fontSize: 9, color: subTextColor, textAlign: 'center', marginTop: 2, opacity: 0.75 }}>
+                                    Adjusted for inflation
+                                </Text>
+                            )}
                         </>
                     ) : (
                         <Text style={[styles.noDataText, { color: subTextColor }]}>No Price Data</Text>
@@ -190,7 +206,7 @@ const PriceBlock = ({
 
                 {/* Timeline Differential Ticker */}
                 {diffNode && (
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: diffNode.color, marginBottom: 4 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: diffNode.color, marginBottom: 4, textAlign: 'center' }}>
                         {diffNode.text}
                     </Text>
                 )}
@@ -254,7 +270,7 @@ const PriceBlock = ({
     );
 };
 
-export default function PriceWaterfallMobile({ stats, costs, packageData, actions, weightData, originData, districtData, dateRanges, reportCounts }) {
+export default function PriceWaterfallMobile({ stats, costs, packageData, actions, weightData, originData, districtData, dateRanges, reportCounts, cpiAdjusted }) {
     if (!stats) return null;
 
     // Helper to safely format numbers
@@ -291,7 +307,9 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 units={weightData?.retail?.units}
                 dateRange={dateRanges?.retail}
                 priorDateRange={stats?.priorDateRanges?.retail}
+                timeRange={stats?.timeRange}
                 reportCount={reportCounts?.retail}
+                cpiAdjusted={cpiAdjusted}
             />
 
             <PriceBlock
@@ -312,7 +330,9 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 units={weightData?.terminal?.units}
                 dateRange={dateRanges?.terminal}
                 priorDateRange={stats?.priorDateRanges?.terminal}
+                timeRange={stats?.timeRange}
                 reportCount={reportCounts?.terminal}
+                cpiAdjusted={cpiAdjusted}
             />
 
             <PriceBlock
@@ -333,7 +353,9 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 units={weightData?.shipping?.units}
                 dateRange={dateRanges?.shipping}
                 priorDateRange={stats?.priorDateRanges?.shipping}
+                timeRange={stats?.timeRange}
                 reportCount={reportCounts?.shipping}
+                cpiAdjusted={cpiAdjusted}
             />
 
             {/* Your Cost Block - shown when costs are configured */}

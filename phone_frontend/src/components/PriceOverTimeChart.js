@@ -22,7 +22,7 @@ import {
     ScrollView,
     Dimensions,
 } from 'react-native';
-import { CartesianChart, StackedBar } from 'victory-native';
+import { CartesianChart, Line } from 'victory-native';
 import { useFont } from '@shopify/react-native-skia';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -143,7 +143,8 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         availableRanges,
         dateSpan,
         actions,
-    } = usePriceTimeSeries(filters, { organicOnly, selectedVariety });
+        cpiActive,
+    } = usePriceTimeSeries(filters, { organicOnly, selectedVariety, cpiAdjusted: true });
 
     // ── Series visibility toggles (local state) ──
     const [seriesVisibility, setSeriesVisibility] = useState({
@@ -175,6 +176,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
             const s = shippingMap[date];
             return {
                 date,
+                timestamp: new Date(date).getTime(),
                 retail: r ? r.price : null,
                 terminal: t ? t.price : null,
                 shipping: s ? s.price : null,
@@ -250,36 +252,24 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         };
     }, [chartData, seriesVisibility, series]);
 
-    // ── Format month label for display (YYYY-MM → 'Mar 2024') ──
-    const formatMonthLabel = (monthStr) => {
-        if (monthStr == null) return '';
-        const str = String(monthStr);
-        if (str.length < 7 || !str.includes('-')) return str;
-        const parts = str.split('-');
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const monthIdx = parseInt(parts[1], 10) - 1;
-        if (monthIdx < 0 || monthIdx > 11) return str;
-        return `${monthNames[monthIdx]} ${parts[0]}`;
+    // ── Format day label for display (YYYY-MM-DD → 'Mar 15, 2024') ──
+    const formatMonthLabel = (dateStr) => {
+        if (dateStr == null) return '';
+        const d = new Date(dateStr + 'T00:00:00Z');
+        if (isNaN(d.getTime())) return String(dateStr);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     };
 
-    // ── X-axis label formatter (abbreviate for space) ──
-    const formatXLabel = (monthStr) => {
-        if (monthStr == null) return '';
-        const str = String(monthStr);
-        if (str.length < 7 || !str.includes('-')) return str;
-        const parts = str.split('-');
-        
-        const monthFirstLetters = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
-        const monthIdx = parseInt(parts[1], 10) - 1;
-        if (monthIdx < 0 || monthIdx > 11) return str;
-        
-        // Show the full year for January as a major division
-        if (monthIdx === 0) {
-            return parts[0];
-        }
-        
-        // Otherwise, just the first letter (e.g. J, F, M)
-        return monthFirstLetters[monthIdx];
+    // ── X-axis label formatter (receives numeric timestamp from Victory Native) ──
+    const formatXLabel = (ts) => {
+        if (ts == null) return '';
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return '';
+        const month = d.getUTCMonth();
+        const year = d.getUTCFullYear();
+        // Show year for January as a major division, single letter otherwise
+        if (month === 0) return String(year);
+        return ['J','F','M','A','M','J','J','A','S','O','N','D'][month];
     };
 
     // ── Look up tooltip data by touch position ──
@@ -293,25 +283,42 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
 
     const handleTouchEvent = useCallback((evt) => {
         const touchX = evt.nativeEvent.locationX;
-        const { width } = chartLayoutRef.current;
-        if (width <= 0 || chartDataRef.current.length === 0) return;
+        const data = chartDataRef.current;
+        if (!data.length) return;
 
-        // Chart has ~8px padding on each side from paddingHorizontal
-        const chartPadding = 8;
-        const chartWidth = width - chartPadding * 2;
-        const relativeX = touchX - chartPadding;
-        const fraction = Math.max(0, Math.min(1, relativeX / chartWidth));
+        // Use Victory Native's rendered x-positions to find the nearest data point.
+        // This correctly handles non-uniform spacing from xKey="timestamp".
+        const pts = pointsRef.current;
+        const refPoints = pts.retail?.length ? pts.retail
+                        : pts.terminal?.length ? pts.terminal
+                        : pts.shipping;
 
-        // Map fraction to nearest data index
-        const dataLen = chartDataRef.current.length;
-        const index = Math.round(fraction * (dataLen - 1));
-        const row = chartDataRef.current[index];
+        let nearestIndex = 0;
 
+        if (refPoints?.length) {
+            let minDist = Infinity;
+            for (let i = 0; i < refPoints.length; i++) {
+                const px = refPoints[i]?.x;
+                if (px == null) continue;
+                const dist = Math.abs(px - touchX);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestIndex = i;
+                }
+            }
+        } else {
+            // Fallback before first render: linear approximation
+            const { width } = chartLayoutRef.current;
+            if (width <= 0) return;
+            const chartWidth = width - 16; // 8px padding each side
+            const fraction = Math.max(0, Math.min(1, (touchX - 8) / chartWidth));
+            nearestIndex = Math.round(fraction * (data.length - 1));
+        }
 
+        const row = data[nearestIndex];
         if (row) {
-            setActiveIndex(index);
+            setActiveIndex(nearestIndex);
             setActiveTooltip({
-
                 date: row.date,
                 retail: row.retail,
                 terminal: row.terminal,
@@ -321,7 +328,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 shippingMeta: row.shippingMeta,
             });
         }
-    }, [isScrubbing]); // Make sure this hook uses latest if it depended on it, but isScrubbing dependency is safe
+    }, []);
 
     const handleTouchStart = useCallback((evt) => {
         setIsScrubbing(true);
@@ -397,6 +404,11 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 ))}
             </View>
 
+            {cpiActive && (
+                <Text style={{ fontSize: 10, color: colors.textMuted, textAlign: 'center', marginBottom: 6, opacity: 0.75 }}>
+                    Prices adjusted for inflation (Feb 2026 $)
+                </Text>
+            )}
 
             {/* Chart with touch overlay for tooltip */}
             {activeYKeys.length > 0 ? (
@@ -411,49 +423,45 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 >
                     <CartesianChart
                         data={chartData}
-                        xKey="date"
+                        xKey="timestamp"
                         yKeys={activeYKeys}
                         axisOptions={{
                             font: robotoFont,
                             formatXLabel,
                             formatYLabel: (v) => `$${v}`,
-                            tickCount: { x: 12, y: 5 },
+                            tickCount: { x: 6, y: 5 },
                             labelColor: '#94a3b8',
-                            lineColor: '#334155', // Subtle grid color for dark background
+                            lineColor: '#334155',
                         }}
                         domainPadding={{ top: 20, bottom: 0, left: 15, right: 15 }}
                     >
-                        {({ points, chartBounds }) => {
-                            // Sync points to ref for the crosshair overlay below
+                        {({ points }) => {
+                            // Sync full points to ref for crosshair x-position lookup
                             pointsRef.current = points;
-                            
-                            const activePoints = [];
-                            const activeColors = [];
-                            
-                            if (seriesVisibility.retail && points.retail) {
-                                activePoints.push(points.retail);
-                                activeColors.push(SERIES_CONFIG.retail.color);
-                            }
-                            if (seriesVisibility.terminal && points.terminal) {
-                                activePoints.push(points.terminal);
-                                activeColors.push(SERIES_CONFIG.terminal.color);
-                            }
-                            if (seriesVisibility.shipping && points.shipping) {
-                                activePoints.push(points.shipping);
-                                activeColors.push(SERIES_CONFIG.shipping.color);
-                            }
 
                             return (
                                 <>
-                                    {activePoints.length > 0 && (
-                                        <StackedBar
-                                            chartBounds={chartBounds}
-                                            points={activePoints}
-                                            colors={activeColors}
-                                            barWidth={8}
-                                            barOptions={() => ({
-                                                roundedCorners: { topLeft: 2, topRight: 2, bottomLeft: 2, bottomRight: 2 }
-                                            })}
+                                    {seriesVisibility.retail && points.retail && (
+                                        <Line
+                                            points={points.retail.filter(p => Number.isFinite(p.y))}
+                                            color={SERIES_CONFIG.retail.color}
+                                            strokeWidth={2}
+                                            animate={{ type: 'timing', duration: 300 }}
+                                        />
+                                    )}
+                                    {seriesVisibility.terminal && points.terminal && (
+                                        <Line
+                                            points={points.terminal.filter(p => Number.isFinite(p.y))}
+                                            color={SERIES_CONFIG.terminal.color}
+                                            strokeWidth={2}
+                                            animate={{ type: 'timing', duration: 300 }}
+                                        />
+                                    )}
+                                    {seriesVisibility.shipping && points.shipping && (
+                                        <Line
+                                            points={points.shipping.filter(p => Number.isFinite(p.y))}
+                                            color={SERIES_CONFIG.shipping.color}
+                                            strokeWidth={2}
                                             animate={{ type: 'timing', duration: 300 }}
                                         />
                                     )}
@@ -486,7 +494,8 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                                         {['retail', 'terminal', 'shipping'].map(key => {
                                             if (!seriesVisibility[key]) return null;
                                             const p = pointsRef.current[key]?.[activeIndex];
-                                            if (!p) return null;
+                                            // Skip dot if point is missing or y is not a real number (null data)
+                                            if (!p || !Number.isFinite(p.y)) return null;
                                             return (
                                                 <View key={key} style={{
                                                     position: 'absolute', left: p.x + 3, top: p.y - 4.5,

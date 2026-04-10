@@ -17,6 +17,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getTimeSeriesData } from '../services/api';
+import { adjustToCurrent } from '../shared/cpiAdjust';
 
 // ── Time range presets ──────────────────────────────────────────
 const RANGE_PRESETS = [
@@ -34,30 +35,29 @@ function getUnique(arr, field) {
 }
 
 /**
- * Aggregate raw rows into monthly averages per market type.
- * Each output item: { date: 'YYYY-MM', price: number, pointCount: number, packagesCount: Object, originsCount: Object, varietiesCount: Object }
+ * Aggregate raw rows into daily averages per market type.
+ * Each output item: { date: 'YYYY-MM-DD', price: number, pointCount: number, packagesCount: Object, originsCount: Object, varietiesCount: Object }
  */
-function aggregateMonthlyAverages(rows) {
-    const byMonth = {};
+function aggregateDailyAverages(rows) {
+    const byDay = {};
     for (const row of rows) {
         if (!row.report_date || row.price_avg == null) continue;
-        const dateKey = row.report_date.split('T')[0];
-        const monthKey = dateKey.substring(0, 7); // 'YYYY-MM'
-        if (!byMonth[monthKey]) {
-            byMonth[monthKey] = { sum: 0, count: 0, packages: {}, origins: {}, varieties: {} };
+        const dayKey = row.report_date.split('T')[0]; // 'YYYY-MM-DD'
+        if (!byDay[dayKey]) {
+            byDay[dayKey] = { sum: 0, count: 0, packages: {}, origins: {}, varieties: {} };
         }
-        byMonth[monthKey].sum += row.price_avg;
-        byMonth[monthKey].count += 1;
-        
+        byDay[dayKey].sum += row.price_avg;
+        byDay[dayKey].count += 1;
+
         const pkg = row.package || 'Unknown';
         const org = row.origin || 'Unknown';
         const v = row.variety || 'Unknown';
-        
-        byMonth[monthKey].packages[pkg] = (byMonth[monthKey].packages[pkg] || 0) + 1;
-        byMonth[monthKey].origins[org] = (byMonth[monthKey].origins[org] || 0) + 1;
-        byMonth[monthKey].varieties[v] = (byMonth[monthKey].varieties[v] || 0) + 1;
+
+        byDay[dayKey].packages[pkg] = (byDay[dayKey].packages[pkg] || 0) + 1;
+        byDay[dayKey].origins[org] = (byDay[dayKey].origins[org] || 0) + 1;
+        byDay[dayKey].varieties[v] = (byDay[dayKey].varieties[v] || 0) + 1;
     }
-    return Object.entries(byMonth)
+    return Object.entries(byDay)
         .map(([date, data]) => ({
             date,
             price: Math.round((data.sum / data.count) * 100) / 100,
@@ -82,6 +82,7 @@ export default function usePriceTimeSeries(filters, options = {}) {
     const {
         organicOnly = false,
         selectedVariety = '',
+        cpiAdjusted = false,
     } = options;
 
     // ── Raw data ──
@@ -283,13 +284,26 @@ export default function usePriceTimeSeries(filters, options = {}) {
             else if (type === 'shipping') shipping.push(row);
         }
 
-        // Step 4: Aggregate into monthly averages
-        return {
-            retail: aggregateMonthlyAverages(retail),
-            terminal: aggregateMonthlyAverages(terminal),
-            shipping: aggregateMonthlyAverages(shipping),
+        // Step 4: Aggregate into daily averages, then optionally adjust for CPI.
+        // Only apply CPI for ranges long enough for inflation to be meaningful (1Y+).
+        const longRange = selectedRange === '1Y' || selectedRange === '2Y' || selectedRange === 'All';
+        const shouldApplyCpi = cpiAdjusted && longRange;
+
+        const applyCpi = (points) => {
+            if (!shouldApplyCpi) return points;
+            return points.map(p => ({
+                ...p,
+                price: adjustToCurrent(p.price, p.date),
+            }));
         };
-    }, [rawData, organicOnly, selectedVariety, selectedPackage, selectedOrigin, selectedRange, dateSpan.max]);
+
+        return {
+            retail:   applyCpi(aggregateDailyAverages(retail)),
+            terminal: applyCpi(aggregateDailyAverages(terminal)),
+            shipping: applyCpi(aggregateDailyAverages(shipping)),
+            _cpiActive: shouldApplyCpi,
+        };
+    }, [rawData, organicOnly, selectedVariety, selectedPackage, selectedOrigin, selectedRange, dateSpan.max, cpiAdjusted]);
 
     // ── Actions ──
     const actions = {
@@ -300,6 +314,7 @@ export default function usePriceTimeSeries(filters, options = {}) {
 
     return {
         series,
+        cpiActive: series._cpiActive ?? false,
         loading,
         error,
         rawData,

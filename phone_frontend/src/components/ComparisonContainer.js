@@ -53,7 +53,7 @@ const COMPARISON_PRESETS = [
 
 // ─── Main Component ──────────────────────────────────────────────
 
-export default function ComparisonContainer({ filters, organicOnly, selectedVariety }) {
+export default function ComparisonContainer({ filters, organicOnly, selectedVariety, cpiAdjusted }) {
     const { colors, isDark } = useTheme();
 
     // Period A: default = 2 weeks ago → 1 week ago
@@ -71,7 +71,7 @@ export default function ComparisonContainer({ filters, organicOnly, selectedVari
     // Fetch + compute bridge
     const { bridges, loading, error } = usePriceBridge(
         filters, startA, endA, startB, endB,
-        { organicOnly, selectedVariety }
+        { organicOnly, selectedVariety, cpiAdjusted }
     );
 
     // ── Date Picker Logic ──

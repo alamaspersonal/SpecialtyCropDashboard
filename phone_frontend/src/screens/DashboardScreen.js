@@ -61,6 +61,7 @@ export default function DashboardScreen({ route, navigation }) {
         commission: '0.50'
     });
 
+
     // ══════════════════════════════════════════════════════════════
     // USE THE CUSTOM HOOK — replaces ~600 lines of inline logic
     // ══════════════════════════════════════════════════════════════
@@ -69,6 +70,7 @@ export default function DashboardScreen({ route, navigation }) {
         customEndDate,
         organicOnly,
         selectedVariety,
+        cpiAdjusted: timeRange === 'custom',
     });
 
     const {
@@ -369,6 +371,7 @@ export default function DashboardScreen({ route, navigation }) {
                                         dateRanges={stats.dateRanges}
                                         reportCounts={stats.reportCounts}
                                         actions={actions}
+                                        cpiAdjusted={timeRange === 'custom'}
                                     />
                                 </ErrorBoundary>
                             </>
@@ -393,6 +396,7 @@ export default function DashboardScreen({ route, navigation }) {
                                 filters={filters}
                                 organicOnly={organicOnly}
                                 selectedVariety={selectedVariety}
+                                cpiAdjusted={true}
                             />
                         )}
 
@@ -506,6 +510,7 @@ export default function DashboardScreen({ route, navigation }) {
             <Modal visible={showDateModal} animationType="slide" transparent>
                 <View style={styles.modalOverlay}>
                     <View style={[styles.dateModalContent, { backgroundColor: colors.surface }]}>
+                        {/* Header */}
                         <View style={styles.dateModalHeader}>
                             <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>Select Date Range</Text>
                             <TouchableOpacity onPress={() => { setShowDateModal(false); setActiveDatePicker(null); }}>
@@ -513,116 +518,117 @@ export default function DashboardScreen({ route, navigation }) {
                             </TouchableOpacity>
                         </View>
 
-                        {/* Quick Select Presets */}
-                        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                            {[
-                                { label: 'Last 7 Days', days: 7 },
-                                { label: 'Last 30 Days', days: 30 },
-                            ].map(preset => {
-                                const maxDate = serverDateBounds.max || new Date();
-                                return (
-                                    <TouchableOpacity
-                                        key={preset.label}
-                                        style={[styles.quickPresetChip, { borderColor: colors.border }]}
-                                        onPress={() => {
-                                            const end = new Date(maxDate);
-                                            const start = new Date(maxDate);
-                                            start.setDate(start.getDate() - preset.days);
-                                            if (serverDateBounds.min && start < serverDateBounds.min) {
-                                                start.setTime(serverDateBounds.min.getTime());
-                                            }
-                                            setCustomStartDate(start);
-                                            setCustomEndDate(end);
-                                            setActiveDatePicker(null);
-                                        }}
-                                    >
-                                        <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '600' }}>{preset.label}</Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
-
-                        {/* Data availability hint */}
-                        {serverDateBounds.min && serverDateBounds.max && (
-                            <Text style={{ color: colors.textMuted, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>
-                                Data available: {serverDateBounds.min.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} — {serverDateBounds.max.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}  •  Max 1 month window
-                            </Text>
-                        )}
-
-                        {/* Date Cards */}
-                        <View style={styles.dateCardsRow}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.dateCard,
-                                    { backgroundColor: colors.surfaceElevated, borderColor: activeDatePicker === 'start' ? colors.accent : colors.border }
-                                ]}
-                                onPress={() => setActiveDatePicker(activeDatePicker === 'start' ? null : 'start')}
-                            >
-                                <Text style={[styles.dateCardLabel, { color: colors.textMuted }]}>Start Date</Text>
-                                <Text style={[styles.dateCardValue, { color: colors.text }]}>
-                                    {customStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                </Text>
-                            </TouchableOpacity>
-                            <Ionicons name="arrow-forward" size={18} color={colors.textMuted} style={{ marginHorizontal: 8 }} />
-                            <TouchableOpacity
-                                style={[
-                                    styles.dateCard,
-                                    { backgroundColor: colors.surfaceElevated, borderColor: activeDatePicker === 'end' ? colors.accent : colors.border }
-                                ]}
-                                onPress={() => setActiveDatePicker(activeDatePicker === 'end' ? null : 'end')}
-                            >
-                                <Text style={[styles.dateCardLabel, { color: colors.textMuted }]}>End Date</Text>
-                                <Text style={[styles.dateCardValue, { color: colors.text }]}>
-                                    {customEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Native Date Picker */}
-                        {activeDatePicker && (
-                            <View style={styles.datePickerWrapper}>
-                                <DateTimePicker
-                                    value={activeDatePicker === 'start' ? customStartDate : customEndDate}
-                                    mode="date"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                    maximumDate={activeDatePicker === 'start'
-                                        ? new Date(customEndDate)
-                                        : (() => {
-                                            const maxFromSpan = new Date(customStartDate);
-                                            maxFromSpan.setDate(maxFromSpan.getDate() + 31);
-                                            const serverMax = serverDateBounds.max || new Date();
-                                            return maxFromSpan < serverMax ? maxFromSpan : serverMax;
-                                        })()
-                                    }
-                                    minimumDate={activeDatePicker === 'start'
-                                        ? (serverDateBounds.min || undefined)
-                                        : customStartDate
-                                    }
-                                    onChange={(event, selectedDate) => {
-                                        if (Platform.OS === 'android') setActiveDatePicker(null);
-                                        if (selectedDate) {
-                                            if (activeDatePicker === 'start') {
-                                                setCustomStartDate(selectedDate);
-                                                const maxEnd = new Date(selectedDate);
-                                                maxEnd.setDate(maxEnd.getDate() + 31);
-                                                const serverMax = serverDateBounds.max || new Date();
-                                                const cappedEnd = maxEnd < serverMax ? maxEnd : serverMax;
-                                                if (customEndDate > cappedEnd) setCustomEndDate(cappedEnd);
-                                                if (customEndDate < selectedDate) {
-                                                    setCustomEndDate(new Date(Math.min(cappedEnd.getTime(), selectedDate.getTime() + 7 * 24 * 60 * 60 * 1000)));
+                        {/* Scrollable body */}
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                            contentContainerStyle={{ paddingBottom: 8 }}
+                        >
+                            {/* Quick Select Presets */}
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                {[
+                                    { label: '7 Days', days: 7 },
+                                    { label: '30 Days', days: 30 },
+                                    { label: '60 Days', days: 60 },
+                                    { label: '90 Days', days: 90 },
+                                    { label: '6 Months', days: 180 },
+                                    { label: '1 Year', days: 365 },
+                                ].map(preset => {
+                                    const maxDate = serverDateBounds.max || new Date();
+                                    return (
+                                        <TouchableOpacity
+                                            key={preset.label}
+                                            style={[styles.quickPresetChip, { borderColor: colors.border }]}
+                                            onPress={() => {
+                                                const end = new Date(maxDate);
+                                                const start = new Date(maxDate);
+                                                start.setDate(start.getDate() - preset.days);
+                                                if (serverDateBounds.min && start < serverDateBounds.min) {
+                                                    start.setTime(serverDateBounds.min.getTime());
                                                 }
-                                            } else {
-                                                setCustomEndDate(selectedDate);
-                                            }
-                                        }
-                                    }}
-                                    themeVariant={isDark ? 'dark' : 'light'}
-                                    style={{ height: 150 }}
-                                />
+                                                setCustomStartDate(start);
+                                                setCustomEndDate(end);
+                                                setActiveDatePicker(null);
+                                            }}
+                                        >
+                                            <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '600' }}>{preset.label}</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
                             </View>
-                        )}
 
-                        {/* Actions */}
+                            {/* Data availability hint */}
+                            {serverDateBounds.min && serverDateBounds.max && (
+                                <Text style={{ color: colors.textMuted, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>
+                                    Data available: {serverDateBounds.min.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} — {serverDateBounds.max.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </Text>
+                            )}
+
+                            {/* Date Cards */}
+                            <View style={styles.dateCardsRow}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.dateCard,
+                                        { backgroundColor: colors.surfaceElevated, borderColor: activeDatePicker === 'start' ? colors.accent : colors.border }
+                                    ]}
+                                    onPress={() => setActiveDatePicker(activeDatePicker === 'start' ? null : 'start')}
+                                >
+                                    <Text style={[styles.dateCardLabel, { color: colors.textMuted }]}>Start Date</Text>
+                                    <Text style={[styles.dateCardValue, { color: colors.text }]}>
+                                        {customStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    </Text>
+                                </TouchableOpacity>
+                                <Ionicons name="arrow-forward" size={18} color={colors.textMuted} style={{ marginHorizontal: 8 }} />
+                                <TouchableOpacity
+                                    style={[
+                                        styles.dateCard,
+                                        { backgroundColor: colors.surfaceElevated, borderColor: activeDatePicker === 'end' ? colors.accent : colors.border }
+                                    ]}
+                                    onPress={() => setActiveDatePicker(activeDatePicker === 'end' ? null : 'end')}
+                                >
+                                    <Text style={[styles.dateCardLabel, { color: colors.textMuted }]}>End Date</Text>
+                                    <Text style={[styles.dateCardValue, { color: colors.text }]}>
+                                        {customEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Native Date Picker */}
+                            {activeDatePicker && (
+                                <View style={styles.datePickerWrapper}>
+                                    <DateTimePicker
+                                        value={activeDatePicker === 'start' ? customStartDate : customEndDate}
+                                        mode="date"
+                                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                        maximumDate={activeDatePicker === 'start'
+                                            ? new Date(customEndDate)
+                                            : (serverDateBounds.max || new Date())
+                                        }
+                                        minimumDate={activeDatePicker === 'start'
+                                            ? (serverDateBounds.min || undefined)
+                                            : customStartDate
+                                        }
+                                        onChange={(event, selectedDate) => {
+                                            if (Platform.OS === 'android') setActiveDatePicker(null);
+                                            if (selectedDate) {
+                                                if (activeDatePicker === 'start') {
+                                                    setCustomStartDate(selectedDate);
+                                                    if (customEndDate < selectedDate) {
+                                                        setCustomEndDate(selectedDate);
+                                                    }
+                                                } else {
+                                                    setCustomEndDate(selectedDate);
+                                                }
+                                            }
+                                        }}
+                                        themeVariant={isDark ? 'dark' : 'light'}
+                                        style={{ height: 150 }}
+                                    />
+                                </View>
+                            )}
+                        </ScrollView>
+
+                        {/* Actions — pinned at bottom */}
                         <View style={styles.dateModalActions}>
                             <TouchableOpacity
                                 style={[styles.dateModalCancel, { borderColor: colors.border }]}
@@ -776,8 +782,10 @@ const styles = StyleSheet.create({
     checkboxDisabled: { borderColor: '#94a3b8', backgroundColor: 'transparent' },
     organicLabel: { fontSize: 15, fontWeight: '600' },
     dateModalContent: {
-        borderTopLeftRadius: 24, borderTopRightRadius: 24, borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
-        padding: 24, maxHeight: '80%',
+        borderRadius: 24,
+        padding: 24,
+        maxHeight: '85%',
+        flexShrink: 1,
     },
     dateModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     quickPresetChip: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1 },

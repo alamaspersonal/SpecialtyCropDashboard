@@ -16,9 +16,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPricesByDateRange } from '../services/api';
 import { computeAllBridges } from '../shared/priceBridge';
+import { adjustToCurrent } from '../shared/cpiAdjust';
 
 export default function usePriceBridge(filters, startA, endA, startB, endB, options = {}) {
-    const { organicOnly = false, selectedVariety = '' } = options;
+    const { organicOnly = false, selectedVariety = '', cpiAdjusted = false } = options;
 
     const [bridges, setBridges] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -62,8 +63,17 @@ export default function usePriceBridge(filters, startA, endA, startB, endB, opti
                 filteredB = filteredB.filter(d => d.variety === selectedVariety);
             }
 
+            // Optionally adjust rows for CPI before bridge computation
+            const applyCpi = (rows) => {
+                if (!cpiAdjusted) return rows;
+                return rows.map(row => ({
+                    ...row,
+                    price_avg: adjustToCurrent(parseFloat(row.price_avg) || 0, row.report_date),
+                }));
+            };
+
             // Compute bridges
-            const result = computeAllBridges(filteredA, filteredB);
+            const result = computeAllBridges(applyCpi(filteredA), applyCpi(filteredB));
             setBridges(result);
         } catch (err) {
             console.error('[usePriceBridge] Error:', err);
@@ -76,7 +86,7 @@ export default function usePriceBridge(filters, startA, endA, startB, endB, opti
         JSON.stringify(filters),
         startA?.toISOString(), endA?.toISOString(),
         startB?.toISOString(), endB?.toISOString(),
-        organicOnly, selectedVariety,
+        organicOnly, selectedVariety, cpiAdjusted,
     ]);
 
     useEffect(() => {

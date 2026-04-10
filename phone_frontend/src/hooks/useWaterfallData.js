@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getDateRange, getPricesByDateRange } from '../services/api';
+import { adjustToCurrent } from '../shared/cpiAdjust';
 
 // Package weight lookup
 const PACKAGE_WEIGHTS = {
@@ -61,6 +62,7 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
         customEndDate = null,
         organicOnly = false,
         selectedVariety = '',
+        cpiAdjusted = false,
     } = options;
 
     // ── Data State ──
@@ -301,104 +303,20 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
     const calculateStats = useCallback(() => {
         if (!priceData.length) return null;
 
-        const filterByTimeRange = (data) => {
-            const dates = data.map(d => new Date(d.report_date)).filter(d => !isNaN(d));
-            if (dates.length === 0) return data;
-            const maxDate = new Date(Math.max(...dates));
-
-            if (timeRange === 'custom') {
-                const start = new Date(customStartDate);
-                start.setHours(0, 0, 0, 0);
-                const end = new Date(customEndDate);
-                end.setHours(23, 59, 59, 999);
-                return data.filter(d => {
-                    const itemDate = new Date(d.report_date);
-                    return !isNaN(itemDate) && itemDate >= start && itemDate <= end;
-                });
-            } else if (timeRange === 'daily') {
-                return data.filter(d => {
-                    const itemDate = new Date(d.report_date);
-                    return itemDate.toDateString() === maxDate.toDateString();
-                });
-            } else {
-                const days = timeRange === '7day' ? 7 : 30;
-                const cutoff = new Date(maxDate);
-                cutoff.setDate(cutoff.getDate() - days);
-                return data.filter(d => {
-                    const itemDate = new Date(d.report_date);
-                    return !isNaN(itemDate) && itemDate >= cutoff;
-                });
-            }
+        // 1. Initial Filtering (Market Type + Variety + Organic)
+        const getBaseData = (data) => {
+            let filtered = data;
+            if (organicOnly) filtered = filtered.filter(d => d.organic === 'yes');
+            if (selectedVariety) filtered = filtered.filter(d => d.variety === selectedVariety);
+            return filtered;
         };
 
-        const filterByPriorTimeRange = (data) => {
-            const dates = data.map(d => new Date(d.report_date)).filter(d => !isNaN(d));
-            if (dates.length === 0) return [];
-            const maxDate = new Date(Math.max(...dates));
+        const tBase = getBaseData(terminalData);
+        const sBase = getBaseData(shippingData);
+        const rBase = getBaseData(retailData);
 
-            if (timeRange === 'custom') {
-                return [];
-            } else if (timeRange === 'daily') {
-                const previousDates = dates.filter(d => d.toDateString() !== maxDate.toDateString());
-                if (previousDates.length === 0) return [];
-                const priorMaxDate = new Date(Math.max(...previousDates));
-                return data.filter(d => {
-                    const itemDate = new Date(d.report_date);
-                    return itemDate.toDateString() === priorMaxDate.toDateString();
-                });
-            } else {
-                const days = timeRange === '7day' ? 7 : 30;
-                let currentStart = new Date(maxDate);
-                currentStart.setDate(currentStart.getDate() - days);
-                currentStart.setHours(0,0,0,0);
-                
-                const previousDates = dates.filter(d => {
-                    let itemDate = new Date(d);
-                    itemDate.setHours(0,0,0,0);
-                    return itemDate < currentStart;
-                });
-                
-                if (previousDates.length === 0) return [];
-                const priorMaxDate = new Date(Math.max(...previousDates));
-                
-                let priorStart = new Date(priorMaxDate);
-                priorStart.setDate(priorStart.getDate() - days);
-                priorStart.setHours(0,0,0,0);
-                
-                return data.filter(d => {
-                    const itemDate = new Date(d.report_date);
-                    if (isNaN(itemDate)) return false;
-                    itemDate.setHours(0,0,0,0);
-                    return itemDate >= priorStart && itemDate <= priorMaxDate;
-                });
-            }
-        };
-
-        let baseTerminal = terminalData;
-        let baseShipping = shippingData;
-        let baseRetail = retailData;
-
-        if (organicOnly) {
-            baseTerminal = baseTerminal.filter(d => d.organic === 'yes');
-            baseShipping = baseShipping.filter(d => d.organic === 'yes');
-            baseRetail = baseRetail.filter(d => d.organic === 'yes');
-        }
-
-        if (selectedVariety) {
-            baseTerminal = baseTerminal.filter(d => d.variety === selectedVariety);
-            baseShipping = baseShipping.filter(d => d.variety === selectedVariety);
-            baseRetail = baseRetail.filter(d => d.variety === selectedVariety);
-        }
-
-        const filteredTerminal = filterByTimeRange(baseTerminal);
-        const filteredShipping = filterByTimeRange(baseShipping);
-        const filteredRetail = filterByTimeRange(baseRetail);
-
-        const priorFilteredTerminal = filterByPriorTimeRange(baseTerminal);
-        const priorFilteredShipping = filterByPriorTimeRange(baseShipping);
-        const priorFilteredRetail = filterByPriorTimeRange(baseRetail);
-
-        const filterData = (data, type) => {
+        // 2. Sub-filtering (Package + Origin + District)
+        const filterBySelections = (data, type) => {
             let filtered = data;
             if (selectedPackages[type]) filtered = filtered.filter(d => d.package === selectedPackages[type]);
             if (selectedOrigins[type]) filtered = filtered.filter(d => d.origin === selectedOrigins[type]);
@@ -406,20 +324,87 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             return filtered;
         };
 
+        const tFull = filterBySelections(tBase, 'terminal');
+        const sFull = filterBySelections(sBase, 'shipping');
+        const rFull = filterBySelections(rBase, 'retail');
+
+        // 3. Helper to partition Current and Prior data based on timeRange
+        const partitionData = (data) => {
+            if (!data.length) return { current: [], prior: [] };
+
+            // Get unique sorted dates (descending)
+            const uniqueDates = [...new Set(data.map(d => {
+                const dt = new Date(d.report_date);
+                return isNaN(dt) ? null : dt.toISOString().split('T')[0];
+            }).filter(Boolean))].sort().reverse();
+
+            if (uniqueDates.length === 0) return { current: [], prior: [] };
+
+            if (timeRange === 'daily' || timeRange === 'custom') {
+                // For daily/custom, we compare the most recent day vs the second most recent day
+                const currentDay = uniqueDates[0];
+                const current = data.filter(d => new Date(d.report_date).toISOString().split('T')[0] === currentDay);
+                
+                const priorDay = uniqueDates[1];
+                const prior = priorDay ? data.filter(d => new Date(d.report_date).toISOString().split('T')[0] === priorDay) : [];
+                
+                return { current, prior };
+            } else {
+                // For 7day/30day, we compare periods
+                const daysOffset = (timeRange === '7day' ? 7 : 30) - 1;
+                
+                // Current period: maxDate to maxDate - (days - 1)
+                const maxDateStr = uniqueDates[0];
+                const maxDate = new Date(maxDateStr);
+                const currentStart = new Date(maxDate);
+                currentStart.setDate(currentStart.getDate() - daysOffset);
+                currentStart.setHours(0, 0, 0, 0);
+                
+                const current = data.filter(d => {
+                    const dt = new Date(d.report_date);
+                    return dt >= currentStart && dt <= maxDate;
+                });
+
+                // Prior period: find the last date strictly before currentStart
+                const priorDates = uniqueDates.filter(dStr => {
+                    const dt = new Date(dStr);
+                    dt.setHours(0, 0, 0, 0);
+                    return dt < currentStart;
+                });
+                
+                if (priorDates.length === 0) return { current, prior: [] };
+
+                const priorMaxDateStr = priorDates[0];
+                const priorMaxDate = new Date(priorMaxDateStr);
+                const priorStart = new Date(priorMaxDate);
+                priorStart.setDate(priorStart.getDate() - daysOffset);
+                priorStart.setHours(0, 0, 0, 0);
+
+                const prior = data.filter(d => {
+                    const dt = new Date(d.report_date);
+                    return dt >= priorStart && dt <= priorMaxDate;
+                });
+
+                return { current, prior };
+            }
+        };
+
+        const tParts = partitionData(tFull);
+        const sParts = partitionData(sFull);
+        const rParts = partitionData(rFull);
+
         const calcAvgPrice = (data) => {
             if (!data.length) return 0;
-            const validValues = data.map(d => parseFloat(d.price_avg)).filter(v => v !== null && v !== undefined && !isNaN(v));
+            const validValues = data
+                .map(d => {
+                    const nominal = parseFloat(d.price_avg);
+                    if (isNaN(nominal)) return NaN;
+                    return cpiAdjusted ? adjustToCurrent(nominal, d.report_date) : nominal;
+                })
+                .filter(v => !isNaN(v));
             if (validValues.length === 0) return 0;
             return validValues.reduce((a, b) => a + b, 0) / validValues.length;
         };
-
-        const terminalFiltered = filterData(filteredTerminal, 'terminal');
-        const shippingFiltered = filterData(filteredShipping, 'shipping');
-        const retailFiltered = filterData(filteredRetail, 'retail');
-
-        const priorTerminalFiltered = filterData(priorFilteredTerminal, 'terminal');
-        const priorShippingFiltered = filterData(priorFilteredShipping, 'shipping');
-        const priorRetailFiltered = filterData(priorFilteredRetail, 'retail');
 
         const getDateRangeFromData = (data) => {
             const dates = data.map(d => d.report_date).filter(Boolean).sort();
@@ -427,47 +412,37 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             return { start: dates[0], end: dates[dates.length - 1] };
         };
 
-        const dateRanges = {
-            terminal: getDateRangeFromData(terminalFiltered),
-            shipping: getDateRangeFromData(shippingFiltered),
-            retail: getDateRangeFromData(retailFiltered),
-        };
-        const priorDateRanges = {
-            terminal: getDateRangeFromData(priorTerminalFiltered),
-            shipping: getDateRangeFromData(priorShippingFiltered),
-            retail: getDateRangeFromData(priorRetailFiltered),
-        };
-        const reportCounts = {
-            terminal: terminalFiltered.length,
-            shipping: shippingFiltered.length,
-            retail: retailFiltered.length,
-        };
-
-        const allDates = [...terminalFiltered, ...shippingFiltered, ...retailFiltered]
-            .map(d => d.report_date).filter(Boolean).sort();
-        const overallDateRange = allDates.length > 0
-            ? { start: allDates[0], end: allDates[allDates.length - 1] }
-            : null;
-
         return {
-            terminal_avg: calcAvgPrice(terminalFiltered),
-            shipping_avg: calcAvgPrice(shippingFiltered),
-            retail_avg: calcAvgPrice(retailFiltered),
-            prior_terminal_avg: calcAvgPrice(priorTerminalFiltered),
-            prior_shipping_avg: calcAvgPrice(priorShippingFiltered),
-            prior_retail_avg: calcAvgPrice(priorRetailFiltered),
+            terminal_avg: calcAvgPrice(tParts.current),
+            shipping_avg: calcAvgPrice(sParts.current),
+            retail_avg: calcAvgPrice(rParts.current),
+            prior_terminal_avg: calcAvgPrice(tParts.prior),
+            prior_shipping_avg: calcAvgPrice(sParts.prior),
+            prior_retail_avg: calcAvgPrice(rParts.prior),
             is_shipping_estimated: false,
             is_retail_estimated: false,
             timeRange,
-            dateRanges,
-            priorDateRanges,
-            reportCounts,
-            overallDateRange,
+            dateRanges: {
+                terminal: getDateRangeFromData(tParts.current),
+                shipping: getDateRangeFromData(sParts.current),
+                retail: getDateRangeFromData(rParts.current),
+            },
+            priorDateRanges: {
+                terminal: getDateRangeFromData(tParts.prior),
+                shipping: getDateRangeFromData(sParts.prior),
+                retail: getDateRangeFromData(rParts.prior),
+            },
+            reportCounts: {
+                terminal: tParts.current.length,
+                shipping: sParts.current.length,
+                retail: rParts.current.length,
+            },
+            overallDateRange: getDateRangeFromData([...tParts.current, ...sParts.current, ...rParts.current]),
         };
     }, [
         priceData, terminalData, shippingData, retailData,
         timeRange, customStartDate, customEndDate,
-        organicOnly, selectedVariety,
+        organicOnly, selectedVariety, cpiAdjusted,
         selectedPackages, selectedOrigins, selectedDistricts,
     ]);
 
