@@ -51,7 +51,7 @@ export const getFilters = async (currentFilters = {}) => {
 
             while (hasMore) {
                 let query = supabase
-                    .from('CropPrice')
+                    .from('UnifiedCropPrice')
                     .select(field)
                     .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -180,7 +180,7 @@ export const getCommoditiesWithCompleteData = async () => {
         
         while (hasMore) {
             const { data, error } = await supabase
-                .from('CropPrice')
+                .from('UnifiedCropPrice')
                 .select('commodity, market_type')
                 .range(page * pageSize, (page + 1) * pageSize - 1);
             
@@ -252,11 +252,11 @@ export const getCommoditiesWithOrganicData = async () => {
     try {
         console.log('[DEBUG] Fetching commodities with organic data...');
         
-        // Query for distinct commodities where organic = 'yes' or 'Yes' or 'Y'
+        // Query for distinct commodities where organic = 'yes' (normalized by the pipeline)
         const { data, error } = await supabase
-            .from('CropPrice')
+            .from('UnifiedCropPrice')
             .select('commodity')
-            .or('organic.eq.yes,organic.eq.Yes,organic.eq.Y');
+            .eq('organic', 'yes');
         
         if (error) throw error;
         
@@ -289,7 +289,7 @@ export const getPrices = async (filters = {}, limit = 100, days = null) => {
         console.log('[DEBUG supabaseApi] getPrices called with:', { filters, limit, days });
         
         let query = supabase
-            .from('CropPrice')
+            .from('UnifiedCropPrice')
             .select('*')
             .order('report_date', { ascending: false })
             .limit(limit);
@@ -324,17 +324,17 @@ export const getPrices = async (filters = {}, limit = 100, days = null) => {
         }
 
         let { data, error } = await query;
-        
+
         console.log('[DEBUG supabaseApi] Query result - data length:', data?.length, 'error:', error);
-        
+
         // FALLBACK: If date filter returns no data, retry without date filter
         // This handles cases where database has stale data
         if (days && (!data || data.length === 0) && !error) {
             console.log('[DEBUG supabaseApi] No data in timeframe, falling back to latest available data');
-            
+
             // Rebuild query without date filter
             let fallbackQuery = supabase
-                .from('CropPrice')
+                .from('UnifiedCropPrice')
                 .select('*')
                 .order('report_date', { ascending: false })
                 .limit(limit);
@@ -634,8 +634,8 @@ export const getStats = async (commodity) => {
 export const getPriceSummary = async (options = {}) => {
     try {
         let query = supabase
-            .from('CropPrice')
-            .select('commodity, variety, low_price, high_price, market_tone_comments');
+            .from('UnifiedCropPrice')
+            .select('commodity, variety, price_avg, market_tone_comments');
 
         if (options.commodity) {
             query = query.eq('commodity', options.commodity);
@@ -653,26 +653,20 @@ export const getPriceSummary = async (options = {}) => {
                 groups[key] = {
                     commodity: row.commodity,
                     variety: row.variety,
-                    lowPrices: [],
-                    highPrices: [],
+                    prices: [],
                     marketTone: row.market_tone_comments,
                 };
             }
-            if (row.low_price) groups[key].lowPrices.push(row.low_price);
-            if (row.high_price) groups[key].highPrices.push(row.high_price);
+            if (row.price_avg != null) groups[key].prices.push(row.price_avg);
         });
 
         return Object.values(groups).map(g => ({
             commodity: g.commodity,
             variety: g.variety,
-            avg_low_price: g.lowPrices.length > 0
-                ? Math.round((g.lowPrices.reduce((a, b) => a + b, 0) / g.lowPrices.length) * 100) / 100
+            avg_price: g.prices.length > 0
+                ? Math.round((g.prices.reduce((a, b) => a + b, 0) / g.prices.length) * 100) / 100
                 : null,
-            avg_high_price: g.highPrices.length > 0
-                ? Math.round((g.highPrices.reduce((a, b) => a + b, 0) / g.highPrices.length) * 100) / 100
-                : null,
-            low_price_count: g.lowPrices.length,
-            high_price_count: g.highPrices.length,
+            price_count: g.prices.length,
             market_tone: g.marketTone,
         })).slice(0, 50);
     } catch (error) {

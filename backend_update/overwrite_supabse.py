@@ -1,6 +1,6 @@
 """
 Supabase upload module for SpecialtyCropDashboard.
-Uploads formatted data to CropPrice and UnifiedCropPrice tables in Supabase.
+Uploads formatted data to the UnifiedCropPrice table in Supabase.
 """
 
 import os
@@ -61,6 +61,41 @@ def clear_table(client: Client, table_name: str):
 
 import time
 
+
+def detect_new_columns(client: Client, table_name: str, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compare df columns against the existing Supabase table schema.
+    Prints ALTER TABLE SQL for any columns in df not yet in the table,
+    then returns a df with only the columns the table currently has.
+    """
+    try:
+        res = client.table(table_name).select('*').limit(1).execute()
+        if not res.data:
+            print(f"  ⚠️  {table_name} is empty — cannot infer schema, uploading all columns.")
+            return df
+
+        existing_cols = set(res.data[0].keys())
+        df_cols = set(df.columns)
+        new_cols = df_cols - existing_cols
+
+        if new_cols:
+            print(f"\n⚠️  New columns detected that are not yet in {table_name}:")
+            print("  Run the following SQL in your Supabase SQL editor, then re-run the pipeline:\n")
+            for col in sorted(new_cols):
+                print(f'    ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{col}" text;')
+            print()
+            # Strip unrecognized columns so the upload doesn't fail
+            df = df[[c for c in df.columns if c in existing_cols]]
+        else:
+            print(f"  ✔ No new columns — schema is up to date")
+
+        return df
+
+    except Exception as e:
+        print(f"  ⚠️  Could not detect schema for {table_name}: {e}")
+        return df
+
+
 def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_size: int = 200):
     """
     Upload a DataFrame to a Supabase table.
@@ -113,47 +148,41 @@ def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_si
     print(f"  ✔ Successfully uploaded {total_uploaded} records to {table_name}")
 
 
-def overwrite_supabase_data(crop_price_df: pd.DataFrame, unified_crop_price_df: pd.DataFrame):
+def overwrite_supabase_data(unified_crop_price_df: pd.DataFrame):
     """
-    Main function to overwrite all data in Supabase tables.
-    
+    Main function to overwrite all data in the UnifiedCropPrice Supabase table.
+
     Args:
-        crop_price_df: DataFrame formatted for CropPrice table
         unified_crop_price_df: DataFrame formatted for UnifiedCropPrice table
-    
+
     Returns:
         bool: True if successful, False otherwise
     """
-    # Filter out rows where organic is "N/A" (these are incomplete/header rows)
-    if 'organic' in crop_price_df.columns:
-        before_count = len(crop_price_df)
-        crop_price_df = crop_price_df[crop_price_df['organic'] != 'N/A']
-        filtered_count = before_count - len(crop_price_df)
-        if filtered_count > 0:
-            print(f"Filtered out {filtered_count} CropPrice rows with organic='N/A'")
-    
     if 'organic' in unified_crop_price_df.columns:
         before_count = len(unified_crop_price_df)
         unified_crop_price_df = unified_crop_price_df[unified_crop_price_df['organic'] != 'N/A']
         filtered_count = before_count - len(unified_crop_price_df)
         if filtered_count > 0:
             print(f"Filtered out {filtered_count} UnifiedCropPrice rows with organic='N/A'")
+
     try:
         client = get_supabase_client()
-        
+
+        # Detect new columns BEFORE clearing (table must have rows to infer schema)
+        print("\n=== Checking schema ===")
+        unified_crop_price_df = detect_new_columns(client, "UnifiedCropPrice", unified_crop_price_df)
+
         # Clear existing data
         print("\n=== Clearing existing data ===")
-        clear_table(client, "CropPrice")
         clear_table(client, "UnifiedCropPrice")
-        
+
         # Upload new data
         print("\n=== Uploading new data ===")
-        upload_dataframe(client, "CropPrice", crop_price_df)
         upload_dataframe(client, "UnifiedCropPrice", unified_crop_price_df)
-        
+
         print("\n✔ Supabase upload completed successfully!")
         return True
-        
+
     except Exception as e:
         print(f"\n✘ Supabase upload failed: {e}")
         return False

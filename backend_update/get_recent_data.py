@@ -133,25 +133,32 @@ def flatten_sections(api_response):
 # --------------------------------------------------
 
 def fetch_recent_data(slug_ids, days=60):
+    """
+    Fetch data from the USDA MARS API for the given slug IDs.
+
+    Args:
+        slug_ids: List of slug ID strings to fetch.
+        days: Number of past days to request. Pass None to fetch without any
+              date filter (returns the maximum available data from the API).
+    """
     all_reports = {}
-    
-    # Calculate date range
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
-    
-    start_str = start_date.strftime("%m/%d/%Y") # MARS API format MM/DD/YYYY
-    end_str = end_date.strftime("%m/%d/%Y")
-    
-    print(f"Fetching data from {start_str} to {end_str}...")
+
+    if days is not None:
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        start_str = start_date.strftime("%m/%d/%Y")
+        end_str = end_date.strftime("%m/%d/%Y")
+        print(f"Fetching data from {start_str} to {end_str}...")
+    else:
+        print("Fetching all available data (no date filter)...")
 
     for slug in slug_ids:
         print(f"\nProcessing Slug {slug}...")
-        
+
         url = f"{BASE_URL}/{slug}"
-        params = {
-            "q": f"published_date={start_str}:{end_str}",
-            "allSections": "true"
-        }
+        params = {"allSections": "true"}
+        if days is not None:
+            params["q"] = f"published_date={start_str}:{end_str}"
 
         data = safe_request(url, params)
         if not data:
@@ -159,16 +166,15 @@ def fetch_recent_data(slug_ids, days=60):
             continue
 
         df = flatten_sections(data)
-        
+
         if df is not None and not df.empty:
             print(f"  ✔ {slug}: {len(df)} rows found")
-            
-            # Save individual file
+
             filename = f"{slug}_recent.csv"
             out_path = os.path.join(OUTPUT_DIR, filename)
             df.to_csv(out_path, index=False)
             print(f"    Saved to {out_path}")
-            
+
             all_reports[slug] = df
         else:
             print(f"  No data rows found for {slug}")
@@ -176,6 +182,13 @@ def fetch_recent_data(slug_ids, days=60):
     return all_reports
 
 if __name__ == "__main__":
-    print("Starting recent data pull...")
-    fetch_recent_data(REQUIRED_SLUG_IDS)
+    import argparse
+    parser = argparse.ArgumentParser(description="Fetch USDA MARS data")
+    parser.add_argument("--all", action="store_true", help="Fetch without date filter (max rows)")
+    parser.add_argument("--days", type=int, default=60, help="Number of days to look back (default: 60)")
+    args = parser.parse_args()
+
+    days_arg = None if args.all else args.days
+    print("Starting data pull...")
+    fetch_recent_data(REQUIRED_SLUG_IDS, days=days_arg)
     print("\nDone.")

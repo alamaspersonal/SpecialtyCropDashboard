@@ -4,7 +4,7 @@ Daily Update Pipeline for SpecialtyCropDashboard.
 
 This script orchestrates the daily data update process:
 1. Fetches recent data from USDA API
-2. Formats data to match CropPrice and UnifiedCropPrice schemas
+2. Formats data to match the UnifiedCropPrice schema
 3. Uploads data to Supabase (overwriting existing data)
 
 Usage:
@@ -31,11 +31,11 @@ def main():
     print("=" * 60)
     
     # Step 1: Fetch recent data from USDA API
-    print("\n[Step 1/3] Fetching recent data from USDA API...")
+    print("\n[Step 1/3] Fetching all available data from USDA API (no date filter)...")
     print("-" * 40)
     
     try:
-        reports = fetch_recent_data(REQUIRED_SLUG_IDS)
+        reports = fetch_recent_data(REQUIRED_SLUG_IDS, days=None)
         if not reports:
             print("✘ No data fetched from API. Aborting.")
             return False
@@ -44,29 +44,28 @@ def main():
         print(f"✘ Error fetching data: {e}")
         return False
     
-    # Step 2: Format data for database tables
-    print("\n[Step 2/3] Formatting data for database tables...")
+    # Step 2: Format data for UnifiedCropPrice table
+    print("\n[Step 2/3] Formatting data for UnifiedCropPrice table...")
     print("-" * 40)
-    
+
     try:
-        crop_price_df, unified_crop_price_df = load_and_format_all_data()
-        
-        if crop_price_df.empty and unified_crop_price_df.empty:
+        unified_crop_price_df = load_and_format_all_data()
+
+        if unified_crop_price_df.empty:
             print("✘ No data formatted. Aborting upload.")
             return False
-        
-        print(f"✔ Formatted {len(crop_price_df)} CropPrice records")
+
         print(f"✔ Formatted {len(unified_crop_price_df)} UnifiedCropPrice records")
-        
+
     except Exception as e:
         print(f"✘ Error formatting data: {e}")
         return False
-    
+
     # Step 3: Upload to Supabase
     print("\n[Step 3/3] Uploading to Supabase...")
     print("-" * 40)
-    
-    success = overwrite_supabase_data(crop_price_df, unified_crop_price_df)
+
+    success = overwrite_supabase_data(unified_crop_price_df)
     
     if success:
         print("\n" + "=" * 60)

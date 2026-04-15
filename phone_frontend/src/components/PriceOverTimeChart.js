@@ -41,6 +41,90 @@ const SERIES_CONFIG = {
     shipping: { color: '#f97316', label: 'Shipping' },
 };
 
+// ── Gap threshold for line breaks (~1 month) ──
+const GAP_THRESHOLD_MS = 31 * 24 * 60 * 60 * 1000;
+
+/**
+ * Split Victory Native chart points into continuous segments, inserting a
+ * visual break wherever consecutive data points are more than ~1 month apart.
+ * @param {Array} pts   - points array from CartesianChart render fn
+ * @param {Array} data  - chartData array (same index order as pts)
+ */
+function splitByGap(pts, data) {
+    if (!pts || pts.length === 0) return [];
+    const segments = [];
+    let current = [];
+    let lastTs = null;
+
+    for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        if (!p || !Number.isFinite(p.y)) continue;
+        const ts = data[i]?.timestamp;
+        if (ts == null) continue;
+
+        if (lastTs !== null && ts - lastTs > GAP_THRESHOLD_MS) {
+            if (current.length > 0) {
+                segments.push(current);
+                current = [];
+            }
+        }
+        current.push(p);
+        lastTs = ts;
+    }
+    if (current.length > 0) segments.push(current);
+    return segments;
+}
+
+/**
+ * X-axis year labels rendered below the chart.
+ * Places each year number exactly where Jan 1 of that year falls in the data range,
+ * using the real plot bounds from CartesianChart's onChartBoundsChange.
+ * Shows nothing when the visible range contains no year boundaries (e.g. 3M view).
+ */
+function XAxisYearRow({ chartData, plotLeft, plotRight }) {
+    if (!chartData.length || plotRight <= plotLeft) return null;
+
+    const minTs = chartData[0].timestamp;
+    const maxTs = chartData[chartData.length - 1].timestamp;
+    if (maxTs <= minTs) return null;
+
+    const plotWidth = plotRight - plotLeft;
+    const minYear = new Date(minTs).getUTCFullYear();
+    const maxYear = new Date(maxTs).getUTCFullYear();
+
+    const yearTicks = [];
+    for (let y = minYear; y <= maxYear; y++) {
+        const ts = Date.UTC(y, 0, 1); // Jan 1 00:00 UTC
+        if (ts < minTs || ts > maxTs) continue;
+        const fraction = (ts - minTs) / (maxTs - minTs);
+        yearTicks.push({ year: y, x: plotLeft + fraction * plotWidth });
+    }
+
+    if (yearTicks.length === 0) return null;
+
+    return (
+        <View style={{ height: 18, position: 'relative' }}>
+            {yearTicks.map(({ year, x }) => (
+                <Text
+                    key={year}
+                    style={{
+                        position: 'absolute',
+                        left: Math.max(0, x - 20),
+                        top: 2,
+                        width: 40,
+                        textAlign: 'center',
+                        fontSize: 11,
+                        color: '#94a3b8',
+                        fontWeight: '600',
+                    }}
+                >
+                    {year}
+                </Text>
+            ))}
+        </View>
+    );
+}
+
 // Removed ChartTooltip (no longer used since we use touch overlay)
 
 // ── Filter Chip Row ──
@@ -153,6 +237,10 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         shipping: true,
     });
 
+    // ── Chart layout measurements (for custom x-axis row alignment) ──
+    const [containerWidth, setContainerWidth] = useState(0);
+    const [plotBounds, setPlotBounds] = useState({ left: 0, right: 0, top: 0, bottom: 0 });
+
     // ── Merge series into a single data array for CartesianChart ──
     // Victory Native needs a flat array with a shared xKey.
     const chartData = useMemo(() => {
@@ -252,6 +340,20 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         };
     }, [chartData, seriesVisibility, series]);
 
+    // ── Dynamic x-axis tick count based on selected range ──
+    const xTickCount = useMemo(() => {
+        if (selectedRange === '3M') return 3;
+        if (selectedRange === '6M') return 6;
+        if (selectedRange === '1Y') return 12;
+        if (selectedRange === '2Y') return 8;
+        // 'All': scale with actual data span
+        const months = Math.round((dateSpan.spanDays || 0) / 30);
+        if (months <= 6) return months;
+        if (months <= 12) return 6;
+        if (months <= 24) return 8;
+        return 10;
+    }, [selectedRange, dateSpan.spanDays]);
+
     // ── Format day label for display (YYYY-MM-DD → 'Mar 15, 2024') ──
     const formatMonthLabel = (dateStr) => {
         if (dateStr == null) return '';
@@ -267,9 +369,9 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         if (isNaN(d.getTime())) return '';
         const month = d.getUTCMonth();
         const year = d.getUTCFullYear();
-        // Show year for January as a major division, single letter otherwise
+        // Show full year for January (year boundary marker), 3-letter abbreviation otherwise
         if (month === 0) return String(year);
-        return ['J','F','M','A','M','J','J','A','S','O','N','D'][month];
+        return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month];
     };
 
     // ── Look up tooltip data by touch position ──
@@ -415,21 +517,21 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 <View
                     style={[styles.chartWrapper, { backgroundColor: '#0f172a', borderRadius: 16 }]}
                     onLayout={(e) => {
-                        chartLayoutRef.current = {
-                            x: e.nativeEvent.layout.x,
-                            width: e.nativeEvent.layout.width,
-                        };
+                        const w = e.nativeEvent.layout.width;
+                        chartLayoutRef.current = { x: e.nativeEvent.layout.x, width: w };
+                        setContainerWidth(w);
                     }}
                 >
                     <CartesianChart
                         data={chartData}
                         xKey="timestamp"
                         yKeys={activeYKeys}
+                        onChartBoundsChange={setPlotBounds}
                         axisOptions={{
                             font: robotoFont,
-                            formatXLabel,
+                            formatXLabel: () => '',
                             formatYLabel: (v) => `$${v}`,
-                            tickCount: { x: 6, y: 5 },
+                            tickCount: { x: xTickCount, y: 5 },
                             labelColor: '#94a3b8',
                             lineColor: '#334155',
                         }}
@@ -441,30 +543,39 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
 
                             return (
                                 <>
-                                    {seriesVisibility.retail && points.retail && (
-                                        <Line
-                                            points={points.retail.filter(p => Number.isFinite(p.y))}
-                                            color={SERIES_CONFIG.retail.color}
-                                            strokeWidth={2}
-                                            animate={{ type: 'timing', duration: 300 }}
-                                        />
-                                    )}
-                                    {seriesVisibility.terminal && points.terminal && (
-                                        <Line
-                                            points={points.terminal.filter(p => Number.isFinite(p.y))}
-                                            color={SERIES_CONFIG.terminal.color}
-                                            strokeWidth={2}
-                                            animate={{ type: 'timing', duration: 300 }}
-                                        />
-                                    )}
-                                    {seriesVisibility.shipping && points.shipping && (
-                                        <Line
-                                            points={points.shipping.filter(p => Number.isFinite(p.y))}
-                                            color={SERIES_CONFIG.shipping.color}
-                                            strokeWidth={2}
-                                            animate={{ type: 'timing', duration: 300 }}
-                                        />
-                                    )}
+                                    {seriesVisibility.retail && points.retail &&
+                                        splitByGap(points.retail, chartData).map((seg, i) => (
+                                            <Line
+                                                key={`retail-${i}`}
+                                                points={seg}
+                                                color={SERIES_CONFIG.retail.color}
+                                                strokeWidth={2}
+                                                animate={{ type: 'timing', duration: 300 }}
+                                            />
+                                        ))
+                                    }
+                                    {seriesVisibility.terminal && points.terminal &&
+                                        splitByGap(points.terminal, chartData).map((seg, i) => (
+                                            <Line
+                                                key={`terminal-${i}`}
+                                                points={seg}
+                                                color={SERIES_CONFIG.terminal.color}
+                                                strokeWidth={2}
+                                                animate={{ type: 'timing', duration: 300 }}
+                                            />
+                                        ))
+                                    }
+                                    {seriesVisibility.shipping && points.shipping &&
+                                        splitByGap(points.shipping, chartData).map((seg, i) => (
+                                            <Line
+                                                key={`shipping-${i}`}
+                                                points={seg}
+                                                color={SERIES_CONFIG.shipping.color}
+                                                strokeWidth={2}
+                                                animate={{ type: 'timing', duration: 300 }}
+                                            />
+                                        ))
+                                    }
                                 </>
                             );
                         }}
@@ -483,13 +594,34 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                                 const isRightEdge = xPos > SCREEN_WIDTH - 120;
                                 const dataRow = chartData[activeIndex];
                                 
+                                const monthLabel = dataRow?.date
+                                    ? new Date(dataRow.date + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+                                    : null;
+
                                 return (
                                     <>
                                         <View style={{
                                             position: 'absolute', left: xPos, top: 0, bottom: 0,
                                             width: 1, backgroundColor: colors.textSecondary, opacity: 0.5
                                         }} />
-                                        
+
+                                        {/* Month label anchored to bottom of crosshair line */}
+                                        {monthLabel && (
+                                            <View style={{
+                                                position: 'absolute',
+                                                bottom: 6,
+                                                left: isRightEdge ? xPos - 52 : xPos + 4,
+                                                paddingHorizontal: 5,
+                                                paddingVertical: 2,
+                                                borderRadius: 4,
+                                                backgroundColor: 'rgba(15,23,42,0.85)',
+                                            }}>
+                                                <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600' }}>
+                                                    {monthLabel}
+                                                </Text>
+                                            </View>
+                                        )}
+
                                         {/* Series Nodes */}
                                         {['retail', 'terminal', 'shipping'].map(key => {
                                             if (!seriesVisibility[key]) return null;
@@ -561,6 +693,15 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 <View style={{ flex: 1, minHeight: 260, justifyContent: 'center', alignItems: 'center' }}>
                     <Text style={{ color: colors.textMuted, fontSize: 14 }}>Enable a data series to view the chart</Text>
                 </View>
+            )}
+
+            {/* Year labels beneath the chart — only rendered when data crosses a year boundary */}
+            {activeYKeys.length > 0 && chartData.length >= 2 && plotBounds.right > plotBounds.left && (
+                <XAxisYearRow
+                    chartData={chartData}
+                    plotLeft={8 + plotBounds.left}
+                    plotRight={8 + plotBounds.right}
+                />
             )}
 
             {/* Static Filters Section (Always bounds correctly above the bottom sheet) */}
