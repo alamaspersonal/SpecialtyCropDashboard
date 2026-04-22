@@ -136,7 +136,9 @@ _CONSUMED_COLS = {
     # Mapped to organic (normalized)
     'organic',
     # Explicit price fields (mapped + used in price_avg)
-    'low_price', 'high_price', 'mostly_low_price', 'mostly_high_price', 'wtd_avg_price',
+    'low_price', 'high_price', 'mostly_low_price', 'mostly_high_price',
+    'wtd_avg_price', 'wtd_Avg_Price',  # USDA alternates casing across sections
+    'price_Range', 'price_range',       # retail range string, parsed into low/high
     # Additional explicit fields
     'market_location_name', 'item_size', 'slug_id', 'slug_name',
     # Internal / report metadata — not useful as row-level data
@@ -178,12 +180,28 @@ def format_for_unified_crop_price(df):
         variety = get_field(row, 'variety', 'var')
         package = get_field(row, 'package', 'pkg', 'size')
 
-        # Calculate price_avg for this single row
+        # Calculate price_avg for this single row.
+        # USDA alternates between wtd_avg_price and wtd_Avg_Price across report sections.
         prices = []
-        for field in ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price', 'wtd_avg_price']:
+        for field in ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price',
+                      'wtd_avg_price', 'wtd_Avg_Price']:
             val = clean_price(row.get(field))
             if val is not None:
                 prices.append(val)
+
+        # Retail reports store a price range string (e.g. '2.99-3.49' or '2.49').
+        # Parse it to extract low/high and include in the average.
+        price_range_str = row.get('price_Range') or row.get('price_range')
+        parsed_low, parsed_high = None, None
+        if price_range_str and pd.notna(price_range_str):
+            parts = str(price_range_str).strip().split('-')
+            parsed_low = clean_price(parts[0])
+            parsed_high = clean_price(parts[-1]) if len(parts) > 1 else parsed_low
+            if parsed_low is not None:
+                prices.append(parsed_low)
+            if parsed_high is not None and parsed_high != parsed_low:
+                prices.append(parsed_high)
+
         price_avg = round(sum(prices) / len(prices), 2) if prices else None
 
         # For retail, origin is often stored in the 'region' column instead
@@ -210,9 +228,9 @@ def format_for_unified_crop_price(df):
             'market_tone_comments': row.get('market_tone_comments') if pd.notna(row.get('market_tone_comments')) else None,
             'origin': to_title_case(origin),
             'price_avg': price_avg,
-            # Individual price fields
-            'low_price': clean_price(row.get('low_price')),
-            'high_price': clean_price(row.get('high_price')),
+            # Individual price fields — fall back to parsed price_Range for retail rows
+            'low_price': clean_price(row.get('low_price')) or parsed_low,
+            'high_price': clean_price(row.get('high_price')) or parsed_high,
             'mostly_low_price': clean_price(row.get('mostly_low_price')),
             'mostly_high_price': clean_price(row.get('mostly_high_price')),
             'wtd_avg_price': clean_price(row.get('wtd_avg_price')),
