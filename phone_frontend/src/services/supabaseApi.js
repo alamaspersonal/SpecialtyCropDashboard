@@ -519,8 +519,8 @@ export const getStats = async (commodity) => {
         // Calculate Average helper
         const calcAvg = (rows, type) => {
             const valid = rows
-                .filter(r => r.market_type.includes(type))
-                .map(r => r.price_retail || r.price_max) // Prioritize retail, fallback to max
+                .filter(r => r.market_type?.includes(type))
+                .map(r => r.price_retail || r.price_max)
                 .filter(v => v !== null && v !== undefined);
             return valid.length > 0
                 ? valid.reduce((a, b) => a + b, 0) / valid.length
@@ -538,7 +538,7 @@ export const getStats = async (commodity) => {
         const prevRetail = calcAvg(prevWeekData, 'Retail');
 
         // Calculate % Changes
-        const calcPct = (curr, prev) => prev ? ((curr - prev) / prev) * 100 : 0;
+        const calcPct = (curr, prev) => (prev && curr != null) ? ((curr - prev) / prev) * 100 : null;
 
         return {
             date: latestDateStr,

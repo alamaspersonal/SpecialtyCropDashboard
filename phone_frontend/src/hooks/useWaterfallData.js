@@ -113,7 +113,7 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             }
         };
         fetchDateBounds();
-    }, [JSON.stringify(filters)]);
+    }, [filters.commodity, filters.district]);
 
     // ── Fetch price data ──
     useEffect(() => {
@@ -156,7 +156,7 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
                 // Extract varieties
                 const allVarieties = [...new Set(data.map(d => d.variety).filter(Boolean))].sort();
                 setVarietyOptions(allVarieties);
-                setHasOrganicData(false);
+                setHasOrganicData(data.some(d => d.organic === 'yes'));
 
                 // Extract initial package options
                 setPackageOptions({
@@ -197,7 +197,7 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             }
         };
         fetchPrices();
-    }, [JSON.stringify(filters), timeRange, customStartDate?.toISOString(), customEndDate?.toISOString()]);
+    }, [filters.commodity, filters.district, timeRange, customStartDate?.toISOString(), customEndDate?.toISOString()]);
 
     // ── Cascading filter logic ──
     useEffect(() => {

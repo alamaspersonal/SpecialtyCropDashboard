@@ -228,7 +228,7 @@ export default function usePriceTimeSeries(filters, options = {}) {
     useEffect(() => {
         const keys = availableRanges.map(r => r.key);
         if (!keys.includes(selectedRange)) setSelectedRange(keys[0] || 'All');
-    }, [availableRanges, selectedRange]);
+    }, [availableRanges]); // intentionally omit selectedRange — only reset when available ranges change
 
     // ── Series: apply per-type package/origin filters after partitioning ──
     const series = useMemo(() => {
