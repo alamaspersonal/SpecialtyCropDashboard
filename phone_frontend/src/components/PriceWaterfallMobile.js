@@ -270,20 +270,11 @@ const PriceBlock = ({
     );
 };
 
-export default function PriceWaterfallMobile({ stats, costs, packageData, actions, weightData, originData, districtData, dateRanges, reportCounts, cpiAdjusted }) {
+export default function PriceWaterfallMobile({ stats, packageData, actions, weightData, originData, districtData, dateRanges, reportCounts, cpiAdjusted }) {
     if (!stats) return null;
 
     // Helper to safely format numbers
     const formatPrice = (val) => (val ?? 0).toFixed(2);
-
-    // Calculate total user cost
-    const totalUserCost = Object.values(costs || {}).reduce((sum, val) => {
-        const num = parseFloat(val) || 0;
-        return sum + num;
-    }, 0);
-
-    // Check if user has configured any costs (not just defaults)
-    const hasConfiguredCosts = totalUserCost > 0;
 
     return (
         <View style={styles.container}>
@@ -357,30 +348,6 @@ export default function PriceWaterfallMobile({ stats, costs, packageData, action
                 reportCount={reportCounts?.shipping}
                 cpiAdjusted={cpiAdjusted}
             />
-
-            {/* Your Cost Block - shown when costs are configured */}
-            {hasConfiguredCosts && (
-                <View style={styles.blockRow}>
-                    <View style={[styles.card, styles.yourCostCard]}>
-                        <Text style={styles.yourCostLabel}>YOUR COST</Text>
-                        <View style={styles.priceContainer}>
-                            <Text style={styles.yourCostSubLabel}>Total Costs</Text>
-                            <Text style={styles.yourCostPrice}>${formatPrice(totalUserCost)}</Text>
-                        </View>
-                        <View style={styles.costBreakdown}>
-                            {Object.entries(costs || {}).map(([key, val]) => {
-                                const numVal = parseFloat(val) || 0;
-                                if (numVal === 0) return null;
-                                return (
-                                    <Text key={key} style={styles.costItem}>
-                                        {key.charAt(0).toUpperCase() + key.slice(1)}: ${numVal.toFixed(2)}
-                                    </Text>
-                                );
-                            })}
-                        </View>
-                    </View>
-                </View>
-            )}
 
         </View>
     );
@@ -557,43 +524,4 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
 
-    // Your Cost Block Styles
-    yourCostCard: {
-        backgroundColor: '#22c55e',
-        borderWidth: 2,
-        borderColor: '#16a34a',
-    },
-    yourCostLabel: {
-        fontWeight: '600',
-        marginBottom: 8,
-        fontSize: 11,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        color: 'white',
-        opacity: 0.9,
-    },
-    yourCostSubLabel: {
-        fontSize: 10,
-        fontWeight: '500',
-        marginBottom: 2,
-        color: 'rgba(255,255,255,0.8)',
-    },
-    yourCostPrice: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: 'white',
-    },
-    costBreakdown: {
-        marginTop: 8,
-        paddingTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.3)',
-        width: '100%',
-    },
-    costItem: {
-        fontSize: 11,
-        color: 'rgba(255,255,255,0.9)',
-        textAlign: 'center',
-        marginBottom: 2,
-    },
 });

@@ -6,20 +6,22 @@ Uploads formatted data to the UnifiedCropPrice table in Supabase.
 import os
 import pandas as pd
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase import create_client, Client, ClientOptions
 
 
 def get_supabase_client() -> Client:
-    """Create and return a Supabase client."""
-    # Load environment variables (from .env file if present, otherwise from system env)
+    """Create and return a Supabase client with extended timeouts."""
     load_dotenv()
-    
+
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_SECRET_KEY")
-    
+
     if not supabase_url or not supabase_key:
         raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY must be set in .env")
-    return create_client(supabase_url, supabase_key)
+
+    # Extend the PostgREST timeout to 5 minutes to survive large batch uploads.
+    options = ClientOptions(postgrest_client_timeout=300)
+    return create_client(supabase_url, supabase_key, options=options)
 
 
 def clear_table(client: Client, table_name: str):
@@ -96,56 +98,62 @@ def detect_new_columns(client: Client, table_name: str, df: pd.DataFrame) -> pd.
         return df
 
 
-def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_size: int = 200):
+def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_size: int = 100):
     """
-    Upload a DataFrame to a Supabase table.
-    
+    Upload a DataFrame to a Supabase table in batches with retry/backoff.
+
     Args:
         client: Supabase client
         table_name: Name of the table to upload to
         df: DataFrame with data to upload
-        batch_size: Number of records to upload per batch
+        batch_size: Number of records per batch (default 100 to stay well within timeouts)
     """
     if df.empty:
         print(f"No data to upload to {table_name}")
         return
-    
-    # Replace all NaN, NaT, and None values with None for JSON compatibility
+
+    # Replace all NaN / NaT with None for JSON compatibility
     df_clean = df.copy()
     df_clean = df_clean.replace({pd.NA: None, pd.NaT: None})
     df_clean = df_clean.where(pd.notna(df_clean), None)
-    
-    # Convert to records and sanitize any remaining float NaN values
+
     records = []
     for record in df_clean.to_dict('records'):
         clean_record = {}
         for key, value in record.items():
-            # Handle float NaN values
-            if isinstance(value, float) and (pd.isna(value) or value != value):  # value != value checks for NaN
+            if isinstance(value, float) and (pd.isna(value) or value != value):
                 clean_record[key] = None
-            # Convert price_avg to accurately keep decimals (if DB column supports numeric/float)
             elif key == 'price_avg' and value is not None:
                 clean_record[key] = round(float(value), 2)
             else:
                 clean_record[key] = value
         records.append(clean_record)
-    
-    print(f"Uploading {len(records)} records to {table_name}...")
-    
-    # Upload in batches to avoid timeouts
+
+    print(f"Uploading {len(records):,} records to {table_name} (batch_size={batch_size})...")
+
     total_uploaded = 0
+    max_retries = 3
+
     for i in range(0, len(records), batch_size):
         batch = records[i:i + batch_size]
-        try:
-            client.table(table_name).insert(batch).execute()
-            total_uploaded += len(batch)
-            print(f"  Progress: {total_uploaded}/{len(records)} records uploaded")
-            time.sleep(0.1)
-        except Exception as e:
-            print(f"  ✘ Error uploading batch to {table_name}: {e}")
-            raise
-    
-    print(f"  ✔ Successfully uploaded {total_uploaded} records to {table_name}")
+        for attempt in range(1, max_retries + 1):
+            try:
+                client.table(table_name).insert(batch).execute()
+                total_uploaded += len(batch)
+                if total_uploaded % 5000 == 0 or total_uploaded == len(records):
+                    print(f"  Progress: {total_uploaded:,}/{len(records):,} records uploaded")
+                time.sleep(0.05)
+                break  # success — move to next batch
+            except Exception as e:
+                wait = attempt * 5
+                print(f"  ⚠ Batch {i//batch_size + 1} attempt {attempt} failed: {e}. "
+                      f"Retrying in {wait}s...")
+                time.sleep(wait)
+                if attempt == max_retries:
+                    print(f"  ✘ Batch permanently failed after {max_retries} attempts.")
+                    raise
+
+    print(f"  ✔ Successfully uploaded {total_uploaded:,} records to {table_name}")
 
 
 def overwrite_supabase_data(unified_crop_price_df: pd.DataFrame):

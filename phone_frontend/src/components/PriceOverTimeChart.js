@@ -211,7 +211,7 @@ function FilterChipRow({ options, selectedValue, onSelect, label, colors, enable
 // Dependencies removed as they are housed in ExpandableBottomSheet.js
 
 // ── Main Component ──────────────────────────────────────────────
-export default function PriceOverTimeChart({ filters, organicOnly, selectedVariety, varietyOptions, onSelectVariety }) {
+export default function PriceOverTimeChart({ filters, organicOnly }) {
     const { colors, isDark } = useTheme();
     const robotoFont = useFont(require('../../assets/fonts/Roboto-Regular.ttf'), 11);
 
@@ -221,14 +221,46 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
         loading,
         error,
         filterOptions,
-        selectedPackage,
-        selectedOrigin,
+        selectedVarieties,
+        selectedPackages,
+        selectedOrigins,
         selectedRange,
         availableRanges,
         dateSpan,
         actions,
         cpiActive,
-    } = usePriceTimeSeries(filters, { organicOnly, selectedVariety, cpiAdjusted: true });
+        seriesUnit,
+    } = usePriceTimeSeries(filters, { organicOnly, cpiAdjusted: true });
+
+    // Dominant unit across all visible series (for chart-wide label)
+    const dominantUnit = useMemo(() => {
+        const counts = { lb: 0, unit: 0, package: 0 };
+        for (const key of ['retail', 'terminal', 'shipping']) {
+            if (series[key].length > 0) counts[seriesUnit[key]]++;
+        }
+        if (counts.lb >= counts.unit && counts.lb > 0) return 'lb';
+        if (counts.unit > 0) return 'unit';
+        return 'package';
+    }, [series, seriesUnit]);
+
+    const unitLabel = dominantUnit === 'lb' ? '/lb' : dominantUnit === 'unit' ? '/unit' : '/pkg';
+
+    // ── Filter modal state ──
+    const [showFiltersModal, setShowFiltersModal] = useState(false);
+    const [activePicker, setActivePicker] = useState(null); // { label, options, current, enabledOptions, onSelect }
+
+    const activeFilterCount =
+        Object.values(selectedVarieties).filter(Boolean).length +
+        Object.values(selectedPackages).filter(Boolean).length +
+        Object.values(selectedOrigins).filter(Boolean).length;
+
+    const clearAllFilters = () => {
+        ['retail', 'terminal', 'shipping'].forEach(type => {
+            actions.setSelectedVariety(type, '');
+            actions.setSelectedPackage(type, '');
+            actions.setSelectedOrigin(type, '');
+        });
+    };
 
     // ── Series visibility toggles (local state) ──
     const [seriesVisibility, setSeriesVisibility] = useState({
@@ -506,11 +538,9 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 ))}
             </View>
 
-            {cpiActive && (
-                <Text style={{ fontSize: 10, color: colors.textMuted, textAlign: 'center', marginBottom: 6, opacity: 0.75 }}>
-                    Prices adjusted for inflation (Feb 2026 $)
-                </Text>
-            )}
+            <Text style={{ fontSize: 10, color: colors.textMuted, textAlign: 'center', marginBottom: 6, opacity: 0.8 }}>
+                {`Price${unitLabel}`}{cpiActive ? ' · Inflation-adjusted' : ''}
+            </Text>
 
             {/* Chart with touch overlay for tooltip */}
             {activeYKeys.length > 0 ? (
@@ -530,7 +560,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                         axisOptions={{
                             font: robotoFont,
                             formatXLabel: () => '',
-                            formatYLabel: (v) => `$${v}`,
+                            formatYLabel: (v) => `$${Number(v).toFixed(2)}`,
                             tickCount: { x: xTickCount, y: 5 },
                             labelColor: '#94a3b8',
                             lineColor: '#334155',
@@ -641,7 +671,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                                         {/* Floating Badge */}
                                         <View style={{
                                             position: 'absolute',
-                                            left: isRightEdge ? xPos - 85 : xPos + 8,
+                                            left: isRightEdge ? xPos - 90 : xPos + 8,
                                             top: 20,
                                             backgroundColor: colors.surfaceElevated,
                                             paddingHorizontal: 8, paddingVertical: 6,
@@ -651,17 +681,17 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                                         }}>
                                             {seriesVisibility.retail && dataRow.retail != null && (
                                                 <Text style={{ fontSize: 10, fontWeight: '700', color: SERIES_CONFIG.retail.color, marginBottom: 2 }}>
-                                                    Ret: ${dataRow.retail.toFixed(2)}
+                                                    {`Ret: $${dataRow.retail.toFixed(2)}${unitLabel}`}
                                                 </Text>
                                             )}
                                             {seriesVisibility.terminal && dataRow.terminal != null && (
                                                 <Text style={{ fontSize: 10, fontWeight: '700', color: SERIES_CONFIG.terminal.color, marginBottom: 2 }}>
-                                                    Ter: ${dataRow.terminal.toFixed(2)}
+                                                    {`Ter: $${dataRow.terminal.toFixed(2)}${unitLabel}`}
                                                 </Text>
                                             )}
                                             {seriesVisibility.shipping && dataRow.shipping != null && (
                                                 <Text style={{ fontSize: 10, fontWeight: '700', color: SERIES_CONFIG.shipping.color }}>
-                                                    Shi: ${dataRow.shipping.toFixed(2)}
+                                                    {`Shi: $${dataRow.shipping.toFixed(2)}${unitLabel}`}
                                                 </Text>
                                             )}
                                         </View>
@@ -704,80 +734,188 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 />
             )}
 
-            {/* Static Filters Section (Always bounds correctly above the bottom sheet) */}
+            {/* Series toggles + Filters button */}
             <View style={styles.filtersBottomArea}>
-                {/* Series Toggle Pills */}
                 <View style={styles.toggleRow}>
-                {Object.entries(SERIES_CONFIG).map(([key, config]) => {
-                    if (!seriesHasData[key]) return null;
-                    const isActive = seriesVisibility[key];
-                    return (
-                        <TouchableOpacity
-                            key={key}
-                            style={[
-                                styles.togglePill,
-                                {
-                                    backgroundColor: isActive ? config.color + '20' : colors.background,
-                                    borderColor: isActive ? config.color : colors.border,
-                                },
-                            ]}
-                            onPress={() => toggleSeries(key)}
-                            activeOpacity={0.7}
-                        >
-                            <View style={[styles.toggleDot, { backgroundColor: isActive ? config.color : colors.textMuted }]} />
-                            <Text style={[
-                                styles.toggleLabel,
-                                { color: isActive ? config.color : colors.textMuted },
-                            ]}>
-                                {config.label}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
+                    {Object.entries(SERIES_CONFIG).map(([key, config]) => {
+                        if (!seriesHasData[key]) return null;
+                        const isActive = seriesVisibility[key];
+                        return (
+                            <TouchableOpacity
+                                key={key}
+                                style={[
+                                    styles.togglePill,
+                                    {
+                                        backgroundColor: isActive ? config.color + '20' : colors.background,
+                                        borderColor: isActive ? config.color : colors.border,
+                                    },
+                                ]}
+                                onPress={() => toggleSeries(key)}
+                                activeOpacity={0.7}
+                            >
+                                <View style={[styles.toggleDot, { backgroundColor: isActive ? config.color : colors.textMuted }]} />
+                                <Text style={[styles.toggleLabel, { color: isActive ? config.color : colors.textMuted }]}>
+                                    {config.label}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+
+                    {/* Filters button */}
+                    <TouchableOpacity
+                        style={[
+                            styles.togglePill,
+                            {
+                                backgroundColor: activeFilterCount > 0 ? colors.accent + '20' : colors.background,
+                                borderColor: activeFilterCount > 0 ? colors.accent : colors.border,
+                            },
+                        ]}
+                        onPress={() => setShowFiltersModal(true)}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="options-outline" size={13} color={activeFilterCount > 0 ? colors.accent : colors.textMuted} />
+                        <Text style={[styles.toggleLabel, { color: activeFilterCount > 0 ? colors.accent : colors.textMuted }]}>
+                            Filters
+                        </Text>
+                        {activeFilterCount > 0 && (
+                            <View style={[styles.filterBadge, { backgroundColor: colors.accent }]}>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: '#0f172a' }}>{activeFilterCount}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </View>
             </View>
 
-            {/* Fixed Filter Chips (Variety, Package, Origin) stuck under the chart */}
-            <View style={[styles.filterChipsRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 }]}>
-                {(selectedVariety || selectedPackage || selectedOrigin) && (
-                    <TouchableOpacity 
-                        style={{ alignSelf: 'flex-end', marginBottom: 4, paddingHorizontal: 12 }}
-                        onPress={() => {
-                            if (onSelectVariety) onSelectVariety('');
-                            if (actions.setSelectedPackage) actions.setSelectedPackage('');
-                            if (actions.setSelectedOrigin) actions.setSelectedOrigin('');
-                        }}
-                    >
-                        <Text style={{ color: colors.accent, fontWeight: '600', fontSize: 12 }}>Clear Filters</Text>
-                    </TouchableOpacity>
-                )}
-                {varietyOptions && varietyOptions.length > 0 && onSelectVariety && (
-                    <FilterChipRow
-                        label="Variety"
-                        options={varietyOptions}
-                        selectedValue={selectedVariety}
-                        onSelect={onSelectVariety}
-                        colors={colors}
-                    />
-                )}
-                <FilterChipRow
-                    label="Package"
-                    options={filterOptions.packages}
-                    selectedValue={selectedPackage}
-                    onSelect={actions.setSelectedPackage}
-                    colors={colors}
-                    enabledOptions={filterOptions.packagesWithData}
-                />
-                <FilterChipRow
-                    label="Origin"
-                    options={filterOptions.origins}
-                    selectedValue={selectedOrigin}
-                    onSelect={actions.setSelectedOrigin}
-                    colors={colors}
-                    enabledOptions={filterOptions.originsWithData}
-                />
-            </View>
-            </View>
-            </View>
+            {/* Filters Modal */}
+            <Modal
+                visible={showFiltersModal}
+                animationType="slide"
+                transparent
+                onRequestClose={() => { setShowFiltersModal(false); setActivePicker(null); }}
+            >
+                <View style={styles.filtersModalOverlay}>
+                    <View style={[styles.filtersModalSheet, { backgroundColor: colors.surface }]}>
+                        {/* Header */}
+                        <View style={[styles.filtersModalHeader, { borderBottomColor: colors.border }]}>
+                            {activePicker ? (
+                                <TouchableOpacity
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                                    onPress={() => setActivePicker(null)}
+                                >
+                                    <Ionicons name="chevron-back" size={22} color={colors.text} />
+                                    <Text style={[styles.filtersModalTitle, { color: colors.text }]}>{activePicker.label}</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <Text style={[styles.filtersModalTitle, { color: colors.text }]}>Chart Filters</Text>
+                            )}
+                            <TouchableOpacity onPress={() => { setShowFiltersModal(false); setActivePicker(null); }}>
+                                <Ionicons name="close" size={24} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {activePicker ? (
+                            /* Picker view — list of selectable options */
+                            <FlatList
+                                data={['', ...activePicker.options]}
+                                keyExtractor={item => item || '__all__'}
+                                renderItem={({ item }) => {
+                                    const isSelected = item === activePicker.current || (!item && !activePicker.current);
+                                    const isEnabled = !item || !activePicker.enabledOptions || activePicker.enabledOptions.has(item);
+                                    return (
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.pickerItem,
+                                                { borderBottomColor: colors.border },
+                                                isSelected && { backgroundColor: colors.accent + '18' },
+                                                !isEnabled && { opacity: 0.38 },
+                                            ]}
+                                            onPress={() => {
+                                                if (!isEnabled) return;
+                                                activePicker.onSelect(item);
+                                                setActivePicker(null);
+                                            }}
+                                            activeOpacity={isEnabled ? 0.7 : 1}
+                                        >
+                                            <Text style={[
+                                                styles.pickerItemText,
+                                                { color: isEnabled ? colors.text : colors.textMuted },
+                                                isSelected && { color: colors.accent, fontWeight: '700' },
+                                            ]}>
+                                                {item || 'All'}
+                                            </Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                {!isEnabled && (
+                                                    <Text style={{ fontSize: 11, color: colors.textMuted, fontStyle: 'italic' }}>No data</Text>
+                                                )}
+                                                {isSelected && <Ionicons name="checkmark" size={18} color={colors.accent} />}
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                }}
+                            />
+                        ) : (
+                            /* Main filters view — series sections */
+                            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
+                                {Object.entries(SERIES_CONFIG).map(([key, config]) => {
+                                    if (!seriesHasData[key]) return null;
+                                    const typeOpts = filterOptions[key] || {};
+                                    const hasVar = typeOpts.varieties?.length > 0;
+                                    const hasPkg = typeOpts.packages?.length > 0;
+                                    const hasOrg = typeOpts.origins?.length > 0;
+                                    if (!hasVar && !hasPkg && !hasOrg) return null;
+
+                                    const makeRow = (label, current, options, enabledOptions, onSelect) => (
+                                        <TouchableOpacity
+                                            key={label}
+                                            style={[styles.filterOptionRow, { borderBottomColor: colors.border }]}
+                                            onPress={() => setActivePicker({ label: `${config.label} · ${label}`, options, current, enabledOptions, onSelect })}
+                                        >
+                                            <Text style={[styles.filterOptionLabel, { color: colors.textSecondary }]}>{label}</Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                <Text style={[styles.filterOptionValue, { color: current ? colors.accent : colors.textMuted }]} numberOfLines={1}>
+                                                    {current || 'All'}
+                                                </Text>
+                                                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+
+                                    return (
+                                        <View key={key}>
+                                            <View style={[styles.filterSeriesHeader, { borderBottomColor: config.color + '40' }]}>
+                                                <View style={[styles.filterDot, { backgroundColor: config.color, width: 10, height: 10, borderRadius: 5 }]} />
+                                                <Text style={[styles.filterSeriesTitle, { color: config.color }]}>{config.label}</Text>
+                                            </View>
+                                            {hasVar && makeRow('Variety', selectedVarieties[key], typeOpts.varieties, null, (val) => actions.setSelectedVariety(key, val))}
+                                            {hasPkg && makeRow('Package', selectedPackages[key], typeOpts.packages, typeOpts.packagesWithData, (val) => actions.setSelectedPackage(key, val))}
+                                            {hasOrg && makeRow('Origin',  selectedOrigins[key],  typeOpts.origins,  typeOpts.originsWithData,  (val) => actions.setSelectedOrigin(key, val))}
+                                        </View>
+                                    );
+                                })}
+                            </ScrollView>
+                        )}
+
+                        {/* Footer */}
+                        {!activePicker && (
+                            <View style={[styles.filtersModalFooter, { borderTopColor: colors.border }]}>
+                                <TouchableOpacity
+                                    style={[styles.filtersModalClearBtn, { borderColor: colors.border }]}
+                                    onPress={clearAllFilters}
+                                >
+                                    <Text style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 15 }}>Clear All</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.filtersModalDoneBtn, { backgroundColor: colors.accent }]}
+                                    onPress={() => setShowFiltersModal(false)}
+                                >
+                                    <Text style={{ color: '#0f172a', fontWeight: '700', fontSize: 15 }}>Done</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </Modal>
 
             {/* Custom Swipeable Bottom Sheet */}
             <ExpandableBottomSheet
@@ -786,6 +924,7 @@ export default function PriceOverTimeChart({ filters, organicOnly, selectedVarie
                 seriesConfig={SERIES_CONFIG}
                 colors={colors}
                 formatMonthLabel={formatMonthLabel}
+                unitLabel={unitLabel}
             />
         </View>
     );
@@ -911,14 +1050,109 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 
-    // Filter Chips
-    filterChipsRow: {
-        flexDirection: 'row',
-        gap: 8,
-        paddingHorizontal: 16,
-        paddingBottom: 14,
-        flexWrap: 'wrap',
+    // Filter badge on Filters button
+    filterBadge: {
+        minWidth: 16,
+        height: 16,
+        borderRadius: 8,
+        paddingHorizontal: 3,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
+
+    // Filters modal
+    filtersModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    filtersModalSheet: {
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        maxHeight: '82%',
+        paddingBottom: 32,
+    },
+    filtersModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+    },
+    filtersModalTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+    },
+    filterSeriesHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+    },
+    filterDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    filterSeriesTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.6,
+    },
+    filterOptionRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 15,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    filterOptionLabel: {
+        fontSize: 15,
+        fontWeight: '500',
+    },
+    filterOptionValue: {
+        fontSize: 14,
+        fontWeight: '500',
+        maxWidth: 160,
+    },
+    pickerItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    pickerItemText: {
+        fontSize: 15,
+        flex: 1,
+    },
+    filtersModalFooter: {
+        flexDirection: 'row',
+        gap: 12,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        borderTopWidth: 1,
+    },
+    filtersModalClearBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        alignItems: 'center',
+    },
+    filtersModalDoneBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+
     filterChip: {
         flexDirection: 'row',
         alignItems: 'center',

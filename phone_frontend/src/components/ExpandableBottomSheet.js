@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ── Detailed Modal Metric Card (Extracted from PriceOverTimeChart) ──
-function DetailedMetricCard({ label, color, price, meta, colors }) {
+function DetailedMetricCard({ label, color, price, meta, colors, unitLabel }) {
     if (!meta) return null;
     
     const pkgEntries = Object.entries(meta.packagesCount || {}).sort((a, b) => b[1] - a[1]);
@@ -35,7 +35,7 @@ function DetailedMetricCard({ label, color, price, meta, colors }) {
                     <Text style={{ fontSize: 16, fontWeight: '700', color: '#f8fafc' }}>{label}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: color }}>${Number(price).toFixed(2)}</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: color }}>{`$${Number(price).toFixed(2)}${unitLabel || ''}`}</Text>
                     <Text style={{ fontSize: 12, color: '#94a3b8' }}>{meta.pointCount} readings</Text>
                 </View>
             </View>
@@ -53,7 +53,8 @@ export default function ExpandableBottomSheet({
     seriesVisibility,
     seriesConfig,
     colors,
-    formatMonthLabel
+    formatMonthLabel,
+    unitLabel = '',
 }) {
     // 80px shows the drag handle + date + 1 line of metrics
     const MINIMIZED_HEIGHT = 80;
@@ -129,7 +130,7 @@ export default function ExpandableBottomSheet({
     }
 
     if (selectedKey) {
-        primaryPriceStr = `${seriesConfig[selectedKey].label}: $${Number(displayTooltip[selectedKey]).toFixed(2)}`;
+        primaryPriceStr = `${seriesConfig[selectedKey].label}: $${Number(displayTooltip[selectedKey]).toFixed(2)}${unitLabel}`;
         primaryReadingStr = `${displayTooltip[`${selectedKey}Meta`]?.pointCount || 0} readings`;
         primaryColor = seriesConfig[selectedKey].color;
     }
@@ -166,6 +167,7 @@ export default function ExpandableBottomSheet({
                                 price={displayTooltip[key]}
                                 meta={displayTooltip[`${key}Meta`]}
                                 colors={colors}
+                                unitLabel={unitLabel}
                             />
                         );
                     }

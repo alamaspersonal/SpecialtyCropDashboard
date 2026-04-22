@@ -6,7 +6,6 @@ import {
     TouchableOpacity,
     ScrollView,
     Modal,
-    TextInput,
     ActivityIndicator,
     Platform
 } from 'react-native';
@@ -14,7 +13,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import PriceWaterfallMobile from '../components/PriceWaterfallMobile';
-import ComparisonContainer from '../components/ComparisonContainer';
 import PriceOverTimeChart from '../components/PriceOverTimeChart';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../services/favorites';
@@ -29,8 +27,7 @@ export default function DashboardScreen({ route, navigation }) {
 
     // ── UI-level state (not data-engine) ──
     const [isFavorite, setIsFavorite] = useState(false);
-    const [viewMode, setViewMode] = useState('waterfall'); // 'waterfall' | 'chart' | 'compare'
-    const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+    const [viewMode, setViewMode] = useState('waterfall'); // 'waterfall' | 'chart'
 
     // AI Insights State
     const [aiInsights, setAiInsights] = useState('');
@@ -51,15 +48,6 @@ export default function DashboardScreen({ route, navigation }) {
     const [organicOnly, setOrganicOnly] = useState(initialOrganicOnly || false);
     const [selectedVariety, setSelectedVariety] = useState(filters.variety || '');
     const [showVarietyModal, setShowVarietyModal] = useState(false);
-
-    // Costs State
-    const [showCostModal, setShowCostModal] = useState(false);
-    const [costs, setCosts] = useState({
-        packing: '2.50',
-        cooling: '0.80',
-        inspection: '0.15',
-        commission: '0.50'
-    });
 
 
     // ══════════════════════════════════════════════════════════════
@@ -189,8 +177,8 @@ export default function DashboardScreen({ route, navigation }) {
     };
 
     const ScrollOrView = viewMode === 'chart' ? View : ScrollView;
-    const scrollProps = viewMode === 'chart' 
-        ? { style: [styles.scrollContent, { flex: 1, paddingBottom: 0, paddingHorizontal: 0, paddingTop: 16 }] } 
+    const scrollProps = viewMode === 'chart'
+        ? { style: [styles.scrollContent, { flex: 1, paddingBottom: 0, paddingHorizontal: 0, paddingTop: 16 }] }
         : { contentContainerStyle: styles.scrollContent };
 
     return (
@@ -205,8 +193,8 @@ export default function DashboardScreen({ route, navigation }) {
                         {filters.commodity || 'Price Dashboard'}
                     </Text>
                     {hasOrganicData && (
-                        <TouchableOpacity 
-                            style={{ marginLeft: 8, paddingVertical: 4, paddingHorizontal: 6, backgroundColor: organicOnly ? '#dcfce7' : colors.surfaceElevated, borderRadius: 6, borderWidth: 1, borderColor: organicOnly ? '#86efac' : colors.border }} 
+                        <TouchableOpacity
+                            style={{ marginLeft: 8, paddingVertical: 4, paddingHorizontal: 6, backgroundColor: organicOnly ? '#dcfce7' : colors.surfaceElevated, borderRadius: 6, borderWidth: 1, borderColor: organicOnly ? '#86efac' : colors.border }}
                             onPress={() => setOrganicOnly(!organicOnly)}
                         >
                             <Text style={{ fontSize: 11, fontWeight: '700', color: organicOnly ? '#166534' : colors.textMuted }}>Org</Text>
@@ -224,10 +212,6 @@ export default function DashboardScreen({ route, navigation }) {
                     </TouchableOpacity>
                     <TouchableOpacity onPress={toggleFavorite}>
                         <Ionicons name={isFavorite ? "star" : "star-outline"} size={24} color={isFavorite ? '#eab308' : colors.textMuted} />
-                    </TouchableOpacity>
-                    {/* Overflow Menu */}
-                    <TouchableOpacity onPress={() => setShowOverflowMenu(true)}>
-                        <Ionicons name="ellipsis-horizontal" size={24} color={colors.textMuted} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -287,7 +271,7 @@ export default function DashboardScreen({ route, navigation }) {
                             </>
                         )}
 
-                        {/* ── Normal Mode: single waterfall ── */}
+                        {/* ── Waterfall Mode ── */}
                         {viewMode === 'waterfall' && (
                             <>
                                 {/* Time Range Toggle */}
@@ -363,7 +347,6 @@ export default function DashboardScreen({ route, navigation }) {
                                 <ErrorBoundary>
                                     <PriceWaterfallMobile
                                         stats={stats}
-                                        costs={costs}
                                         packageData={packageOptions}
                                         weightData={weightData}
                                         originData={originOptions}
@@ -383,25 +366,12 @@ export default function DashboardScreen({ route, navigation }) {
                                 <PriceOverTimeChart
                                     filters={filters}
                                     organicOnly={organicOnly}
-                                    selectedVariety={selectedVariety}
-                                    varietyOptions={varietyOptions}
-                                    onSelectVariety={setSelectedVariety}
                                 />
                             </ErrorBoundary>
                         )}
 
-                        {/* ── Comparison Mode: Price Bridge ── */}
-                        {viewMode === 'compare' && (
-                            <ComparisonContainer
-                                filters={filters}
-                                organicOnly={organicOnly}
-                                selectedVariety={selectedVariety}
-                                cpiAdjusted={true}
-                            />
-                        )}
-
-                        {/* AI Market Insights — shown in waterfall and compare modes */}
-                        {viewMode !== 'chart' && (
+                        {/* AI Market Insights — shown in waterfall mode */}
+                        {viewMode === 'waterfall' && (
                             <View style={[styles.notesContainer, { backgroundColor: isDark ? colors.surfaceElevated : '#dcfce7', borderColor: isDark ? colors.border : '#bbf7d0' }]}>
                                 <View style={styles.notesTitleRow}>
                                     <Ionicons name="sparkles" size={18} color={isDark ? colors.accent : '#166534'} />
@@ -424,33 +394,6 @@ export default function DashboardScreen({ route, navigation }) {
                     <Text style={[styles.noDataText, { color: colors.textSecondary }]}>No data available for this selection.</Text>
                 )}
             </ScrollOrView>
-
-            {/* Cost Configuration Modal */}
-            <Modal visible={showCostModal} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>Configure Costs</Text>
-                        {Object.entries(costs).map(([key, val]) => (
-                            <View key={key} style={styles.inputRow}>
-                                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{key}</Text>
-                                <TextInput
-                                    style={[styles.input, { backgroundColor: colors.surfaceElevated, color: colors.text }]}
-                                    value={val}
-                                    onChangeText={(text) => setCosts(prev => ({ ...prev, [key]: text }))}
-                                    keyboardType="numeric"
-                                    placeholderTextColor={colors.textMuted}
-                                />
-                            </View>
-                        ))}
-                        <TouchableOpacity
-                            style={[styles.closeButton, { backgroundColor: colors.accent }]}
-                            onPress={() => setShowCostModal(false)}
-                        >
-                            <Text style={styles.closeButtonText}>Done</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
 
             {/* Variety Selection Modal */}
             <Modal visible={showVarietyModal} animationType="fade" transparent>
@@ -650,44 +593,6 @@ export default function DashboardScreen({ route, navigation }) {
                     </View>
                 </View>
             </Modal>
-
-            {/* Overflow Menu Modal */}
-            <Modal visible={showOverflowMenu} animationType="fade" transparent>
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setShowOverflowMenu(false)}
-                >
-                    <View style={[styles.overflowMenu, { backgroundColor: colors.surface }]}>
-                        <TouchableOpacity
-                            style={[styles.overflowItem, { borderBottomColor: colors.border }]}
-                            onPress={() => {
-                                setShowOverflowMenu(false);
-                                setViewMode('compare');
-                            }}
-                        >
-                            <Ionicons name="git-compare-outline" size={20} color={colors.text} />
-                            <Text style={[styles.overflowItemText, { color: colors.text }]}>Compare Periods</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.overflowItem, { borderBottomColor: colors.border }]}
-                            onPress={() => {
-                                setShowOverflowMenu(false);
-                                setShowCostModal(true);
-                            }}
-                        >
-                            <Ionicons name="calculator-outline" size={20} color={colors.text} />
-                            <Text style={[styles.overflowItemText, { color: colors.text }]}>Configure Costs</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.overflowCancel}
-                            onPress={() => setShowOverflowMenu(false)}
-                        >
-                            <Text style={[styles.overflowCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-                        </TouchableOpacity>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
         </SafeAreaView>
     );
 }
@@ -740,9 +645,6 @@ const styles = StyleSheet.create({
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
     modalContent: { backgroundColor: 'white', borderRadius: 20, padding: 24 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#1e293b' },
-    inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    inputLabel: { fontSize: 16, textTransform: 'capitalize', color: '#64748b' },
-    input: { backgroundColor: '#f1f5f9', width: 100, padding: 12, borderRadius: 10, textAlign: 'right', fontSize: 16 },
     closeButton: { backgroundColor: '#22c55e', padding: 16, borderRadius: 12, marginTop: 16, alignItems: 'center' },
     closeButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
     timeRangeContainer: {
@@ -797,29 +699,4 @@ const styles = StyleSheet.create({
     dateModalActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
     dateModalCancel: { flex: 1, padding: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
     dateModalApply: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center' },
-    overflowMenu: {
-        width: '80%',
-        borderRadius: 16,
-        overflow: 'hidden',
-    },
-    overflowItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        borderBottomWidth: 1,
-    },
-    overflowItemText: {
-        fontSize: 16,
-        fontWeight: '500',
-    },
-    overflowCancel: {
-        paddingVertical: 16,
-        alignItems: 'center',
-    },
-    overflowCancelText: {
-        fontSize: 16,
-        fontWeight: '600',
-    },
 });
