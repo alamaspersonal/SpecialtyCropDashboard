@@ -520,7 +520,7 @@ export const getStats = async (commodity) => {
         const calcAvg = (rows, type) => {
             const valid = rows
                 .filter(r => r.market_type?.includes(type))
-                .map(r => r.price_retail || r.price_max)
+                .map(r => r.price_avg)
                 .filter(v => v !== null && v !== undefined);
             return valid.length > 0
                 ? valid.reduce((a, b) => a + b, 0) / valid.length
