@@ -20,9 +20,7 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "alamaspersonal@gmail.com",
-        "ascAppId": "",
-        "appleTeamId": ""
+        "appleId": "alamaspersonal@gmail.com"
       },
       "android": {
         "track": "production"
