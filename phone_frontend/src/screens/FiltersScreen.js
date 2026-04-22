@@ -88,8 +88,6 @@ export default function FiltersScreen({ navigation }) {
                 if (prev.commodity && newCategory) {
                     const validCommodities = CATEGORY_COMMODITIES[newCategory] || [];
                     if (!validCommodities.includes(prev.commodity)) {
-                        // Commodity is not in the new category - clear it immediately
-                        console.log('[DEBUG] Instantly clearing invalid commodity:', prev.commodity);
                         newCommodity = '';
                         newVariety = ''; // Also clear variety
                     }
@@ -114,7 +112,6 @@ export default function FiltersScreen({ navigation }) {
                 if (value && !prev.category) {
                     const lookupCategory = COMMODITY_TO_CATEGORY[value];
                     if (lookupCategory) {
-                        console.log('[DEBUG] Instantly auto-filling category:', lookupCategory, 'for commodity:', value);
                         newCategory = lookupCategory;
                     }
                 }

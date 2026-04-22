@@ -34,11 +34,8 @@ export const getFilters = async (currentFilters = {}) => {
         );
 
         if (!hasActiveFilters) {
-            console.log('[DEBUG] No active filters, returning STATIC_FILTERS');
             return STATIC_FILTERS;
         }
-
-        console.log('[DEBUG] Active filters detected, querying Supabase:', currentFilters);
         
         // Helper function to fetch options for a specific field
         // excludeField: don't apply filter for this field (so user sees all options)
@@ -77,7 +74,6 @@ export const getFilters = async (currentFilters = {}) => {
                 }
 
                 if (allData.length > 50000) {
-                    console.warn('[DEBUG] Reached safety limit of 50k rows, stopping fetch.');
                     break;
                 }
             }
@@ -136,24 +132,14 @@ export const getFilters = async (currentFilters = {}) => {
             fetchOptionsForField('organic', organicFilters),
         ]);
 
-        const result = {
+        return {
             categories,
             commodities,
             varieties,
-            packages: [], // Not needed in filter UI
+            packages: [],
             districts,
             organics,
         };
-        
-        console.log('[DEBUG] Filter options fetched:', {
-            categories: categories.length,
-            commodities: commodities.length,
-            varieties: varieties.length,
-            districts: districts.length,
-            organics: organics.length,
-        });
-
-        return result;
 
     } catch (error) {
         console.error('Error fetching filters:', error);
@@ -169,7 +155,6 @@ export const getFilters = async (currentFilters = {}) => {
  */
 export const getCommoditiesWithCompleteData = async () => {
     try {
-        console.log('[DEBUG] Fetching commodities with complete market data...');
         
         // Paginate to get ALL commodity + market_type combinations
         // Supabase has a default limit of 1000 rows per request
@@ -197,19 +182,11 @@ export const getCommoditiesWithCompleteData = async () => {
                 hasMore = false;
             }
             
-            // Safety limit to prevent infinite loops
             if (allData.length > 100000) {
-                console.warn('[DEBUG] Reached safety limit of 100k rows');
                 break;
             }
         }
-        
-        console.log('[DEBUG] Total rows fetched:', allData.length);
-        
-        // Log all unique market_type values to understand the data
-        const allMarketTypes = new Set(allData.map(r => r.market_type).filter(Boolean));
-        console.log('[DEBUG] All unique market_type values:', [...allMarketTypes]);
-        
+
         // Group by commodity and collect market types
         const commodityMarketTypes = {};
         allData.forEach(row => {
@@ -232,8 +209,6 @@ export const getCommoditiesWithCompleteData = async () => {
             }
         }
         
-        console.log('[DEBUG] Commodities with complete data:', completeCommodities.size);
-        console.log('[DEBUG] Complete commodities list:', [...completeCommodities].slice(0, 10));
         return completeCommodities;
         
     } catch (error) {
@@ -250,7 +225,6 @@ export const getCommoditiesWithCompleteData = async () => {
  */
 export const getCommoditiesWithOrganicData = async () => {
     try {
-        console.log('[DEBUG] Fetching commodities with organic data...');
         
         // Query for distinct commodities where organic = 'yes' (normalized by the pipeline)
         const { data, error } = await supabase
@@ -265,8 +239,6 @@ export const getCommoditiesWithOrganicData = async () => {
             data?.map(row => row.commodity).filter(Boolean) || []
         );
         
-        console.log('[DEBUG] Commodities with organic data:', organicCommodities.size);
-        console.log('[DEBUG] Organic commodities list:', [...organicCommodities].slice(0, 10));
         return organicCommodities;
         
     } catch (error) {
@@ -286,7 +258,6 @@ export const getCommoditiesWithOrganicData = async () => {
  */
 export const getPrices = async (filters = {}, limit = 100, days = null) => {
     try {
-        console.log('[DEBUG supabaseApi] getPrices called with:', { filters, limit, days });
         
         let query = supabase
             .from('UnifiedCropPrice')
@@ -318,20 +289,14 @@ export const getPrices = async (filters = {}, limit = 100, days = null) => {
         if (days) {
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - days);
-            const cutoffISO = cutoffDate.toISOString();
-            console.log('[DEBUG supabaseApi] Date filter - days:', days, 'cutoff:', cutoffISO);
-            query = query.gte('report_date', cutoffISO);
+            query = query.gte('report_date', cutoffDate.toISOString());
         }
 
         let { data, error } = await query;
 
-        console.log('[DEBUG supabaseApi] Query result - data length:', data?.length, 'error:', error);
-
         // FALLBACK: If date filter returns no data, retry without date filter
         // This handles cases where database has stale data
         if (days && (!data || data.length === 0) && !error) {
-            console.log('[DEBUG supabaseApi] No data in timeframe, falling back to latest available data');
-
             // Rebuild query without date filter
             let fallbackQuery = supabase
                 .from('UnifiedCropPrice')
@@ -350,12 +315,6 @@ export const getPrices = async (filters = {}, limit = 100, days = null) => {
             const fallbackResult = await fallbackQuery;
             data = fallbackResult.data;
             error = fallbackResult.error;
-            console.log('[DEBUG supabaseApi] Fallback result - data length:', data?.length);
-        }
-        
-        if (data?.length > 0) {
-            console.log('[DEBUG supabaseApi] Date range in data:', 
-                data[data.length - 1]?.report_date, 'to', data[0]?.report_date);
         }
 
         if (error) throw error;
@@ -375,7 +334,6 @@ export const getPrices = async (filters = {}, limit = 100, days = null) => {
  */
 export const getDateRange = async (filters = {}) => {
     try {
-        console.log('[DEBUG supabaseApi] getDateRange called with:', filters);
 
         const applyFilters = (query) => {
             if (filters.commodity) query = query.eq('commodity', filters.commodity);
@@ -406,11 +364,10 @@ export const getDateRange = async (filters = {}) => {
         if (minResult.error) throw minResult.error;
         if (maxResult.error) throw maxResult.error;
 
-        const minDate = minResult.data?.[0]?.report_date || null;
-        const maxDate = maxResult.data?.[0]?.report_date || null;
-
-        console.log('[DEBUG supabaseApi] Date range result:', { minDate, maxDate });
-        return { minDate, maxDate };
+        return {
+            minDate: minResult.data?.[0]?.report_date || null,
+            maxDate: maxResult.data?.[0]?.report_date || null,
+        };
     } catch (error) {
         console.error('Error fetching date range:', error);
         throw error;
@@ -429,7 +386,6 @@ export const getDateRange = async (filters = {}) => {
  */
 export const getPricesByDateRange = async (filters = {}, startDate, endDate) => {
     try {
-        console.log('[DEBUG supabaseApi] getPricesByDateRange called:', { filters, startDate, endDate });
 
         let allData = [];
         let page = 0;
@@ -465,14 +421,11 @@ export const getPricesByDateRange = async (filters = {}, startDate, endDate) => 
                 hasMore = false;
             }
 
-            // Safety limit
             if (allData.length > 20000) {
-                console.warn('[DEBUG supabaseApi] Reached 20k row safety limit for date range query');
                 break;
             }
         }
 
-        console.log('[DEBUG supabaseApi] getPricesByDateRange result: ', allData.length, 'rows');
         return allData;
     } catch (error) {
         console.error('Error fetching prices by date range:', error);
@@ -688,7 +641,6 @@ export const getPriceSummary = async (options = {}) => {
  */
 export const getTimeSeriesData = async (commodity, filters = {}) => {
     try {
-        console.log('[DEBUG supabaseApi] getTimeSeriesData called:', { commodity, filters });
 
         let allData = [];
         let page = 0;
@@ -720,14 +672,11 @@ export const getTimeSeriesData = async (commodity, filters = {}) => {
                 hasMore = false;
             }
 
-            // Safety limit
             if (allData.length > 50000) {
-                console.warn('[DEBUG supabaseApi] getTimeSeriesData: reached 50k safety limit');
                 break;
             }
         }
 
-        console.log('[DEBUG supabaseApi] getTimeSeriesData result:', allData.length, 'rows');
         return allData;
     } catch (error) {
         console.error('Error fetching time series data:', error);

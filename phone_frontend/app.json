@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "phone_frontend",
-    "slug": "phone_frontend",
+    "name": "Specialty Crops",
+    "slug": "specialty-crops",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anthonylamas.specialtycrops"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +22,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.phone_frontend"
+      "package": "com.anthonylamas.specialtycrops"
     },
     "web": {
       "favicon": "./assets/favicon.png"
