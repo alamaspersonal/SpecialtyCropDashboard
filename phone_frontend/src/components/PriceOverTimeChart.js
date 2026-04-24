@@ -410,6 +410,8 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
     const chartDataRef = useRef(chartData);
     useEffect(() => { chartDataRef.current = chartData; }, [chartData]);
 
+    const seriesVisibilityRef = useRef(seriesVisibility);
+    useEffect(() => { seriesVisibilityRef.current = seriesVisibility; }, [seriesVisibility]);
 
     const chartLayoutRef = useRef({ x: 0, width: 0 });
     const pointsRef = useRef({});
@@ -418,35 +420,54 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
     const handleTouchEvent = useCallback((evt) => {
         const touchX = evt.nativeEvent.locationX;
         const data = chartDataRef.current;
+        const visibility = seriesVisibilityRef.current;
         if (!data.length) return;
 
-        // Use Victory Native's rendered x-positions to find the nearest data point.
-        // This correctly handles non-uniform spacing from xKey="timestamp".
-        const pts = pointsRef.current;
-        const refPoints = pts.retail?.length ? pts.retail
-                        : pts.terminal?.length ? pts.terminal
-                        : pts.shipping;
+        // Indices where at least one visible series has real price data
+        const validIndices = [];
+        for (let i = 0; i < data.length; i++) {
+            const row = data[i];
+            if ((visibility.retail   && row.retail   != null) ||
+                (visibility.terminal && row.terminal != null) ||
+                (visibility.shipping && row.shipping != null)) {
+                validIndices.push(i);
+            }
+        }
+        if (validIndices.length === 0) return;
 
-        let nearestIndex = 0;
+        // Use Victory Native's rendered x-positions from a visible series
+        const pts = pointsRef.current;
+        const refPoints = (visibility.retail   && pts.retail?.length)   ? pts.retail
+                        : (visibility.terminal && pts.terminal?.length) ? pts.terminal
+                        : (visibility.shipping && pts.shipping?.length) ? pts.shipping
+                        : null;
+
+        let nearestIndex = validIndices[0];
 
         if (refPoints?.length) {
+            // Snap to the valid index whose rendered x-position is closest to the touch
             let minDist = Infinity;
-            for (let i = 0; i < refPoints.length; i++) {
-                const px = refPoints[i]?.x;
+            for (const vi of validIndices) {
+                const px = refPoints[vi]?.x;
                 if (px == null) continue;
                 const dist = Math.abs(px - touchX);
                 if (dist < minDist) {
                     minDist = dist;
-                    nearestIndex = i;
+                    nearestIndex = vi;
                 }
             }
         } else {
-            // Fallback before first render: linear approximation
+            // Fallback before first render: linear approximation, then snap to valid index
             const { width } = chartLayoutRef.current;
             if (width <= 0) return;
-            const chartWidth = width - 16; // 8px padding each side
+            const chartWidth = width - 16;
             const fraction = Math.max(0, Math.min(1, (touchX - 8) / chartWidth));
-            nearestIndex = Math.round(fraction * (data.length - 1));
+            const approxIndex = Math.round(fraction * (data.length - 1));
+            let minDist = Infinity;
+            for (const vi of validIndices) {
+                const d = Math.abs(vi - approxIndex);
+                if (d < minDist) { minDist = d; nearestIndex = vi; }
+            }
         }
 
         const row = data[nearestIndex];
@@ -857,6 +878,21 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                         ) : (
                             /* Main filters view — series sections */
                             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
+                                {(() => {
+                                    const anySection = Object.keys(SERIES_CONFIG).some(key => {
+                                        if (!seriesHasData[key]) return false;
+                                        const o = filterOptions[key] || {};
+                                        return o.varieties?.length > 0 || o.packages?.length > 0 || o.origins?.length > 0;
+                                    });
+                                    if (!anySection) {
+                                        return (
+                                            <Text style={{ color: colors.textMuted, textAlign: 'center', padding: 32, fontSize: 14 }}>
+                                                No filter options available for this commodity.
+                                            </Text>
+                                        );
+                                    }
+                                    return null;
+                                })()}
                                 {Object.entries(SERIES_CONFIG).map(([key, config]) => {
                                     if (!seriesHasData[key]) return null;
                                     const typeOpts = filterOptions[key] || {};
@@ -887,7 +923,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                                                 <View style={[styles.filterDot, { backgroundColor: config.color, width: 10, height: 10, borderRadius: 5 }]} />
                                                 <Text style={[styles.filterSeriesTitle, { color: config.color }]}>{config.label}</Text>
                                             </View>
-                                            {hasVar && makeRow('Variety', selectedVarieties[key], typeOpts.varieties, null, (val) => actions.setSelectedVariety(key, val))}
+                                            {hasVar && makeRow('Variety', selectedVarieties[key], typeOpts.varieties, typeOpts.varietiesWithData, (val) => actions.setSelectedVariety(key, val))}
                                             {hasPkg && makeRow('Package', selectedPackages[key], typeOpts.packages, typeOpts.packagesWithData, (val) => actions.setSelectedPackage(key, val))}
                                             {hasOrg && makeRow('Origin',  selectedOrigins[key],  typeOpts.origins,  typeOpts.originsWithData,  (val) => actions.setSelectedOrigin(key, val))}
                                         </View>
@@ -1067,6 +1103,7 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     filtersModalSheet: {
+        flex: 1,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         maxHeight: '82%',

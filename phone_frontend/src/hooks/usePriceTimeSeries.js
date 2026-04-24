@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { getTimeSeriesData } from '../services/api';
+import { getTimeSeriesData, getPricesByDateRange } from '../services/api';
 import { adjustToCurrent } from '../shared/cpiAdjust';
 
 // ── Time range presets ──────────────────────────────────────────
@@ -126,6 +126,7 @@ export default function usePriceTimeSeries(filters, options = {}) {
     } = options;
 
     const [rawData, setRawData] = useState([]);
+    const [filterData, setFilterData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -153,6 +154,27 @@ export default function usePriceTimeSeries(filters, options = {}) {
             }
         };
         fetchData();
+    }, [filters.commodity, filters.district]);
+
+    // ── Fetch recent data for filter options (same source as waterfall) ──
+    useEffect(() => {
+        const fetchFilterData = async () => {
+            if (!filters.commodity) { setFilterData([]); return; }
+            try {
+                const end = new Date();
+                const start = new Date();
+                start.setDate(start.getDate() - 90);
+                const data = await getPricesByDateRange(
+                    { commodity: filters.commodity, district: filters.district || '' },
+                    start.toISOString().split('T')[0],
+                    end.toISOString().split('T')[0],
+                );
+                setFilterData(data);
+            } catch (err) {
+                console.error('usePriceTimeSeries: error fetching filter data', err);
+            }
+        };
+        fetchFilterData();
     }, [filters.commodity, filters.district]);
 
     // Reset per-type filters on commodity change
@@ -200,25 +222,53 @@ export default function usePriceTimeSeries(filters, options = {}) {
         return result;
     }, [rawData, organicOnly, selectedRange, dateSpan.max]);
 
+    // ── Partition recent data for filter options ──
+    const filterPartitioned = useMemo(() => {
+        const result = { retail: [], terminal: [], shipping: [] };
+        let data = filterData;
+        if (organicOnly) data = data.filter(d => d.organic === 'yes');
+        for (const row of data) {
+            const type = classifyMarketType(row.market_type);
+            if (type) result[type].push(row);
+        }
+        return result;
+    }, [filterData, organicOnly]);
+
     // ── Per-type filter options (cascading within each market type) ──
     const filterOptions = useMemo(() => {
         const opts = {};
         for (const type of MARKET_TYPES) {
-            const typeData = timePartitioned[type];
-            const pkg = selectedPackages[type];
-            const org = selectedOrigins[type];
-            const forPkgs = org ? typeData.filter(d => d.origin === org) : typeData;
-            const forOrgs = pkg ? typeData.filter(d => d.package === pkg) : typeData;
+            const typeData = filterPartitioned[type];
+            const pkg  = selectedPackages[type];
+            const org  = selectedOrigins[type];
+            const vrty = selectedVarieties[type];
+
+            // For each dimension, filter by the OTHER two selections to determine
+            // which values would still yield data (used to grey out unavailable options)
+            const forVarieties = typeData.filter(d =>
+                (!pkg  || d.package === pkg) &&
+                (!org  || d.origin  === org)
+            );
+            const forPackages = typeData.filter(d =>
+                (!vrty || d.variety === vrty) &&
+                (!org  || d.origin  === org)
+            );
+            const forOrigins = typeData.filter(d =>
+                (!vrty || d.variety === vrty) &&
+                (!pkg  || d.package === pkg)
+            );
+
             opts[type] = {
                 varieties: getUnique(typeData, 'variety'),
                 packages:  getUnique(typeData, 'package'),
                 origins:   getUnique(typeData, 'origin'),
-                packagesWithData: new Set(getUnique(forPkgs, 'package')),
-                originsWithData:  new Set(getUnique(forOrgs, 'origin')),
+                varietiesWithData: new Set(getUnique(forVarieties, 'variety')),
+                packagesWithData:  new Set(getUnique(forPackages,  'package')),
+                originsWithData:   new Set(getUnique(forOrigins,   'origin')),
             };
         }
         return opts;
-    }, [timePartitioned, selectedPackages, selectedOrigins]);
+    }, [filterPartitioned, selectedVarieties, selectedPackages, selectedOrigins]);
 
     // ── Available range presets ──
     const availableRanges = useMemo(() =>
