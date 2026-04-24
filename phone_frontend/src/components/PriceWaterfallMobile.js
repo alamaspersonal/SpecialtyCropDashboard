@@ -97,6 +97,9 @@ const PriceBlock = ({
     districtOptions,
     selectedDistrict,
     onDistrictChange,
+    varietyOptions,
+    selectedVariety,
+    onVarietyChange,
     weightLbs,
     units,
     dateRange,
@@ -264,13 +267,24 @@ const PriceBlock = ({
                         isCardDark={isCardDark}
                     />
                 )}
+
+                {/* Variety Selector */}
+                {varietyOptions && varietyOptions.length > 1 && (
+                    <DropdownSelector
+                        label="Variety"
+                        options={varietyOptions}
+                        selectedValue={selectedVariety}
+                        onValueChange={onVarietyChange}
+                        isCardDark={isCardDark}
+                    />
+                )}
             </View>
             <View style={styles.connector} />
         </View>
     );
 };
 
-export default function PriceWaterfallMobile({ stats, packageData, actions, weightData, originData, districtData, dateRanges, reportCounts, cpiAdjusted }) {
+export default function PriceWaterfallMobile({ stats, packageData, actions, weightData, originData, districtData, varietyData, dateRanges, reportCounts, cpiAdjusted }) {
     if (!stats) return null;
 
     // Helper to safely format numbers
@@ -294,6 +308,9 @@ export default function PriceWaterfallMobile({ stats, packageData, actions, weig
                 districtOptions={districtData?.retail}
                 selectedDistrict={actions?.selectedDistricts?.retail}
                 onDistrictChange={(v) => actions?.setDistrict('retail', v)}
+                varietyOptions={varietyData?.retail}
+                selectedVariety={actions?.selectedVarieties?.retail}
+                onVarietyChange={(v) => actions?.setVariety('retail', v)}
                 weightLbs={weightData?.retail?.weight_lbs}
                 units={weightData?.retail?.units}
                 dateRange={dateRanges?.retail}
@@ -317,6 +334,9 @@ export default function PriceWaterfallMobile({ stats, packageData, actions, weig
                 districtOptions={districtData?.terminal}
                 selectedDistrict={actions?.selectedDistricts?.terminal}
                 onDistrictChange={(v) => actions?.setDistrict('terminal', v)}
+                varietyOptions={varietyData?.terminal}
+                selectedVariety={actions?.selectedVarieties?.terminal}
+                onVarietyChange={(v) => actions?.setVariety('terminal', v)}
                 weightLbs={weightData?.terminal?.weight_lbs}
                 units={weightData?.terminal?.units}
                 dateRange={dateRanges?.terminal}
@@ -340,6 +360,9 @@ export default function PriceWaterfallMobile({ stats, packageData, actions, weig
                 districtOptions={districtData?.shipping}
                 selectedDistrict={actions?.selectedDistricts?.shipping}
                 onDistrictChange={(v) => actions?.setDistrict('shipping', v)}
+                varietyOptions={varietyData?.shipping}
+                selectedVariety={actions?.selectedVarieties?.shipping}
+                onVarietyChange={(v) => actions?.setVariety('shipping', v)}
                 weightLbs={weightData?.shipping?.weight_lbs}
                 units={weightData?.shipping?.units}
                 dateRange={dateRanges?.shipping}

@@ -75,6 +75,7 @@ export default function DashboardScreen({ route, navigation }) {
         selectedOrigins,
         districtOptions,
         selectedDistricts,
+        marketVarietyOptions,
         weightData,
         varietyOptions,
         hasOrganicData,
@@ -192,14 +193,6 @@ export default function DashboardScreen({ route, navigation }) {
                     <Text style={[styles.headerTitle, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>
                         {filters.commodity || 'Price Dashboard'}
                     </Text>
-                    {hasOrganicData && (
-                        <TouchableOpacity
-                            style={{ marginLeft: 8, paddingVertical: 4, paddingHorizontal: 6, backgroundColor: organicOnly ? '#dcfce7' : colors.surfaceElevated, borderRadius: 6, borderWidth: 1, borderColor: organicOnly ? '#86efac' : colors.border }}
-                            onPress={() => setOrganicOnly(!organicOnly)}
-                        >
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: organicOnly ? '#166534' : colors.textMuted }}>Org</Text>
-                        </TouchableOpacity>
-                    )}
                 </View>
                 <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                     {/* Chart Toggle */}
@@ -351,6 +344,7 @@ export default function DashboardScreen({ route, navigation }) {
                                         weightData={weightData}
                                         originData={originOptions}
                                         districtData={districtOptions}
+                                        varietyData={marketVarietyOptions}
                                         dateRanges={stats.dateRanges}
                                         reportCounts={stats.reportCounts}
                                         actions={actions}

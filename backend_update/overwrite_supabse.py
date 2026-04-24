@@ -25,38 +25,19 @@ def get_supabase_client() -> Client:
 
 
 def clear_table(client: Client, table_name: str):
-    """Clear all data from a table in batches to prevent timeouts."""
+    """
+    Clear all rows from a table using TRUNCATE via a Supabase RPC function.
+
+    Requires the following function to exist in Supabase (run once in SQL editor):
+        CREATE OR REPLACE FUNCTION truncate_unified_crop_price()
+        RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+        BEGIN TRUNCATE TABLE "UnifiedCropPrice"; END; $$;
+    """
     print(f"Clearing table: {table_name}...")
     try:
-        # First, fetch all IDs
-        has_more = True
-        offset = 0
-        limit = 10000
-        all_ids = []
-        
-        while has_more:
-            res = client.table(table_name).select("id").range(offset, offset + limit - 1).execute()
-            data = res.data
-            if data:
-                all_ids.extend([row["id"] for row in data])
-                offset += limit
-            else:
-                has_more = False
-                
-        if not all_ids:
-            print(f"  ✔ Table {table_name} is already empty")
-            return
-            
-        print(f"Found {len(all_ids)} rows to delete from {table_name}...")
-        
-        # Delete in batches of 1000
-        batch_size = 1000
-        for i in range(0, len(all_ids), batch_size):
-            batch = all_ids[i:i + batch_size]
-            client.table(table_name).delete().in_("id", batch).execute()
-            print(f"  Progress: deleted {min(i + batch_size, len(all_ids))}/{len(all_ids)} rows")
-            
-        print(f"  ✔ Cleared {table_name}")
+        rpc_name = f"truncate_{table_name.lower().replace(' ', '_')}"
+        client.rpc(rpc_name).execute()
+        print(f"  ✔ Cleared {table_name} via TRUNCATE")
     except Exception as e:
         print(f"  ✘ Error clearing {table_name}: {e}")
         raise

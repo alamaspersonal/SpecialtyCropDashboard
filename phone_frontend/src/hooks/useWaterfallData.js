@@ -86,6 +86,8 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
     const [selectedOrigins, setSelectedOrigins] = useState({ terminal: '', shipping: '', retail: '' });
     const [districtOptions, setDistrictOptions] = useState({ terminal: [], shipping: [], retail: [] });
     const [selectedDistricts, setSelectedDistricts] = useState({ terminal: '', shipping: '', retail: '' });
+    const [marketVarietyOptions, setMarketVarietyOptions] = useState({ terminal: [], shipping: [], retail: [] });
+    const [selectedVarieties, setSelectedVarieties] = useState({ terminal: '', shipping: '', retail: '' });
     const [weightData, setWeightData] = useState({ terminal: null, shipping: null, retail: null });
 
     // Server-side date bounds
@@ -218,29 +220,38 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
         const sBase = getBaseData(shippingData);
         const rBase = getBaseData(retailData);
 
-        const getOptionsForType = (baseData, currentPkg, currentOrg, currentDist) => {
+        const getOptionsForType = (baseData, currentPkg, currentOrg, currentDist, currentVar) => {
             const pkgData = baseData.filter(d =>
                 (!currentOrg || d.origin === currentOrg) &&
-                (!currentDist || d.district === currentDist)
+                (!currentDist || d.district === currentDist) &&
+                (!currentVar || d.variety === currentVar)
             );
             const orgData = baseData.filter(d =>
                 (!currentPkg || d.package === currentPkg) &&
-                (!currentDist || d.district === currentDist)
+                (!currentDist || d.district === currentDist) &&
+                (!currentVar || d.variety === currentVar)
             );
             const distData = baseData.filter(d =>
                 (!currentPkg || d.package === currentPkg) &&
-                (!currentOrg || d.origin === currentOrg)
+                (!currentOrg || d.origin === currentOrg) &&
+                (!currentVar || d.variety === currentVar)
+            );
+            const varData = baseData.filter(d =>
+                (!currentPkg || d.package === currentPkg) &&
+                (!currentOrg || d.origin === currentOrg) &&
+                (!currentDist || d.district === currentDist)
             );
             return {
                 packages: getUnique(pkgData, 'package'),
                 origins: getUnique(orgData, 'origin'),
                 districts: getUnique(distData, 'district'),
+                varieties: getUnique(varData, 'variety'),
             };
         };
 
-        const tOpts = getOptionsForType(tBase, selectedPackages.terminal, selectedOrigins.terminal, selectedDistricts.terminal);
-        const sOpts = getOptionsForType(sBase, selectedPackages.shipping, selectedOrigins.shipping, selectedDistricts.shipping);
-        const rOpts = getOptionsForType(rBase, selectedPackages.retail, selectedOrigins.retail, selectedDistricts.retail);
+        const tOpts = getOptionsForType(tBase, selectedPackages.terminal, selectedOrigins.terminal, selectedDistricts.terminal, selectedVarieties.terminal);
+        const sOpts = getOptionsForType(sBase, selectedPackages.shipping, selectedOrigins.shipping, selectedDistricts.shipping, selectedVarieties.shipping);
+        const rOpts = getOptionsForType(rBase, selectedPackages.retail, selectedOrigins.retail, selectedDistricts.retail, selectedVarieties.retail);
 
         const newPkgOpts = { terminal: tOpts.packages, shipping: sOpts.packages, retail: rOpts.packages };
         setPackageOptions(prev => JSON.stringify(prev) === JSON.stringify(newPkgOpts) ? prev : newPkgOpts);
@@ -250,6 +261,9 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
 
         const newDistOpts = { terminal: tOpts.districts, shipping: sOpts.districts, retail: rOpts.districts };
         setDistrictOptions(prev => JSON.stringify(prev) === JSON.stringify(newDistOpts) ? prev : newDistOpts);
+
+        const newVarOpts = { terminal: tOpts.varieties, shipping: sOpts.varieties, retail: rOpts.varieties };
+        setMarketVarietyOptions(prev => JSON.stringify(prev) === JSON.stringify(newVarOpts) ? prev : newVarOpts);
 
         const validate = (options, currentVal) => {
             if (options.length === 0) return '';
@@ -284,10 +298,19 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             };
             return (prev.terminal === next.terminal && prev.shipping === next.shipping && prev.retail === next.retail) ? prev : next;
         });
+
+        setSelectedVarieties(prev => {
+            const next = {
+                terminal: validate(tOpts.varieties, prev.terminal),
+                shipping: validate(sOpts.varieties, prev.shipping),
+                retail: validate(rOpts.varieties, prev.retail),
+            };
+            return (prev.terminal === next.terminal && prev.shipping === next.shipping && prev.retail === next.retail) ? prev : next;
+        });
     }, [
         selectedVariety, organicOnly,
         terminalData, shippingData, retailData,
-        selectedPackages, selectedOrigins, selectedDistricts,
+        selectedPackages, selectedOrigins, selectedDistricts, selectedVarieties,
     ]);
 
     // ── Update weight data ──
@@ -315,12 +338,13 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
         const sBase = getBaseData(shippingData);
         const rBase = getBaseData(retailData);
 
-        // 2. Sub-filtering (Package + Origin + District)
+        // 2. Sub-filtering (Package + Origin + District + per-market Variety)
         const filterBySelections = (data, type) => {
             let filtered = data;
             if (selectedPackages[type]) filtered = filtered.filter(d => d.package === selectedPackages[type]);
             if (selectedOrigins[type]) filtered = filtered.filter(d => d.origin === selectedOrigins[type]);
             if (selectedDistricts[type]) filtered = filtered.filter(d => d.district === selectedDistricts[type]);
+            if (selectedVarieties[type]) filtered = filtered.filter(d => d.variety === selectedVarieties[type]);
             return filtered;
         };
 
@@ -443,7 +467,7 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
         priceData, terminalData, shippingData, retailData,
         timeRange, customStartDate, customEndDate,
         organicOnly, selectedVariety, cpiAdjusted,
-        selectedPackages, selectedOrigins, selectedDistricts,
+        selectedPackages, selectedOrigins, selectedDistricts, selectedVarieties,
     ]);
 
     const stats = calculateStats();
@@ -459,6 +483,10 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
 
     const setDistrict = useCallback((type, val) => {
         setSelectedDistricts(prev => ({ ...prev, [type]: val }));
+    }, []);
+
+    const setVariety = useCallback((type, val) => {
+        setSelectedVarieties(prev => ({ ...prev, [type]: val }));
     }, []);
 
     return {
@@ -481,6 +509,8 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
         selectedOrigins,
         districtOptions,
         selectedDistricts,
+        marketVarietyOptions,
+        selectedVarieties,
         weightData,
 
         // Top-level filter options
@@ -498,6 +528,8 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             setOrigin,
             selectedDistricts,
             setDistrict,
+            selectedVarieties,
+            setVariety,
         },
     };
 }
