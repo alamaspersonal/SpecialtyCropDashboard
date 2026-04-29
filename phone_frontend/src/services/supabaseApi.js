@@ -154,67 +154,40 @@ export const getFilters = async (currentFilters = {}) => {
  * @returns {Set<string>} Set of commodity names with complete market data
  */
 export const getCommoditiesWithCompleteData = async () => {
-    try {
-        
-        // Paginate to get ALL commodity + market_type combinations
-        // Supabase has a default limit of 1000 rows per request
-        let allData = [];
+    // Fetch all unique commodity names for a given market_type keyword, paginated.
+    // Querying one market type at a time (in parallel) is far faster than a full
+    // table scan, since Supabase filters server-side and we only transfer one column.
+    const fetchCommoditiesForType = async (pattern) => {
+        const commodities = new Set();
         let page = 0;
         const pageSize = 1000;
-        let hasMore = true;
-        
-        while (hasMore) {
+        while (true) {
             const { data, error } = await supabase
                 .from('UnifiedCropPrice')
-                .select('commodity, market_type')
+                .select('commodity')
+                .ilike('market_type', `%${pattern}%`)
                 .range(page * pageSize, (page + 1) * pageSize - 1);
-            
             if (error) throw error;
-            
-            if (data && data.length > 0) {
-                allData = [...allData, ...data];
-                if (data.length < pageSize) {
-                    hasMore = false;
-                } else {
-                    page++;
-                }
-            } else {
-                hasMore = false;
-            }
-            
-            if (allData.length > 100000) {
-                break;
-            }
+            if (!data || data.length === 0) break;
+            data.forEach(row => { if (row.commodity) commodities.add(row.commodity); });
+            if (data.length < pageSize) break;
+            page++;
         }
+        return commodities;
+    };
 
-        // Group by commodity and collect market types
-        const commodityMarketTypes = {};
-        allData.forEach(row => {
-            if (!row.commodity || !row.market_type) return;
-            if (!commodityMarketTypes[row.commodity]) {
-                commodityMarketTypes[row.commodity] = new Set();
-            }
-            // Normalize market type (check if it contains the key words)
-            const mt = row.market_type.toLowerCase();
-            if (mt.includes('shipping')) commodityMarketTypes[row.commodity].add('shipping');
-            if (mt.includes('terminal')) commodityMarketTypes[row.commodity].add('terminal');
-            if (mt.includes('retail')) commodityMarketTypes[row.commodity].add('retail');
-        });
-        
-        // Filter to commodities with all 3 market types
-        const completeCommodities = new Set();
-        for (const [commodity, types] of Object.entries(commodityMarketTypes)) {
-            if (types.has('shipping') && types.has('terminal') && types.has('retail')) {
-                completeCommodities.add(commodity);
-            }
-        }
-        
-        return completeCommodities;
-        
-    } catch (error) {
-        console.error('Error fetching complete data commodities:', error);
-        return new Set(); // Return empty set on error
+    const [terminal, shipping, retail] = await Promise.all([
+        fetchCommoditiesForType('terminal'),
+        fetchCommoditiesForType('shipping'),
+        fetchCommoditiesForType('retail'),
+    ]);
+
+    // Intersect: only keep commodities present in all three market types
+    const completeCommodities = new Set();
+    for (const c of terminal) {
+        if (shipping.has(c) && retail.has(c)) completeCommodities.add(c);
     }
+    return completeCommodities;
 };
 
 /**
@@ -224,27 +197,22 @@ export const getCommoditiesWithCompleteData = async () => {
  * @returns {Set<string>} Set of commodity names with organic data
  */
 export const getCommoditiesWithOrganicData = async () => {
-    try {
-        
-        // Query for distinct commodities where organic = 'yes' (normalized by the pipeline)
+    const commodities = new Set();
+    let page = 0;
+    const pageSize = 1000;
+    while (true) {
         const { data, error } = await supabase
             .from('UnifiedCropPrice')
             .select('commodity')
-            .eq('organic', 'yes');
-        
+            .eq('organic', 'yes')
+            .range(page * pageSize, (page + 1) * pageSize - 1);
         if (error) throw error;
-        
-        // Extract unique commodities
-        const organicCommodities = new Set(
-            data?.map(row => row.commodity).filter(Boolean) || []
-        );
-        
-        return organicCommodities;
-        
-    } catch (error) {
-        console.error('Error fetching organic commodities:', error);
-        return new Set(); // Return empty set on error
+        if (!data || data.length === 0) break;
+        data.forEach(row => { if (row.commodity) commodities.add(row.commodity); });
+        if (data.length < pageSize) break;
+        page++;
     }
+    return commodities;
 };
 
 /**

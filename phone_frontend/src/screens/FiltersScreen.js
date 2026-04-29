@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -6,7 +6,6 @@ import {
     ScrollView,
     TouchableOpacity,
     ActivityIndicator,
-    Alert,
     Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,7 +20,6 @@ export default function FiltersScreen({ navigation }) {
     const [filters, setFilters] = useState(null);
     const [selectedFilters, setSelectedFilters] = useState({
         commodity: '',
-        variety: '',
         category: '',
     });
     const [loading, setLoading] = useState(true);
@@ -31,10 +29,14 @@ export default function FiltersScreen({ navigation }) {
     // Complete market data filter state
     const [showCompleteDataOnly, setShowCompleteDataOnly] = useState(false);
     const [completeDataCommodities, setCompleteDataCommodities] = useState(new Set());
-    
+    const [completeFetching, setCompleteFetching] = useState(false);
+    const [completeError, setCompleteError] = useState(false);
+
     // Organic filter state
     const [organicOnly, setOrganicOnly] = useState(false);
     const [organicCommodities, setOrganicCommodities] = useState(new Set());
+    const [organicFetching, setOrganicFetching] = useState(false);
+    const [organicError, setOrganicError] = useState(false);
 
     useEffect(() => {
         const fetchFilters = async () => {
@@ -51,26 +53,76 @@ export default function FiltersScreen({ navigation }) {
         fetchFilters();
     }, [selectedFilters.category, selectedFilters.commodity]);
 
+    // Clears the selected commodity (and category if it has no valid options left)
+    // after a filter set is applied, so stale selections don't reach the Dashboard.
+    const clearInvalidSelection = useCallback((validSet) => {
+        setSelectedFilters(prev => {
+            if (!prev.commodity || validSet.has(prev.commodity)) return prev;
+            const categoryStillValid = prev.category &&
+                (CATEGORY_COMMODITIES[prev.category] || []).some(c => validSet.has(c));
+            return { ...prev, commodity: '', category: categoryStillValid ? prev.category : '' };
+        });
+    }, []);
+
     // Fetch commodities with complete market data when toggle is enabled
     useEffect(() => {
-        if (showCompleteDataOnly && completeDataCommodities.size === 0) {
-            const fetchCompleteData = async () => {
-                const completeCommodities = await getCommoditiesWithCompleteData();
-                setCompleteDataCommodities(completeCommodities);
-            };
-            fetchCompleteData();
+        if (!showCompleteDataOnly) {
+            setCompleteError(false);
+            return;
         }
+        if (completeDataCommodities.size > 0) {
+            // Already cached — just validate the current selection against cached data
+            clearInvalidSelection(completeDataCommodities);
+            return;
+        }
+        let cancelled = false;
+        setCompleteFetching(true);
+        setCompleteError(false);
+        getCommoditiesWithCompleteData()
+            .then(result => {
+                if (cancelled) return;
+                setCompleteDataCommodities(result);
+                clearInvalidSelection(result);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setCompleteError(true);
+                setShowCompleteDataOnly(false);
+            })
+            .finally(() => {
+                if (!cancelled) setCompleteFetching(false);
+            });
+        return () => { cancelled = true; };
     }, [showCompleteDataOnly]);
 
     // Fetch commodities with organic data when toggle is enabled
     useEffect(() => {
-        if (organicOnly && organicCommodities.size === 0) {
-            const fetchOrganicData = async () => {
-                const organicCmds = await getCommoditiesWithOrganicData();
-                setOrganicCommodities(organicCmds);
-            };
-            fetchOrganicData();
+        if (!organicOnly) {
+            setOrganicError(false);
+            return;
         }
+        if (organicCommodities.size > 0) {
+            clearInvalidSelection(organicCommodities);
+            return;
+        }
+        let cancelled = false;
+        setOrganicFetching(true);
+        setOrganicError(false);
+        getCommoditiesWithOrganicData()
+            .then(result => {
+                if (cancelled) return;
+                setOrganicCommodities(result);
+                clearInvalidSelection(result);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setOrganicError(true);
+                setOrganicOnly(false);
+            })
+            .finally(() => {
+                if (!cancelled) setOrganicFetching(false);
+            });
+        return () => { cancelled = true; };
     }, [organicOnly]);
 
     const handleFilterChange = (filterName, value) => {
@@ -78,55 +130,41 @@ export default function FiltersScreen({ navigation }) {
         // Uses local mappings for INSTANT validation - no database calls!
         
         if (filterName === 'category') {
-            // When category changes, immediately check if commodity is still valid
             setSelectedFilters(prev => {
                 const newCategory = value;
                 let newCommodity = prev.commodity;
-                let newVariety = prev.variety;
-                
-                // If we have a commodity selected, check if it belongs to the new category
+
                 if (prev.commodity && newCategory) {
                     const validCommodities = CATEGORY_COMMODITIES[newCategory] || [];
                     if (!validCommodities.includes(prev.commodity)) {
                         newCommodity = '';
-                        newVariety = ''; // Also clear variety
                     }
                 }
-                
-                // If category is cleared, don't clear commodity (allow browsing)
-                
-                return { 
-                    ...prev, 
+
+                return {
+                    ...prev,
                     category: newCategory,
                     commodity: newCommodity,
-                    variety: newVariety,
                 };
             });
-        } 
+        }
         else if (filterName === 'commodity') {
-            // When commodity is selected, instantly look up its parent category
             setSelectedFilters(prev => {
                 let newCategory = prev.category;
-                
-                // Auto-fill category if not set and we have a commodity
+
                 if (value && !prev.category) {
                     const lookupCategory = COMMODITY_TO_CATEGORY[value];
                     if (lookupCategory) {
                         newCategory = lookupCategory;
                     }
                 }
-                
-                return { 
-                    ...prev, 
+
+                return {
+                    ...prev,
                     commodity: value,
                     category: newCategory,
-                    variety: '', // Clear variety when commodity changes
                 };
             });
-        }
-        else if (filterName === 'variety') {
-            // Variety is a leaf node, just update it
-            setSelectedFilters(prev => ({ ...prev, variety: value }));
         }
         
         // Clear validation error when filters change
@@ -148,7 +186,6 @@ export default function FiltersScreen({ navigation }) {
     const clearFilters = () => {
         setSelectedFilters({
             commodity: '',
-            variety: '',
             category: '',
         });
         setValidationError('');
@@ -196,10 +233,20 @@ export default function FiltersScreen({ navigation }) {
                         <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
                             Show only crops with Shipping, Terminal, and Retail data
                         </Text>
+                        {completeFetching && (
+                            <View style={styles.fetchingRow}>
+                                <ActivityIndicator size="small" color={colors.accent} />
+                                <Text style={[styles.fetchingText, { color: colors.textSecondary }]}>Loading…</Text>
+                            </View>
+                        )}
+                        {completeError && (
+                            <Text style={styles.toggleErrorText}>Failed to load — please try again.</Text>
+                        )}
                     </View>
                     <Switch
                         value={showCompleteDataOnly}
-                        onValueChange={setShowCompleteDataOnly}
+                        onValueChange={completeFetching ? undefined : setShowCompleteDataOnly}
+                        disabled={completeFetching}
                         trackColor={{ false: '#64748b', true: colors.accent }}
                         thumbColor={showCompleteDataOnly ? '#fff' : '#f4f3f4'}
                     />
@@ -207,12 +254,24 @@ export default function FiltersScreen({ navigation }) {
 
                 {/* Organic Only Toggle */}
                 <View style={[styles.organicToggleRow, { backgroundColor: colors.surfaceElevated }]}>
-                    <Text style={[styles.organicLabel, { color: colors.text }]}>Organic</Text>
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.organicLabel, { color: colors.text }]}>Organic</Text>
+                        {organicFetching && (
+                            <View style={styles.fetchingRow}>
+                                <ActivityIndicator size="small" color={colors.accent} />
+                                <Text style={[styles.fetchingText, { color: colors.textSecondary }]}>Loading…</Text>
+                            </View>
+                        )}
+                        {organicError && (
+                            <Text style={styles.toggleErrorText}>Failed to load — please try again.</Text>
+                        )}
+                    </View>
                     <View style={styles.yesNoContainer}>
                         <Text style={[styles.yesNoText, { color: organicOnly ? colors.textMuted : colors.text }]}>No</Text>
                         <Switch
                             value={organicOnly}
-                            onValueChange={setOrganicOnly}
+                            onValueChange={organicFetching ? undefined : setOrganicOnly}
+                            disabled={organicFetching}
                             trackColor={{ false: '#64748b', true: colors.accent }}
                             thumbColor={organicOnly ? '#fff' : '#f4f3f4'}
                             style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
@@ -225,6 +284,7 @@ export default function FiltersScreen({ navigation }) {
                     <View style={styles.filtersContainer}>
                         <FilterDropdown
                             label="Category"
+                            disabled={completeFetching || organicFetching}
                             options={
                                 (() => {
                                     let categoryList = filters.categories;
@@ -253,6 +313,7 @@ export default function FiltersScreen({ navigation }) {
                         />
                         <FilterDropdown
                             label="Commodity"
+                            disabled={completeFetching || organicFetching}
                             options={
                                 (() => {
                                     let commodityList = selectedFilters.category 
@@ -274,14 +335,6 @@ export default function FiltersScreen({ navigation }) {
                             value={selectedFilters.commodity}
                             onChange={(v) => handleFilterChange('commodity', v)}
                             color={colors.accent}
-                        />
-                        <FilterDropdown
-                            label={selectedFilters.commodity ? "Variety" : "Variety (Select Commodity First)"}
-                            options={filters.varieties}
-                            value={selectedFilters.variety}
-                            onChange={(v) => handleFilterChange('variety', v)}
-                            color={colors.accent}
-                            disabled={!selectedFilters.commodity}
                         />
                     </View>
                 )}
@@ -410,6 +463,20 @@ const styles = StyleSheet.create({
     toggleDescription: {
         fontSize: 13,
         lineHeight: 18,
+    },
+    fetchingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 6,
+    },
+    fetchingText: {
+        fontSize: 12,
+    },
+    toggleErrorText: {
+        marginTop: 6,
+        fontSize: 12,
+        color: '#dc2626',
     },
     organicToggleRow: {
         flexDirection: 'row',

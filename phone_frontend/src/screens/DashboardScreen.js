@@ -7,7 +7,8 @@ import {
     ScrollView,
     Modal,
     ActivityIndicator,
-    Platform
+    Platform,
+    TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,8 +47,9 @@ export default function DashboardScreen({ route, navigation }) {
 
     // Top-level Filter Controls
     const [organicOnly, setOrganicOnly] = useState(initialOrganicOnly || false);
-    const [selectedVariety, setSelectedVariety] = useState(filters.variety || '');
+    const [selectedVariety, setSelectedVariety] = useState('');
     const [showVarietyModal, setShowVarietyModal] = useState(false);
+    const [varietySearch, setVarietySearch] = useState('');
 
 
     // ══════════════════════════════════════════════════════════════
@@ -390,52 +392,65 @@ export default function DashboardScreen({ route, navigation }) {
             </ScrollOrView>
 
             {/* Variety Selection Modal */}
-            <Modal visible={showVarietyModal} animationType="fade" transparent>
+            <Modal visible={showVarietyModal} animationType="fade" transparent onRequestClose={() => { setShowVarietyModal(false); setVarietySearch(''); }}>
                 <TouchableOpacity
                     style={styles.modalOverlay}
                     activeOpacity={1}
-                    onPress={() => setShowVarietyModal(false)}
+                    onPress={() => { setShowVarietyModal(false); setVarietySearch(''); }}
                 >
                     <View style={[styles.varietyModalContent, { backgroundColor: colors.surface }]}>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>Select Variety</Text>
+                        <Text style={[styles.modalTitle, { color: colors.text, paddingTop: 20 }]}>Select Variety</Text>
+                        <TextInput
+                            style={[styles.varietySearchInput, { backgroundColor: colors.surfaceElevated, color: colors.text, borderColor: colors.border }]}
+                            placeholder="Search varieties..."
+                            placeholderTextColor={colors.textMuted}
+                            value={varietySearch}
+                            onChangeText={setVarietySearch}
+                            autoCorrect={false}
+                            clearButtonMode="while-editing"
+                        />
                         <ScrollView style={styles.varietyList}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.varietyItem,
-                                    { borderBottomColor: colors.border },
-                                    !selectedVariety && { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : '#f0fdf4' }
-                                ]}
-                                onPress={() => { setSelectedVariety(''); setShowVarietyModal(false); }}
-                            >
-                                <Text style={[
-                                    styles.varietyItemText,
-                                    { color: colors.text },
-                                    !selectedVariety && { color: colors.accent, fontWeight: '600' }
-                                ]}>All Varieties</Text>
-                                {!selectedVariety && <Ionicons name="checkmark" size={20} color={colors.accent} />}
-                            </TouchableOpacity>
-                            {varietyOptions.map(variety => (
+                            {!varietySearch && (
                                 <TouchableOpacity
-                                    key={variety}
                                     style={[
                                         styles.varietyItem,
                                         { borderBottomColor: colors.border },
-                                        selectedVariety === variety && { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : '#f0fdf4' }
+                                        !selectedVariety && { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : '#f0fdf4' }
                                     ]}
-                                    onPress={() => { setSelectedVariety(variety); setShowVarietyModal(false); }}
+                                    onPress={() => { setSelectedVariety(''); setShowVarietyModal(false); setVarietySearch(''); }}
                                 >
                                     <Text style={[
                                         styles.varietyItemText,
                                         { color: colors.text },
-                                        selectedVariety === variety && { color: colors.accent, fontWeight: '600' }
-                                    ]}>{variety}</Text>
-                                    {selectedVariety === variety && <Ionicons name="checkmark" size={20} color={colors.accent} />}
+                                        !selectedVariety && { color: colors.accent, fontWeight: '600' }
+                                    ]}>All Varieties</Text>
+                                    {!selectedVariety && <Ionicons name="checkmark" size={20} color={colors.accent} />}
                                 </TouchableOpacity>
-                            ))}
+                            )}
+                            {varietyOptions
+                                .filter(v => v.toLowerCase().includes(varietySearch.toLowerCase()))
+                                .map(variety => (
+                                    <TouchableOpacity
+                                        key={variety}
+                                        style={[
+                                            styles.varietyItem,
+                                            { borderBottomColor: colors.border },
+                                            selectedVariety === variety && { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.2)' : '#f0fdf4' }
+                                        ]}
+                                        onPress={() => { setSelectedVariety(variety); setShowVarietyModal(false); setVarietySearch(''); }}
+                                    >
+                                        <Text style={[
+                                            styles.varietyItemText,
+                                            { color: colors.text },
+                                            selectedVariety === variety && { color: colors.accent, fontWeight: '600' }
+                                        ]}>{variety}</Text>
+                                        {selectedVariety === variety && <Ionicons name="checkmark" size={20} color={colors.accent} />}
+                                    </TouchableOpacity>
+                                ))}
                         </ScrollView>
                         <TouchableOpacity
                             style={[styles.closeButton, { backgroundColor: colors.textMuted }]}
-                            onPress={() => setShowVarietyModal(false)}
+                            onPress={() => { setShowVarietyModal(false); setVarietySearch(''); }}
                         >
                             <Text style={styles.closeButtonText}>Cancel</Text>
                         </TouchableOpacity>
@@ -660,6 +675,10 @@ const styles = StyleSheet.create({
     varietySelectorLabel: { fontSize: 14, fontWeight: '500' },
     varietySelectorValue: { fontSize: 14, fontWeight: '600', flex: 1, marginLeft: 8 },
     varietyModalContent: { width: '90%', maxHeight: '70%', borderRadius: 16, padding: 0, overflow: 'hidden' },
+    varietySearchInput: {
+        marginHorizontal: 16, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 9,
+        borderRadius: 10, borderWidth: 1, fontSize: 14,
+    },
     varietyList: { maxHeight: 300 },
     varietyItem: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
