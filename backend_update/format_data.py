@@ -121,7 +121,7 @@ _CONSUMED_COLS = {
     # Mapped to district
     'district',
     # Mapped to commodity
-    'commodity',
+    'commodity', 'crop',
     # Mapped to variety
     'variety', 'var',
     # Mapped to package
@@ -142,7 +142,23 @@ _CONSUMED_COLS = {
     # Additional explicit fields
     'market_location_name', 'item_size', 'slug_id', 'slug_name',
     # Internal / report metadata — not useful as row-level data
-    '_section', 'report_title', 'published_date', 'report_begin_date',
+    '_section', 'report_title', 'published_date', 'published_Date',
+    'report_begin_date', 'report_narrative', 'report_footer', 'report_footnotes',
+    'special_notes', 'final_ind',
+    # Location metadata (redundant with district/origin already mapped)
+    'city', 'state', 'office_city', 'office_state', 'office_name',
+    'market_location_city', 'market_location_state', 'reporting_city',
+    # Product quality / condition fields not in the schema
+    'appear', 'appearance', 'cond', 'condition', 'quality', 'grade',
+    'storage', 'repack', 'season', 'properties', 'environment', 'env',
+    'basis_of_sale', 'transportation_mode', 'import_export_flag',
+    # Retail-specific weekly stats not in the schema
+    'store_count', 'stores_with_Ads', '%_Marked_Local',
+    'prior_WK_store_count', 'prior_WK_wtd_avg_price',
+    'prior_YR_store_count', 'prior_YR_wtd_avg_price',
+    'unit_sales',
+    # Size comment variant (item_size is already mapped)
+    'item_Size_Comment',
 }
 
 
@@ -282,7 +298,8 @@ def load_and_format_all_data():
             print(f"Error processing {csv_file}: {e}")
             continue
 
-    combined_unified = pd.concat(all_unified_records, ignore_index=True) if all_unified_records else pd.DataFrame()
+    non_empty = [df for df in all_unified_records if not df.empty]
+    combined_unified = pd.concat(non_empty, ignore_index=True) if non_empty else pd.DataFrame()
 
     print(f"\nTotal UnifiedCropPrice records: {len(combined_unified)}")
 

@@ -239,18 +239,18 @@ export default function HomeScreen({ navigation }) {
             </ScrollView>
 
             {/* Floating Action Button */}
-            <View style={styles.fabWrapper}>
+            <TouchableOpacity
+                style={styles.fabWrapper}
+                onPress={() => navigation.navigate('Filters')}
+                activeOpacity={0.8}
+            >
                 <View style={dynamicStyles.fabIconCircle}>
                     <Ionicons name="options-outline" size={32} color="#0f172a" />
                 </View>
-                <TouchableOpacity
-                    style={dynamicStyles.startFilteringButton}
-                    onPress={() => navigation.navigate('Filters')}
-                    activeOpacity={0.8}
-                >
+                <View style={dynamicStyles.startFilteringButton}>
                     <Text style={styles.startFilteringText}>Start Filtering</Text>
-                </TouchableOpacity>
-            </View>
+                </View>
+            </TouchableOpacity>
         </SafeAreaView>
     );
 }

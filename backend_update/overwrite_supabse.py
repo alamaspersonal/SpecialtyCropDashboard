@@ -24,22 +24,19 @@ def get_supabase_client() -> Client:
     return create_client(supabase_url, supabase_key, options=options)
 
 
-def clear_table(client: Client, table_name: str):
+def delete_recent_rows(client: Client, table_name: str, days: int):
     """
-    Clear all rows from a table using TRUNCATE via a Supabase RPC function.
-
-    Requires the following function to exist in Supabase (run once in SQL editor):
-        CREATE OR REPLACE FUNCTION truncate_unified_crop_price()
-        RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-        BEGIN TRUNCATE TABLE "UnifiedCropPrice"; END; $$;
+    Delete only the rows whose report_date falls within the last `days` days.
+    Historical data outside that window is left untouched.
     """
-    print(f"Clearing table: {table_name}...")
+    from datetime import datetime, timedelta
+    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime('%Y-%m-%d')
+    print(f"Deleting rows in {table_name} with report_date >= {cutoff}...")
     try:
-        rpc_name = f"truncate_{table_name.lower().replace(' ', '_')}"
-        client.rpc(rpc_name).execute()
-        print(f"  ✔ Cleared {table_name} via TRUNCATE")
+        client.table(table_name).delete().gte('report_date', cutoff).execute()
+        print(f"  ✔ Removed recent rows (>= {cutoff})")
     except Exception as e:
-        print(f"  ✘ Error clearing {table_name}: {e}")
+        print(f"  ✘ Error deleting recent rows: {e}")
         raise
 
 import time
@@ -161,9 +158,9 @@ def overwrite_supabase_data(unified_crop_price_df: pd.DataFrame):
         print("\n=== Checking schema ===")
         unified_crop_price_df = detect_new_columns(client, "UnifiedCropPrice", unified_crop_price_df)
 
-        # Clear existing data
-        print("\n=== Clearing existing data ===")
-        clear_table(client, "UnifiedCropPrice")
+        # Delete only the recent window — historical data outside 30 days is preserved
+        print("\n=== Deleting recent data window (last 30 days) ===")
+        delete_recent_rows(client, "UnifiedCropPrice", days=30)
 
         # Upload new data
         print("\n=== Uploading new data ===")

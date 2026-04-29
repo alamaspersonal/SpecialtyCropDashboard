@@ -31,11 +31,11 @@ def main():
     print("=" * 60)
     
     # Step 1: Fetch recent data from USDA API
-    print("\n[Step 1/3] Fetching all available data from USDA API (no date filter)...")
+    print("\n[Step 1/3] Fetching last 30 days of data from USDA API...")
     print("-" * 40)
-    
+
     try:
-        reports = fetch_recent_data(REQUIRED_SLUG_IDS, days=None)
+        reports = fetch_recent_data(REQUIRED_SLUG_IDS, days=30)
         if not reports:
             print("✘ No data fetched from API. Aborting.")
             return False
