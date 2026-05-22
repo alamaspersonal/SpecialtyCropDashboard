@@ -185,6 +185,11 @@ const PriceBlock = ({
                 <Text style={[styles.blockLabel, { color: textColor }]}>
                     {label}
                 </Text>
+                {(selectedVariety || (!selectedVariety && varietyOptions?.length === 1)) ? (
+                    <Text style={{ fontSize: 12, color: subTextColor, textAlign: 'center', marginTop: -4, marginBottom: 4 }}>
+                        {selectedVariety || varietyOptions[0]}
+                    </Text>
+                ) : null}
 
                 {/* Price Display */}
                 <View style={styles.priceContainer}>

@@ -38,6 +38,7 @@ const PACKAGE_WEIGHTS = {
     '6 ct trays filmwrapped': { weight_lbs: null, units: 6 },
     'each': { weight_lbs: null, units: 1 },
     'per each': { weight_lbs: null, units: 1 },
+    'per lb': { weight_lbs: 1, units: null },
 };
 
 function lookupWeight(pkg) {
