@@ -20,7 +20,7 @@ export default function Header() {
 
     return (
         <header className="glass sticky top-0 z-50 h-[var(--header-height)] border-b border-[var(--color-border)]">
-            <div className="mx-auto flex h-full max-w-[var(--max-content)] items-center justify-between px-4 sm:px-6 lg:px-8">
+            <div className="mx-auto grid h-full max-w-[var(--max-content)] grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6 lg:px-8">
                 {/* Brand */}
                 <Link href="/" className="flex items-center gap-2.5 no-underline group">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-accent)] text-white shadow-sm transition-transform duration-200 group-hover:scale-110">
@@ -59,7 +59,7 @@ export default function Header() {
                     })}
                 </nav>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 justify-end">
                     {/* Theme Toggle */}
                     <button
                         onClick={toggleTheme}

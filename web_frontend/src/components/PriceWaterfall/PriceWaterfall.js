@@ -1,12 +1,48 @@
 'use client';
 
-/**
- * PriceWaterfall — Three market-type price blocks (Terminal, Shipping, Retail)
- * with per-market sub-filters for package, origin, and district.
- */
-
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import FilterDropdown from '../FilterDropdown/FilterDropdown';
+
+function BreakdownSection({ title, items, bg }) {
+    if (!items || items.length === 0) return null;
+
+    return (
+        <div className="pt-2 border-t border-[var(--color-border)]">
+            <p className="text-xs font-semibold text-[var(--color-text-secondary)] mb-2 uppercase tracking-wide">{title}</p>
+            <div className="space-y-2">
+                {items.map((item) => {
+                    const displayPrice = item.pricePerUnit
+                        ? `$${item.pricePerUnit.value}/${item.pricePerUnit.unit}`
+                        : `$${Number(item.avgPrice).toFixed(2)}`;
+                    return (
+                        <div key={item.name} className="space-y-0.5">
+                            <div className="flex items-center justify-between gap-2">
+                                <span
+                                    className="text-xs text-[var(--color-text-secondary)] truncate min-w-0 flex-1"
+                                    title={item.name}
+                                >
+                                    {item.name}
+                                </span>
+                                <span className="text-xs font-semibold text-[var(--color-text-primary)] whitespace-nowrap">
+                                    {displayPrice}
+                                </span>
+                                <span className="text-xs text-[var(--color-text-muted)] whitespace-nowrap">
+                                    {item.count}
+                                </span>
+                            </div>
+                            <div className="h-1 w-full rounded-full bg-[var(--color-surface-elevated)]">
+                                <div
+                                    className="h-1 rounded-full opacity-50 transition-all duration-500"
+                                    style={{ width: `${Math.max(item.pct * 100, 3)}%`, backgroundColor: bg }}
+                                />
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
 
 function PriceBlock({
     label,
@@ -26,6 +62,9 @@ function PriceBlock({
     units,
     dateRange,
     reportCount,
+    breakdownByPackage,
+    breakdownByOrigin,
+    breakdownByDistrict,
 }) {
     const formatPrice = (val) => {
         if (val == null || isNaN(val)) return '—';
@@ -39,8 +78,31 @@ function PriceBlock({
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
+    const priceValue = avgPrice != null && !isNaN(avgPrice) ? Number(avgPrice) : null;
+    const pricePerUnit = (() => {
+        if (priceValue == null) return null;
+        if (weightLbs && weightLbs > 0) return { value: (priceValue / weightLbs).toFixed(2), unit: 'lb' };
+        if (units && units > 0) return { value: (priceValue / units).toFixed(2), unit: 'unit' };
+        return null;
+    })();
+
+    // Apply selected package weight to origin/district breakdowns
+    const applyWeightToBreakdown = (items) => {
+        if (!items || items.length === 0) return items;
+        if (!(weightLbs > 0) && !(units > 0)) return items;
+        return items.map(item => ({
+            ...item,
+            pricePerUnit: weightLbs > 0
+                ? { value: (item.avgPrice / weightLbs).toFixed(2), unit: 'lb' }
+                : { value: (item.avgPrice / units).toFixed(2), unit: 'unit' },
+        }));
+    };
+
+    const enrichedOriginBreakdown = applyWeightToBreakdown(breakdownByOrigin);
+    const enrichedDistrictBreakdown = applyWeightToBreakdown(breakdownByDistrict);
+
     return (
-        <div 
+        <div
             className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-card-hover)] relative"
             style={{ zIndex }}
         >
@@ -50,15 +112,21 @@ function PriceBlock({
             </div>
 
             <div className="p-4 space-y-3">
-                {/* Price */}
-                <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-[var(--color-text-primary)]">{formatPrice(avgPrice)}</span>
-                    {weightLbs && (
-                        <span className="text-xs text-[var(--color-text-muted)]">/ {weightLbs} lbs</span>
-                    )}
-                    {units && !weightLbs && (
-                        <span className="text-xs text-[var(--color-text-muted)]">/ {units} ct</span>
-                    )}
+                {/* Price — per lb/unit */}
+                <div>
+                    <p className="text-xs text-[var(--color-text-muted)] mb-0.5">
+                        {pricePerUnit ? `Price / ${pricePerUnit.unit}` : 'Avg Package Price'}
+                    </p>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-bold text-[var(--color-text-primary)]">
+                            {pricePerUnit ? `$${pricePerUnit.value}` : formatPrice(avgPrice)}
+                        </span>
+                        {pricePerUnit && (
+                            <span className="text-xs text-[var(--color-text-muted)]">
+                                {formatPrice(avgPrice)} / pkg
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 {/* Date Range */}
@@ -83,6 +151,17 @@ function PriceBlock({
                         <FilterDropdown label="District" options={districtOptions} value={selectedDistrict} onChange={onDistrictChange} color={bg} />
                     )}
                 </div>
+
+                {/* Price Breakdowns */}
+                {breakdownByPackage?.length > 1 && (
+                    <BreakdownSection title="By Package" items={breakdownByPackage} bg={bg} />
+                )}
+                {enrichedOriginBreakdown?.length > 1 && (
+                    <BreakdownSection title="By Origin" items={enrichedOriginBreakdown} bg={bg} />
+                )}
+                {enrichedDistrictBreakdown?.length > 1 && (
+                    <BreakdownSection title="By District" items={enrichedDistrictBreakdown} bg={bg} />
+                )}
             </div>
         </div>
     );
@@ -98,6 +177,7 @@ export default function PriceWaterfall({
     districtData,
     dateRanges,
     reportCounts,
+    breakdownData,
 }) {
     const blocks = [
         { key: 'terminal', label: 'Terminal Market', bg: 'var(--color-terminal)', price: stats?.terminal },
@@ -116,14 +196,14 @@ export default function PriceWaterfall({
             {/* Summary Bar Chart */}
             {chartData.length > 0 && (
                 <div>
-                    <h3 className="mb-3 text-sm font-semibold text-[var(--color-text-secondary)]">Price Comparison</h3>
+                    <h3 className="mb-3 text-sm font-semibold text-[var(--color-text-secondary)]">Price Comparison (Avg Package Price)</h3>
                     <div className="rounded-xl bg-[var(--color-surface-elevated)] p-4">
                         <ResponsiveContainer width="100%" height={200}>
                             <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30 }}>
                                 <XAxis type="number" tickFormatter={(v) => `$${v.toFixed(2)}`} fontSize={12} />
                                 <YAxis type="category" dataKey="name" width={120} fontSize={12} />
                                 <Tooltip
-                                    formatter={(value) => [`$${value.toFixed(2)}`, 'Avg Price']}
+                                    formatter={(value) => [`$${value.toFixed(2)}`, 'Avg Package Price']}
                                     contentStyle={{
                                         background: 'var(--color-surface)',
                                         border: '1px solid var(--color-border)',
@@ -165,6 +245,9 @@ export default function PriceWaterfall({
                         units={weightData?.[b.key]?.units}
                         dateRange={dateRanges?.[b.key]}
                         reportCount={reportCounts?.[b.key]}
+                        breakdownByPackage={breakdownData?.[b.key]?.byPackage}
+                        breakdownByOrigin={breakdownData?.[b.key]?.byOrigin}
+                        breakdownByDistrict={breakdownData?.[b.key]?.byDistrict}
                     />
                 ))}
             </div>

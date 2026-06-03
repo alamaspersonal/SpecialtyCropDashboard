@@ -20,7 +20,7 @@
 		13B07F961A680F5B00A75B9A /* SpecialtyCropDashboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpecialtyCropDashboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = SpecialtyCropDashboard/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = SpecialtyCropDashboard/Info.plist; sourceTree = "<group>"; };
-		2466CE0D2F3EC0BDF7A5D493 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = SpecialtyCropDashboard/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		2466CE0D2F3EC0BDF7A5D493 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = SpecialtyCropDashboard/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		69884B08B9684864E0E1DCC4 /* libPods-SpecialtyCropDashboard.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-SpecialtyCropDashboard.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		8C3ED28577C494CD89C08276 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-SpecialtyCropDashboard/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = SpecialtyCropDashboard/SplashScreen.storyboard; sourceTree = "<group>"; };
@@ -128,7 +128,6 @@
 				D9093591D4EEFF838EDC739C /* Pods-SpecialtyCropDashboard.debug.xcconfig */,
 				D339F2372F22C87E7C70526C /* Pods-SpecialtyCropDashboard.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -362,7 +361,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.anthonylamas.specialtycrops;
+				PRODUCT_BUNDLE_IDENTIFIER = anthonylamas.specialtycrops;
 				PRODUCT_NAME = SpecialtyCropDashboard;
 				SWIFT_OBJC_BRIDGING_HEADER = "SpecialtyCropDashboard/SpecialtyCropDashboard-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -396,7 +395,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.anthonylamas.specialtycrops;
+				PRODUCT_BUNDLE_IDENTIFIER = anthonylamas.specialtycrops;
 				PRODUCT_NAME = SpecialtyCropDashboard;
 				SWIFT_OBJC_BRIDGING_HEADER = "SpecialtyCropDashboard/SpecialtyCropDashboard-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

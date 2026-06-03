@@ -205,6 +205,34 @@ function DashboardContent() {
         }
     };
 
+    const computeBreakdown = (data, field, priceConverter) => {
+        const groups = {};
+        data.forEach(d => {
+            const key = d[field];
+            if (!key) return;
+            const price = d.price_avg ?? ((d.low_price || 0) + (d.high_price || 0)) / 2;
+            if (price > 0) {
+                if (!groups[key]) groups[key] = { prices: [], count: 0 };
+                groups[key].prices.push(price);
+                groups[key].count++;
+            }
+        });
+        const totalCount = Object.values(groups).reduce((sum, g) => sum + g.count, 0);
+        return Object.entries(groups)
+            .map(([name, { prices, count }]) => {
+                const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+                return {
+                    name,
+                    avgPrice,
+                    pricePerUnit: priceConverter ? priceConverter(name, avgPrice) : null,
+                    count,
+                    pct: totalCount > 0 ? count / totalCount : 0,
+                };
+            })
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 6);
+    };
+
     const computeMarketData = (base, pkg, org, dist) => {
         const baseForPkg = base.filter(d => (!org || d.origin === org) && (!dist || d.district === dist));
         const baseForOrg = base.filter(d => (!pkg || d.package === pkg) && (!dist || d.district === dist));
@@ -219,6 +247,15 @@ function DashboardContent() {
         if (org) filtered = filtered.filter(d => d.origin === org);
         if (dist) filtered = filtered.filter(d => d.district === dist);
 
+        const pkgBreakdown = computeBreakdown(base, 'package', (pkgName, avgPrice) => {
+            const w = lookupWeight(pkgName);
+            if (w.weight_lbs > 0) return { value: (avgPrice / w.weight_lbs).toFixed(2), unit: 'lb' };
+            if (w.units > 0) return { value: (avgPrice / w.units).toFixed(2), unit: 'unit' };
+            return null;
+        });
+        const orgBreakdown = computeBreakdown(base, 'origin', null);
+        const distBreakdown = computeBreakdown(base, 'district', null);
+
         return {
             packageData: { options: pkgOptions, selected: pkg },
             originData: { options: orgOptions, selected: org },
@@ -227,7 +264,8 @@ function DashboardContent() {
             stats: calcAvgPrice(filtered),
             weightData: lookupWeight(pkg),
             dateRanges: getDateRangeFromData(filtered),
-            reportCounts: filtered.length
+            reportCounts: filtered.length,
+            breakdownData: { byPackage: pkgBreakdown, byOrigin: orgBreakdown, byDistrict: distBreakdown },
         };
     };
 
@@ -252,6 +290,7 @@ function DashboardContent() {
     const dateRanges = { terminal: terminalMemo.dateRanges, shipping: shippingMemo.dateRanges, retail: retailMemo.dateRanges };
     const reportCounts = { terminal: terminalMemo.reportCounts, shipping: shippingMemo.reportCounts, retail: retailMemo.reportCounts };
     const filteredDataByType = { terminal: terminalMemo.filtered, shipping: shippingMemo.filtered, retail: retailMemo.filtered };
+    const breakdownData = { terminal: terminalMemo.breakdownData, shipping: shippingMemo.breakdownData, retail: retailMemo.breakdownData };
 
     const updateFilter = (type, changedKey, newVal) => {
         const base = type === 'terminal' ? terminalBase : type === 'shipping' ? shippingBase : retailBase;
@@ -519,6 +558,7 @@ function DashboardContent() {
                                                     districtData={districtData}
                                                     dateRanges={dateRanges}
                                                     reportCounts={reportCounts}
+                                                    breakdownData={breakdownData}
                                                 />
                                             </motion.section>
                                         )}
