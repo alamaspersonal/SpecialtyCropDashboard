@@ -190,9 +190,9 @@ export default function AccountScreen({ navigation }) {
                     )}
                 </View>
 
-                {/* Settings - Only Dark Mode */}
+                {/* Settings */}
                 <View style={dynamicStyles.settingsSection}>
-                    <View style={[dynamicStyles.settingsItem, { borderBottomWidth: 0 }]}>
+                    <View style={dynamicStyles.settingsItem}>
                         <Ionicons name={isDark ? "moon" : "sunny-outline"} size={22} color={colors.textSecondary} />
                         <Text style={dynamicStyles.settingsText}>Dark Mode</Text>
                         <Switch
@@ -203,6 +203,15 @@ export default function AccountScreen({ navigation }) {
                             ios_backgroundColor={colors.border}
                         />
                     </View>
+                    <TouchableOpacity
+                        style={[dynamicStyles.settingsItem, { borderBottomWidth: 0 }]}
+                        onPress={() => navigation.navigate('PrivacyPolicy')}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="shield-checkmark-outline" size={22} color={colors.textSecondary} />
+                        <Text style={dynamicStyles.settingsText}>Privacy Policy</Text>
+                        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                    </TouchableOpacity>
                 </View>
 
                 {/* App Info */}

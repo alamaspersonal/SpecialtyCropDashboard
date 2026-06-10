@@ -14,6 +14,7 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import FiltersScreen from './src/screens/FiltersScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import AccountScreen from './src/screens/AccountScreen';
+import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -84,6 +85,7 @@ function AppNavigator() {
         <Stack.Screen name="Filters" component={FiltersScreen} />
         <Stack.Screen name="Account" component={AccountScreen} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

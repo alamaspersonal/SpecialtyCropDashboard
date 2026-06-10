@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import { User, Moon, Sun, Trash2, ArrowLeft, Edit3, Check, X } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { getUserName, setUserName, clearUserData } from '../../services/userStorage';
@@ -181,6 +182,12 @@ export default function AccountPage() {
                     <div className="text-center text-xs text-[var(--color-text-muted)]">
                         <p>SpecialtyCrop Dashboard v2.0</p>
                         <p className="mt-0.5">USDA Market Data</p>
+                        <Link
+                            href="/privacy-policy"
+                            className="mt-2 inline-block underline-offset-2 hover:underline hover:text-[var(--color-text-secondary)] transition-colors"
+                        >
+                            Privacy Policy
+                        </Link>
                     </div>
                 </div>
             </div>

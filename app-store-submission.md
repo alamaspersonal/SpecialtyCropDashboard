@@ -102,7 +102,7 @@ Host the `privacy-policy.html` file (provided below) at a stable public URL. The
 1. Create a `docs/` folder in your repo (or a separate `gh-pages` branch)
 2. Drop `privacy-policy.html` in it
 3. Enable GitHub Pages in repo Settings → Pages
-4. Your URL will be: `https://[your-username].github.io/SpecialtyCropDashboard/privacy-policy.html`
+4. Your URL will be: `https://anthonylamas.github.io/SpecialtyCropDashboard/privacy-policy.html`
 
 Enter that URL in the Privacy Policy URL field in App Store Connect.
 

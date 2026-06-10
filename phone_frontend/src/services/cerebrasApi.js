@@ -102,7 +102,7 @@ If data for a section is missing, still include the header and state that data i
                 'Authorization': `Bearer ${CEREBRAS_API_KEY}`,
             },
             body: JSON.stringify({
-                model: 'llama3.1-8b',
+                model: 'gpt-oss-120b',
                 messages: [
                     { role: 'system', content: 'You are a concise agricultural market analyst providing factual market summaries.' },
                     { role: 'user', content: prompt }
