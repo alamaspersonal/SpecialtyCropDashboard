@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../context/ThemeContext';
-import { Moon, Sun, Leaf, Menu, X } from 'lucide-react';
+import { Moon, Sun, Menu, X } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -23,8 +24,15 @@ export default function Header() {
             <div className="mx-auto grid h-full max-w-[var(--max-content)] grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6 lg:px-8">
                 {/* Brand */}
                 <Link href="/" className="flex items-center gap-2.5 no-underline group">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-accent)] text-white shadow-sm transition-transform duration-200 group-hover:scale-110">
-                        <Leaf size={18} />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl overflow-hidden transition-transform duration-200 group-hover:scale-110">
+                        <Image
+                            src="/specialty-crop-logo.png"
+                            alt="SpecialtyCrop Dashboard logo"
+                            width={36}
+                            height={36}
+                            className="object-contain"
+                            priority
+                        />
                     </div>
                     <span className="text-base font-semibold tracking-tight text-[var(--color-text-primary)]">
                         SpecialtyCrop

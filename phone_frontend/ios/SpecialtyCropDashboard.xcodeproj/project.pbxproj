@@ -165,7 +165,6 @@
 				LastUpgradeCheck = 1130;
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
-						DevelopmentTeam = 5T9RYN6378;
 						LastSwiftMigration = 1250;
 						ProvisioningStyle = Automatic;
 					};
@@ -342,7 +341,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5T9RYN6378;
+				DEVELOPMENT_TEAM = 5FTX4YA8U5;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -361,7 +360,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = anthonylamas.specialtycrops;
+				PRODUCT_BUNDLE_IDENTIFIER = com.farmeconlab.specialtycrops;
 				PRODUCT_NAME = SpecialtyCropDashboard;
 				SWIFT_OBJC_BRIDGING_HEADER = "SpecialtyCropDashboard/SpecialtyCropDashboard-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -381,7 +380,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5T9RYN6378;
+				DEVELOPMENT_TEAM = 5FTX4YA8U5;
 				INFOPLIST_FILE = SpecialtyCropDashboard/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -395,7 +394,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = anthonylamas.specialtycrops;
+				PRODUCT_BUNDLE_IDENTIFIER = com.farmeconlab.specialtycrops;
 				PRODUCT_NAME = SpecialtyCropDashboard;
 				SWIFT_OBJC_BRIDGING_HEADER = "SpecialtyCropDashboard/SpecialtyCropDashboard-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
