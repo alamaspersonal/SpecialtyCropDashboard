@@ -185,26 +185,40 @@ def _parse_mixed_number(s):
     return total
 
 
+def _lbs_kgs(lbs):
+    """Return (weight_lbs, weight_kgs) rounded, derived from a pound figure."""
+    return round(lbs, 2), round(lbs / LB_PER_KG, 2)
+
+
+def _kgs_lbs(kgs):
+    """Return (weight_lbs, weight_kgs) rounded, derived from a kilogram figure."""
+    return round(kgs * LB_PER_KG, 2), round(kgs, 2)
+
+
 def parse_package_measures(package):
     """
     Derive (weight_lbs, weight_kgs, units) from a USDA package description.
 
-    weight_lbs / weight_kgs are the TOTAL net product weight of the package
-    (kg is derived from lbs and vice-versa so both columns are populated whenever
-    either is known). `units` is the count of individual sellable sub-units in the
-    package (e.g. the 12 in 'flats 12 1-pint baskets'). Any value that cannot be
-    derived from the string is returned as None.
+    weight_lbs / weight_kgs are the TOTAL net product weight of the package (kg is
+    derived from lbs and vice-versa so both columns are populated whenever either is
+    known). `units` is the count of individual sellable sub-units in the package
+    (e.g. the 12 in 'flats 12 1-pint baskets', or 1 for 'each'). Any value that
+    cannot be derived from the string is returned as None.
 
     Patterns covered, in priority order:
       1. Combined kg + lb        -> '5 kg/11 lb cartons', '9 kg (19.8 lb) containers'
-      2. Count x per-unit measure-> 'cartons 12 1-lb film bags', 'flats 12 5-oz cups',
-                                     'cartons 4 2-1/2 lb film bags', 'flats 12 1-pint baskets'
-      3. Leading kilograms       -> '10 kg containers', '3.5 kg containers'
-      4. Leading pounds (+range) -> '25 lb sacks', '30-35 lb cartons'
-      5. Leading count/volume    -> bare 'N pint'/'N count'
+      2. Priced per pound        -> 'per lb', 'per pound'                  (weight=1 lb)
+      3. Count x per-unit measure-> 'cartons 12 1-lb film bags', 'flats 12 5-oz cups',
+                                     'cartons 4 2-1/2 lb film bags', 'flats 12 125-gm cups'
+      4. Leading kilograms       -> '10 kg containers', '3.5 kg containers'
+      5. Leading pounds (+range) -> '25 lb sacks', '30-35 lb cartons', '2 pound bags'
+      6. Leading ounces (+range) -> '6 oz package', '5-9 oz package'
+      7. Leading grams           -> '100 gm packages'
+      8. Per-item pricing        -> 'each', 'per bunch', 'per sleeve'      (units=1)
+      9. Leading count/volume    -> bare 'N pint' / 'N count'
 
-    Bushels and bare containers ('cartons', 'bins', 'lugs', '1 layer') yield no
-    weight because the figure depends on the commodity, so they stay None.
+    Bushels and bare containers ('cartons', 'bins', 'lugs', '1 layer', 'N inch')
+    yield no weight because the figure depends on the commodity, so they stay None.
     """
     if package is None or (isinstance(package, float) and pd.isna(package)) or str(package).strip() == "":
         return None, None, None
@@ -214,42 +228,63 @@ def parse_package_measures(package):
     # 1. Combined "X kg/Y lb" or "X kg (Y lb)" — both figures are stated explicitly.
     m = re.search(r'(\d+(?:\.\d+)?)\s*kg\s*[/(]\s*(\d+(?:\.\d+)?)\s*lb', s)
     if m:
-        kg, lbs = float(m.group(1)), float(m.group(2))
-        return round(lbs, 2), round(kg, 2), None
+        return round(float(m.group(2)), 2), round(float(m.group(1)), 2), None
 
-    # 2. Count x per-unit measure, e.g. "12 1-lb", "4 2-1/2 lb", "12 18-oz", "12 1-pint".
-    m = re.search(r'(\d+)\s+([\d./\s-]*?\d)\s*-?\s*(lbs?|oz|pints?|pt|cups?|count|ct)\b', s)
+    # 2. Priced by the pound — normalize to a 1 lb basis so price/weight = price/lb.
+    if re.search(r'\bper\s+(?:lbs?|pounds?)\b', s):
+        return (*_lbs_kgs(1.0), None)
+
+    # 3. Count x per-unit measure, e.g. "12 1-lb", "4 2-1/2 lb", "12 18-oz", "12 125-gm".
+    m = re.search(r'(\d+)\s+([\d./\s-]*?\d)\s*-?\s*'
+                  r'(lbs?|pounds?|oz|gms?|grams?|kgs?|pints?|pt|cups?|count|ct)\b', s)
     if m:
         count = int(m.group(1))
         each = _parse_mixed_number(m.group(2))
         unit = m.group(3)
-        if unit.startswith('lb'):
-            lbs = count * each
-            return round(lbs, 2), round(lbs / LB_PER_KG, 2), count
+        if unit.startswith(('lb', 'pound')):
+            return (*_lbs_kgs(count * each), count)
         if unit == 'oz':
-            lbs = count * each / 16.0
-            return round(lbs, 2), round(lbs / LB_PER_KG, 2), count
+            return (*_lbs_kgs(count * each / 16.0), count)
+        if unit.startswith('kg'):
+            return (*_kgs_lbs(count * each), count)
+        if unit.startswith(('gm', 'gram')):
+            return (*_kgs_lbs(count * each / 1000.0), count)
         if unit in ('count', 'ct'):
             # "12 3-count packages" -> 36 individual items
             return None, None, int(count * each) if each else count
         # pint / pt / cup -> volume measure, weight depends on commodity
         return None, None, count
 
-    # 3. Leading kilograms, e.g. "10 kg containers".
+    # 4. Leading kilograms, e.g. "10 kg containers".
     m = re.search(r'(?<![\d.])(\d+(?:\.\d+)?)\s*kg\b', s)
     if m:
-        kg = float(m.group(1))
-        return round(kg * LB_PER_KG, 2), round(kg, 2), None
+        return (*_kgs_lbs(float(m.group(1))), None)
 
-    # 4. Leading pounds, optionally a range "30-35 lb" (use the midpoint).
-    m = re.search(r'(?<![\d.])(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*lbs?\b', s)
+    # 5. Leading pounds, optionally a range "30-35 lb" (use the midpoint).
+    m = re.search(r'(?<![\d.])(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*(?:lbs?|pounds?)\b', s)
     if m:
         lo = float(m.group(1))
         hi = float(m.group(2)) if m.group(2) else lo
-        lbs = (lo + hi) / 2.0
-        return round(lbs, 2), round(lbs / LB_PER_KG, 2), None
+        return (*_lbs_kgs((lo + hi) / 2.0), None)
 
-    # 5. Bare count / volume with no weight, e.g. "1 pint containers".
+    # 6. Leading ounces, optionally a range. Skip fluid-ounce volumes ("64 oz (1 gallon)").
+    if 'gallon' not in s:
+        m = re.search(r'(?<![\d.])(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*oz\b', s)
+        if m:
+            lo = float(m.group(1))
+            hi = float(m.group(2)) if m.group(2) else lo
+            return (*_lbs_kgs((lo + hi) / 2.0 / 16.0), None)
+
+    # 7. Leading grams, e.g. "100 gm packages".
+    m = re.search(r'(?<![\d.])(\d+(?:\.\d+)?)\s*(?:gms?|grams?)\b', s)
+    if m:
+        return (*_kgs_lbs(float(m.group(1)) / 1000.0), None)
+
+    # 8. Per-item pricing with no weight, e.g. "each", "per bunch", "per sleeve".
+    if s == 'each' or s.startswith('per '):
+        return None, None, 1
+
+    # 9. Bare count / volume with no weight, e.g. "1 pint containers", "3 count".
     m = re.search(r'(?<![\d.])(\d+)\s*(pints?|pt|count|ct|cups?)\b', s)
     if m:
         return None, None, int(m.group(1))
