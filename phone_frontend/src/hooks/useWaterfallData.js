@@ -39,8 +39,19 @@ const PACKAGE_WEIGHTS = {
     "per lb": { weight_lbs: 1, units: null },
 };
 
-function lookupWeight(pkg) {
+function lookupWeight(pkg, rows = null) {
     if (!pkg) return null;
+    // Prefer the weight_lbs / weight_kgs / units columns computed by the backend
+    // pipeline; fall back to the legacy map only when the DB has no value.
+    if (rows && rows.length) {
+        const match = rows.find(d => d.package === pkg &&
+            (d.weight_lbs != null || d.weight_kgs != null || d.units != null));
+        if (match) return {
+            weight_lbs: match.weight_lbs ?? null,
+            weight_kgs: match.weight_kgs ?? null,
+            units: match.units ?? null,
+        };
+    }
     if (PACKAGE_WEIGHTS[pkg]) return PACKAGE_WEIGHTS[pkg];
     for (const [key, val] of Object.entries(PACKAGE_WEIGHTS)) {
         if (pkg.toLowerCase().includes(key.toLowerCase()) ||
@@ -317,11 +328,11 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
     // ── Update weight data ──
     useEffect(() => {
         setWeightData({
-            terminal: lookupWeight(selectedPackages.terminal),
-            shipping: lookupWeight(selectedPackages.shipping),
-            retail: lookupWeight(selectedPackages.retail),
+            terminal: lookupWeight(selectedPackages.terminal, terminalData),
+            shipping: lookupWeight(selectedPackages.shipping, shippingData),
+            retail: lookupWeight(selectedPackages.retail, retailData),
         });
-    }, [selectedPackages]);
+    }, [selectedPackages, terminalData, shippingData, retailData]);
 
     // ── Calculate stats ──
     const calculateStats = useCallback(() => {

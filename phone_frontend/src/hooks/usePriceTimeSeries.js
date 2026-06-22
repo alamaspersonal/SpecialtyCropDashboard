@@ -41,7 +41,20 @@ const PACKAGE_WEIGHTS = {
     'per lb': { weight_lbs: 1, units: null },
 };
 
-function lookupWeight(pkg) {
+function lookupWeight(row) {
+    if (!row) return null;
+    // Prefer the weight_lbs / weight_kgs / units columns computed by the backend
+    // pipeline (present on each row); fall back to the legacy map by package string.
+    if (typeof row === 'object') {
+        if (row.weight_lbs != null || row.weight_kgs != null || row.units != null) {
+            return {
+                weight_lbs: row.weight_lbs ?? null,
+                weight_kgs: row.weight_kgs ?? null,
+                units: row.units ?? null,
+            };
+        }
+    }
+    const pkg = typeof row === 'string' ? row : row.package;
     if (!pkg) return null;
     const lower = pkg.toLowerCase().trim();
     for (const [key, val] of Object.entries(PACKAGE_WEIGHTS)) {
@@ -76,7 +89,7 @@ function aggregateDailyAverages(rows) {
             byDay[dayKey] = { sum: 0, count: 0, packages: {}, origins: {}, varieties: {} };
         }
 
-        const weight = lookupWeight(row.package);
+        const weight = lookupWeight(row);
         let normalizedPrice;
         if (weight?.weight_lbs > 0) {
             normalizedPrice = row.price_avg / weight.weight_lbs;

@@ -177,10 +177,23 @@ function DashboardContent() {
         return { start: dates[0], end: dates[dates.length - 1] };
     };
 
-    const lookupWeight = (pkg) => {
-        if (!pkg) return { weight_lbs: null, units: null };
-        const normalized = pkg.toLowerCase().trim();
-        return PACKAGE_WEIGHTS[normalized] || { weight_lbs: null, units: null };
+    // Prefer the weight_lbs / weight_kgs / units columns computed by the backend
+    // pipeline (present on each row). Fall back to the legacy hardcoded map only
+    // when the DB has no value for that package.
+    const lookupWeight = (pkg, rows = null) => {
+        const empty = { weight_lbs: null, weight_kgs: null, units: null };
+        if (!pkg) return empty;
+        if (rows && rows.length) {
+            const match = rows.find(d => d.package === pkg &&
+                (d.weight_lbs != null || d.weight_kgs != null || d.units != null));
+            if (match) return {
+                weight_lbs: match.weight_lbs ?? null,
+                weight_kgs: match.weight_kgs ?? null,
+                units: match.units ?? null,
+            };
+        }
+        const fallback = PACKAGE_WEIGHTS[pkg.toLowerCase().trim()];
+        return fallback ? { ...empty, ...fallback } : empty;
     };
 
     const getFilterState = (type) => {
@@ -248,7 +261,7 @@ function DashboardContent() {
         if (dist) filtered = filtered.filter(d => d.district === dist);
 
         const pkgBreakdown = computeBreakdown(base, 'package', (pkgName, avgPrice) => {
-            const w = lookupWeight(pkgName);
+            const w = lookupWeight(pkgName, base);
             if (w.weight_lbs > 0) return { value: (avgPrice / w.weight_lbs).toFixed(2), unit: 'lb' };
             if (w.units > 0) return { value: (avgPrice / w.units).toFixed(2), unit: 'unit' };
             return null;
@@ -262,7 +275,7 @@ function DashboardContent() {
             districtData: { options: distOptions, selected: dist },
             filtered,
             stats: calcAvgPrice(filtered),
-            weightData: lookupWeight(pkg),
+            weightData: lookupWeight(pkg, filtered),
             dateRanges: getDateRangeFromData(filtered),
             reportCounts: filtered.length,
             breakdownData: { byPackage: pkgBreakdown, byOrigin: orgBreakdown, byDistrict: distBreakdown },

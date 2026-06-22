@@ -5,8 +5,13 @@ Transforms raw CSV data from USDA API into the UnifiedCropPrice schema.
 
 import os
 import glob
+import re
 import pandas as pd
 from datetime import datetime
+
+
+# Conversion constant
+LB_PER_KG = 2.20462
 
 
 # Path to the data directory (local to backend_update/)
@@ -162,6 +167,96 @@ _CONSUMED_COLS = {
 }
 
 
+def _parse_mixed_number(s):
+    """
+    Parse a USDA numeric token that may contain whole + fractional parts.
+
+    Handles: '5', '19.8', '1/2', '1 1/9', '2-1/2', '3 1/2'.
+    The dash form ('2-1/2') and space form ('3 1/2') both mean whole + fraction.
+    """
+    s = s.strip().replace('-', ' ')
+    total = 0.0
+    for tok in s.split():
+        if '/' in tok:
+            num, den = tok.split('/')
+            total += float(num) / float(den)
+        else:
+            total += float(tok)
+    return total
+
+
+def parse_package_measures(package):
+    """
+    Derive (weight_lbs, weight_kgs, units) from a USDA package description.
+
+    weight_lbs / weight_kgs are the TOTAL net product weight of the package
+    (kg is derived from lbs and vice-versa so both columns are populated whenever
+    either is known). `units` is the count of individual sellable sub-units in the
+    package (e.g. the 12 in 'flats 12 1-pint baskets'). Any value that cannot be
+    derived from the string is returned as None.
+
+    Patterns covered, in priority order:
+      1. Combined kg + lb        -> '5 kg/11 lb cartons', '9 kg (19.8 lb) containers'
+      2. Count x per-unit measure-> 'cartons 12 1-lb film bags', 'flats 12 5-oz cups',
+                                     'cartons 4 2-1/2 lb film bags', 'flats 12 1-pint baskets'
+      3. Leading kilograms       -> '10 kg containers', '3.5 kg containers'
+      4. Leading pounds (+range) -> '25 lb sacks', '30-35 lb cartons'
+      5. Leading count/volume    -> bare 'N pint'/'N count'
+
+    Bushels and bare containers ('cartons', 'bins', 'lugs', '1 layer') yield no
+    weight because the figure depends on the commodity, so they stay None.
+    """
+    if package is None or (isinstance(package, float) and pd.isna(package)) or str(package).strip() == "":
+        return None, None, None
+
+    s = str(package).lower().strip()
+
+    # 1. Combined "X kg/Y lb" or "X kg (Y lb)" — both figures are stated explicitly.
+    m = re.search(r'(\d+(?:\.\d+)?)\s*kg\s*[/(]\s*(\d+(?:\.\d+)?)\s*lb', s)
+    if m:
+        kg, lbs = float(m.group(1)), float(m.group(2))
+        return round(lbs, 2), round(kg, 2), None
+
+    # 2. Count x per-unit measure, e.g. "12 1-lb", "4 2-1/2 lb", "12 18-oz", "12 1-pint".
+    m = re.search(r'(\d+)\s+([\d./\s-]*?\d)\s*-?\s*(lbs?|oz|pints?|pt|cups?|count|ct)\b', s)
+    if m:
+        count = int(m.group(1))
+        each = _parse_mixed_number(m.group(2))
+        unit = m.group(3)
+        if unit.startswith('lb'):
+            lbs = count * each
+            return round(lbs, 2), round(lbs / LB_PER_KG, 2), count
+        if unit == 'oz':
+            lbs = count * each / 16.0
+            return round(lbs, 2), round(lbs / LB_PER_KG, 2), count
+        if unit in ('count', 'ct'):
+            # "12 3-count packages" -> 36 individual items
+            return None, None, int(count * each) if each else count
+        # pint / pt / cup -> volume measure, weight depends on commodity
+        return None, None, count
+
+    # 3. Leading kilograms, e.g. "10 kg containers".
+    m = re.search(r'(?<![\d.])(\d+(?:\.\d+)?)\s*kg\b', s)
+    if m:
+        kg = float(m.group(1))
+        return round(kg * LB_PER_KG, 2), round(kg, 2), None
+
+    # 4. Leading pounds, optionally a range "30-35 lb" (use the midpoint).
+    m = re.search(r'(?<![\d.])(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?\s*lbs?\b', s)
+    if m:
+        lo = float(m.group(1))
+        hi = float(m.group(2)) if m.group(2) else lo
+        lbs = (lo + hi) / 2.0
+        return round(lbs, 2), round(lbs / LB_PER_KG, 2), None
+
+    # 5. Bare count / volume with no weight, e.g. "1 pint containers".
+    m = re.search(r'(?<![\d.])(\d+)\s*(pints?|pt|count|ct|cups?)\b', s)
+    if m:
+        return None, None, int(m.group(1))
+
+    return None, None, None
+
+
 def format_for_unified_crop_price(df):
     """
     Format DataFrame for UnifiedCropPrice table.
@@ -195,6 +290,9 @@ def format_for_unified_crop_price(df):
         # Normalize variety and package columns
         variety = get_field(row, 'variety', 'var')
         package = get_field(row, 'package', 'pkg', 'size')
+
+        # Derive net weight and unit count from the package description
+        weight_lbs, weight_kgs, units = parse_package_measures(package)
 
         # Calculate price_avg for this single row.
         # USDA alternates between wtd_avg_price and wtd_Avg_Price across report sections.
@@ -236,9 +334,9 @@ def format_for_unified_crop_price(df):
             'commodity': to_title_case(commodity),
             'variety': to_title_case(variety),
             'package': to_title_case(package),
-            'weight_lbs': None,
-            'weight_kgs': None,
-            'units': None,
+            'weight_lbs': weight_lbs,
+            'weight_kgs': weight_kgs,
+            'units': units,
             'supply_tone_comments': row.get('supply_tone_comments') if pd.notna(row.get('supply_tone_comments')) else None,
             'demand_tone_comments': row.get('demand_tone_comments') if pd.notna(row.get('demand_tone_comments')) else None,
             'market_tone_comments': row.get('market_tone_comments') if pd.notna(row.get('market_tone_comments')) else None,

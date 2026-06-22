@@ -618,7 +618,7 @@ export const getTimeSeriesData = async (commodity, filters = {}) => {
         while (hasMore) {
             let query = supabase
                 .from('UnifiedCropPrice')
-                .select('report_date, market_type, price_avg, package, origin, variety, organic')
+                .select('report_date, market_type, price_avg, package, origin, variety, organic, weight_lbs, weight_kgs, units')
                 .eq('commodity', commodity)
                 .not('report_date', 'is', null)
                 .order('report_date', { ascending: true })
