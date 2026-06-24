@@ -398,17 +398,19 @@ def format_for_unified_crop_price(df):
 
         price_avg = round(sum(prices) / len(prices), 2) if prices else None
 
-        # Normalize the package price to a per-pound and/or per-unit basis so the
-        # frontend can lead with a comparable price. The choice of basis is driven
-        # entirely by what the package describes (see parse_package_measures):
-        #   - weight-based packages -> price_per_lb
-        #   - count-based packages  -> price_per_unit
-        #   - packages that yield both (e.g. "12 6-oz cups") -> both are stored
-        #   - packages with neither (e.g. "cartons tray pack", bushels) -> both None
-        price_per_lb = (round(price_avg / weight_lbs, 2)
-                        if price_avg is not None and weight_lbs and weight_lbs > 0 else None)
+        # Normalize the package price to a per-pound OR per-unit basis. These are
+        # mutually exclusive and weight wins:
+        #   - any package with a net weight -> price_per_lb only. The sub-container
+        #     count ("flats 8 1-lb containers" = 8 clamshells) is NOT a meaningful
+        #     "unit" to price by, and $/lb is the correct cross-package comparable.
+        #   - packages with no weight but a genuine count ("each", "per bunch",
+        #     "3 count", "12 1-pint baskets") -> price_per_unit.
+        #   - packages with neither ("cartons tray pack", bushels) -> both None.
+        has_weight = price_avg is not None and weight_lbs and weight_lbs > 0
+        price_per_lb = round(price_avg / weight_lbs, 2) if has_weight else None
         price_per_unit = (round(price_avg / units, 2)
-                          if price_avg is not None and units and units > 0 else None)
+                          if price_avg is not None and units and units > 0 and not has_weight
+                          else None)
 
         # For retail, origin is often stored in the 'region' column instead
         origin = row.get('origin')

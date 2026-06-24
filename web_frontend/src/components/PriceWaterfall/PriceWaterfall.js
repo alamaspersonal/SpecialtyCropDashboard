@@ -89,8 +89,10 @@ function PriceBlock({
     // backfill hasn't reached yet.
     const perLb = (pricePerLb != null && !isNaN(pricePerLb)) ? Number(pricePerLb)
         : (priceValue != null && weightLbs > 0 ? priceValue / weightLbs : null);
+    // $/unit only when there's no weight — a weight-based pack shows $/lb, never a
+    // per-container "unit". (Mirrors the backend rule for not-yet-refreshed rows.)
     const perUnit = (pricePerUnit != null && !isNaN(pricePerUnit)) ? Number(pricePerUnit)
-        : (priceValue != null && units > 0 ? priceValue / units : null);
+        : (priceValue != null && units > 0 && !(weightLbs > 0) ? priceValue / units : null);
     const normalized = [];
     if (perLb != null) normalized.push({ value: perLb.toFixed(2), unit: 'lb' });
     if (perUnit != null) normalized.push({ value: perUnit.toFixed(2), unit: 'unit' });
