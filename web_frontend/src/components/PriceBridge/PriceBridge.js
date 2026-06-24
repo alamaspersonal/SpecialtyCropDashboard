@@ -87,19 +87,19 @@ export default function PriceBridge({ bridge, label }) {
             <div>
                 <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={chartData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid-line)" />
                         <XAxis
                             dataKey="name"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
+                            tick={{ fontSize: 12, fill: 'var(--chart-axis-text)' }}
                             interval={0}
                         />
                         <YAxis
                             tickFormatter={formatCurrency}
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
+                            tick={{ fontSize: 12, fill: 'var(--chart-axis-text)' }}
                         />
                         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
                         <Bar dataKey="base" stackId="a" fill="transparent" />

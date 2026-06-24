@@ -273,11 +273,11 @@ export default function ComparisonContainer({ filters, organicOnly, selectedVari
                             <div className="h-80 w-full mt-6">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-primary)' }} dy={10} />
-                                        <YAxis tickFormatter={(v) => `$${v.toFixed(0)}`} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid-line)" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--chart-axis-text)' }} dy={10} />
+                                        <YAxis tickFormatter={(v) => `$${v.toFixed(0)}`} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--chart-axis-text)' }} />
                                         <Tooltip content={<CustomComparisonTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
-                                        <Legend wrapperStyle={{ paddingTop: '15px', fontSize: '12px', color: 'var(--color-text-primary)' }} iconType="circle" />
+                                        <Legend wrapperStyle={{ paddingTop: '15px', fontSize: '12px', color: 'var(--chart-axis-text)' }} iconType="circle" />
                                         <Bar dataKey="periodA" name="Period A" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={60} />
                                         <Bar dataKey="periodB" name="Period B" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={60} />
                                     </BarChart>
