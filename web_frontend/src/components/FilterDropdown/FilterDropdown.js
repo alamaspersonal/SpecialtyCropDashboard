@@ -19,6 +19,7 @@ export default function FilterDropdown({
     const [open, setOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const containerRef = useRef(null);
+    const autoSelectedRef = useRef(null);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -30,6 +31,21 @@ export default function FilterDropdown({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    // When a filter resolves to a single option, default to it — selecting the
+    // sole option yields the same data as leaving it unset, so auto-applying it is
+    // purely a convenience. The ref guards against re-selecting after the user
+    // manually clears it (until the option set actually changes).
+    const soleOption = options.length === 1 ? options[0] : null;
+    useEffect(() => {
+        if (disabled) return;
+        if (soleOption != null && !value && autoSelectedRef.current !== soleOption) {
+            autoSelectedRef.current = soleOption;
+            onChange(soleOption);
+        } else if (soleOption == null) {
+            autoSelectedRef.current = null;
+        }
+    }, [soleOption, value, disabled, onChange]);
 
     const handleSelect = (opt) => {
         onChange(opt === value ? '' : opt);
