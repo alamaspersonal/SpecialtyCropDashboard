@@ -203,9 +203,10 @@ export default function PriceWaterfall({
     reportCounts,
     breakdownData,
 }) {
+    // Order: Shipping first (left-most card / bottom bar), then Terminal, then Retail.
     const blocks = [
-        { key: 'terminal', label: 'Terminal Market', bg: 'var(--color-terminal)', price: stats?.terminal },
         { key: 'shipping', label: 'Shipping Point', bg: 'var(--color-shipping)', price: stats?.shipping },
+        { key: 'terminal', label: 'Terminal Market', bg: 'var(--color-terminal)', price: stats?.terminal },
         { key: 'retail', label: 'National Retail', bg: 'var(--color-retail)', price: stats?.retail },
     ];
 
@@ -220,7 +221,10 @@ export default function PriceWaterfall({
         return pkg != null && !isNaN(pkg) ? { value: Number(pkg), unit: 'pkg' } : null;
     };
 
-    const chartData = blocks
+    // Horizontal bars render the first row at the TOP, so reverse the block order
+    // for the chart: Retail on top, Terminal in the middle, Shipping at the bottom.
+    const chartData = [...blocks]
+        .reverse()
         .map((b) => ({ block: b, norm: normPrimary(b.key) }))
         .filter((d) => d.norm != null)
         .map((d) => ({
@@ -229,8 +233,6 @@ export default function PriceWaterfall({
             unit: d.norm.unit,
             fill: d.block.bg,
         }));
-
-    const chartColors = ['var(--color-terminal)', 'var(--color-shipping)', 'var(--color-retail)'];
 
     return (
         <div className="space-y-6">
@@ -241,8 +243,21 @@ export default function PriceWaterfall({
                     <div className="rounded-xl bg-[var(--color-surface-elevated)] p-4">
                         <ResponsiveContainer width="100%" height={200}>
                             <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30 }}>
-                                <XAxis type="number" tickFormatter={(v) => `$${v.toFixed(2)}`} fontSize={12} />
-                                <YAxis type="category" dataKey="name" width={150} fontSize={12} />
+                                <XAxis
+                                    type="number"
+                                    tickFormatter={(v) => `$${v.toFixed(2)}`}
+                                    tick={{ fill: 'var(--chart-axis-text)', fontSize: 12 }}
+                                    axisLine={{ stroke: 'var(--chart-grid-line)' }}
+                                    tickLine={{ stroke: 'var(--chart-grid-line)' }}
+                                />
+                                <YAxis
+                                    type="category"
+                                    dataKey="name"
+                                    width={150}
+                                    tick={{ fill: 'var(--chart-axis-text)', fontSize: 12 }}
+                                    axisLine={{ stroke: 'var(--chart-grid-line)' }}
+                                    tickLine={{ stroke: 'var(--chart-grid-line)' }}
+                                />
                                 <Tooltip
                                     formatter={(value, _n, item) => [`$${value.toFixed(2)} / ${item?.payload?.unit ?? 'pkg'}`, 'Price']}
                                     contentStyle={{
@@ -255,7 +270,7 @@ export default function PriceWaterfall({
                                 />
                                 <Bar dataKey="price" radius={[0, 6, 6, 0]} barSize={32}>
                                     {chartData.map((entry, index) => (
-                                        <Cell key={index} fill={chartColors[index]} />
+                                        <Cell key={index} fill={entry.fill} />
                                     ))}
                                 </Bar>
                             </BarChart>
