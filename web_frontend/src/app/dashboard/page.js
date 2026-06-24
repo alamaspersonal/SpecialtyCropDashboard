@@ -171,6 +171,17 @@ function DashboardContent() {
         return validPrices.reduce((a, b) => a + b, 0) / validPrices.length;
     };
 
+    // Average a precomputed per-row column (price_per_lb / price_per_unit) across
+    // rows that have it. Each row's value is normalized by its own package, so this
+    // yields a comparable $/lb (or $/unit) even when packages are mixed.
+    const calcAvgField = (data, field) => {
+        const vals = data
+            .map(d => d[field])
+            .filter(v => v != null && !isNaN(v) && v > 0);
+        if (vals.length === 0) return null;
+        return vals.reduce((a, b) => a + b, 0) / vals.length;
+    };
+
     const getDateRangeFromData = (data) => {
         if (!data || data.length === 0) return null;
         const dates = data.map(d => d.report_date).filter(Boolean).sort();
@@ -275,6 +286,10 @@ function DashboardContent() {
             districtData: { options: distOptions, selected: dist },
             filtered,
             stats: calcAvgPrice(filtered),
+            normalized: {
+                pricePerLb: calcAvgField(filtered, 'price_per_lb'),
+                pricePerUnit: calcAvgField(filtered, 'price_per_unit'),
+            },
             weightData: lookupWeight(pkg, filtered),
             dateRanges: getDateRangeFromData(filtered),
             reportCounts: filtered.length,
@@ -296,6 +311,7 @@ function DashboardContent() {
         [retailBase, retailPkg, retailOrg, retailDist]);
 
     const stats = { terminal: terminalMemo.stats, shipping: shippingMemo.stats, retail: retailMemo.stats };
+    const normalizedData = { terminal: terminalMemo.normalized, shipping: shippingMemo.normalized, retail: retailMemo.normalized };
     const packageData = { terminal: terminalMemo.packageData, shipping: shippingMemo.packageData, retail: retailMemo.packageData };
     const originData = { terminal: terminalMemo.originData, shipping: shippingMemo.originData, retail: retailMemo.originData };
     const districtData = { terminal: terminalMemo.districtData, shipping: shippingMemo.districtData, retail: retailMemo.districtData };
@@ -564,6 +580,7 @@ function DashboardContent() {
                                                 </div>
                                                 <PriceWaterfall
                                                     stats={stats}
+                                                    normalizedData={normalizedData}
                                                     packageData={packageData}
                                                     actions={actions}
                                                     weightData={weightData}

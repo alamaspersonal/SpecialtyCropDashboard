@@ -47,6 +47,8 @@ function BreakdownSection({ title, items, bg }) {
 function PriceBlock({
     label,
     avgPrice,
+    pricePerLb,
+    pricePerUnit,
     bg,
     zIndex,
     packageOptions,
@@ -79,12 +81,19 @@ function PriceBlock({
     };
 
     const priceValue = avgPrice != null && !isNaN(avgPrice) ? Number(avgPrice) : null;
-    const pricePerUnit = (() => {
-        if (priceValue == null) return null;
-        if (weightLbs && weightLbs > 0) return { value: (priceValue / weightLbs).toFixed(2), unit: 'lb' };
-        if (units && units > 0) return { value: (priceValue / units).toFixed(2), unit: 'unit' };
-        return null;
-    })();
+
+    // Headline is the backend-computed price/lb and/or price/unit (averaged per row,
+    // so it stays comparable across mixed packages). Which one(s) show is driven by
+    // the package: weight packages -> /lb, count packages -> /unit, both -> both.
+    // Falls back to deriving from the selected package weight for any rows the
+    // backfill hasn't reached yet.
+    const perLb = (pricePerLb != null && !isNaN(pricePerLb)) ? Number(pricePerLb)
+        : (priceValue != null && weightLbs > 0 ? priceValue / weightLbs : null);
+    const perUnit = (pricePerUnit != null && !isNaN(pricePerUnit)) ? Number(pricePerUnit)
+        : (priceValue != null && units > 0 ? priceValue / units : null);
+    const normalized = [];
+    if (perLb != null) normalized.push({ value: perLb.toFixed(2), unit: 'lb' });
+    if (perUnit != null) normalized.push({ value: perUnit.toFixed(2), unit: 'unit' });
 
     // Apply selected package weight to origin/district breakdowns
     const applyWeightToBreakdown = (items) => {
@@ -112,21 +121,35 @@ function PriceBlock({
             </div>
 
             <div className="p-4 space-y-3">
-                {/* Price — per lb/unit */}
+                {/* Price — per lb and/or per unit, with avg package price underneath */}
                 <div>
-                    <p className="text-xs text-[var(--color-text-muted)] mb-0.5">
-                        {pricePerUnit ? `Price / ${pricePerUnit.unit}` : 'Avg Package Price'}
-                    </p>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-[var(--color-text-primary)]">
-                            {pricePerUnit ? `$${pricePerUnit.value}` : formatPrice(avgPrice)}
-                        </span>
-                        {pricePerUnit && (
-                            <span className="text-xs text-[var(--color-text-muted)]">
-                                {formatPrice(avgPrice)} / pkg
+                    {normalized.length > 0 ? (
+                        <>
+                            <p className="text-xs text-[var(--color-text-muted)] mb-0.5">
+                                {normalized.length > 1
+                                    ? 'Price / lb · unit'
+                                    : `Price / ${normalized[0].unit}`}
+                            </p>
+                            <div className="flex items-baseline gap-3 flex-wrap">
+                                {normalized.map((n) => (
+                                    <span key={n.unit} className="text-2xl font-bold text-[var(--color-text-primary)]">
+                                        ${n.value}
+                                        <span className="text-sm font-semibold text-[var(--color-text-muted)]">/{n.unit}</span>
+                                    </span>
+                                ))}
+                            </div>
+                            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                                {formatPrice(avgPrice)} avg package price
+                            </p>
+                        </>
+                    ) : (
+                        <>
+                            <p className="text-xs text-[var(--color-text-muted)] mb-0.5">Avg Package Price</p>
+                            <span className="text-2xl font-bold text-[var(--color-text-primary)]">
+                                {formatPrice(avgPrice)}
                             </span>
-                        )}
-                    </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Date Range */}
@@ -169,6 +192,7 @@ function PriceBlock({
 
 export default function PriceWaterfall({
     stats,
+    normalizedData,
     costs,
     packageData,
     actions,
@@ -185,9 +209,26 @@ export default function PriceWaterfall({
         { key: 'retail', label: 'National Retail', bg: 'var(--color-retail)', price: stats?.retail },
     ];
 
+    // Pick the primary normalized basis for each market: $/lb if available, else
+    // $/unit, else fall back to the avg package price. The unit is shown per-bar so
+    // a $/lb bar is never silently compared against a $/unit bar.
+    const normPrimary = (key) => {
+        const n = normalizedData?.[key];
+        if (n?.pricePerLb != null && !isNaN(n.pricePerLb)) return { value: Number(n.pricePerLb), unit: 'lb' };
+        if (n?.pricePerUnit != null && !isNaN(n.pricePerUnit)) return { value: Number(n.pricePerUnit), unit: 'unit' };
+        const pkg = stats?.[key];
+        return pkg != null && !isNaN(pkg) ? { value: Number(pkg), unit: 'pkg' } : null;
+    };
+
     const chartData = blocks
-        .filter((b) => b.price != null && !isNaN(b.price))
-        .map((b) => ({ name: b.label, price: Number(b.price), fill: b.bg }));
+        .map((b) => ({ block: b, norm: normPrimary(b.key) }))
+        .filter((d) => d.norm != null)
+        .map((d) => ({
+            name: `${d.block.label} ($/${d.norm.unit})`,
+            price: d.norm.value,
+            unit: d.norm.unit,
+            fill: d.block.bg,
+        }));
 
     const chartColors = ['var(--color-terminal)', 'var(--color-shipping)', 'var(--color-retail)'];
 
@@ -196,14 +237,14 @@ export default function PriceWaterfall({
             {/* Summary Bar Chart */}
             {chartData.length > 0 && (
                 <div>
-                    <h3 className="mb-3 text-sm font-semibold text-[var(--color-text-secondary)]">Price Comparison (Avg Package Price)</h3>
+                    <h3 className="mb-3 text-sm font-semibold text-[var(--color-text-secondary)]">Price Comparison (Price / lb or unit)</h3>
                     <div className="rounded-xl bg-[var(--color-surface-elevated)] p-4">
                         <ResponsiveContainer width="100%" height={200}>
                             <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30 }}>
                                 <XAxis type="number" tickFormatter={(v) => `$${v.toFixed(2)}`} fontSize={12} />
-                                <YAxis type="category" dataKey="name" width={120} fontSize={12} />
+                                <YAxis type="category" dataKey="name" width={150} fontSize={12} />
                                 <Tooltip
-                                    formatter={(value) => [`$${value.toFixed(2)}`, 'Avg Package Price']}
+                                    formatter={(value, _n, item) => [`$${value.toFixed(2)} / ${item?.payload?.unit ?? 'pkg'}`, 'Price']}
                                     contentStyle={{
                                         background: 'var(--color-surface)',
                                         border: '1px solid var(--color-border)',
@@ -230,6 +271,8 @@ export default function PriceWaterfall({
                         key={b.key}
                         label={b.label}
                         avgPrice={b.price}
+                        pricePerLb={normalizedData?.[b.key]?.pricePerLb}
+                        pricePerUnit={normalizedData?.[b.key]?.pricePerUnit}
                         bg={b.bg}
                         zIndex={20 - idx}
                         packageOptions={packageData?.[b.key]?.options}

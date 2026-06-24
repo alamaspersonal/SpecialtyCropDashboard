@@ -6,6 +6,7 @@ Transforms raw CSV data from USDA API into the UnifiedCropPrice schema.
 import os
 import glob
 import re
+import json
 import pandas as pd
 from datetime import datetime
 
@@ -16,6 +17,39 @@ LB_PER_KG = 2.20462
 
 # Path to the data directory (local to backend_update/)
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "APP_CROP_DATA"))
+
+# Canonical (crop, package) -> net weight reference, sourced from USDA Handbook 697
+# plus explicit report weights. Used as a fallback for bare package descriptions
+# ("cartons tray pack", "bushel cartons", ...) that the regex parser cannot measure.
+# Keeps the daily pipeline's weights consistent with the historical Supabase backfill.
+_PACKAGE_UNITS_PATH = os.path.join(os.path.dirname(__file__), "package_units.json")
+
+
+def _load_package_weight_reference():
+    """Build {(crop_lower, package_lower): (weight_lbs, weight_kgs)} from package_units.json."""
+    try:
+        with open(_PACKAGE_UNITS_PATH, "r") as f:
+            entries = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+    ref = {}
+    for entry in entries:
+        crop = str(entry.get("crop", "")).lower().strip()
+        pkg = str(entry.get("package_size", "")).lower().strip()
+        if not crop or not pkg:
+            continue
+        lbs = entry.get("weight_lbs")
+        kgs = entry.get("weight_kg")
+        if lbs is None:
+            continue
+        lbs = round(float(lbs), 2)
+        kgs = round(float(kgs), 2) if kgs is not None else round(lbs / LB_PER_KG, 2)
+        ref[(crop, pkg)] = (lbs, kgs)
+    return ref
+
+
+PACKAGE_WEIGHT_REFERENCE = _load_package_weight_reference()
 
 
 def clean_price(price_val):
@@ -326,8 +360,19 @@ def format_for_unified_crop_price(df):
         variety = get_field(row, 'variety', 'var')
         package = get_field(row, 'package', 'pkg', 'size')
 
-        # Derive net weight and unit count from the package description
+        # Derive net weight and unit count from the package description.
         weight_lbs, weight_kgs, units = parse_package_measures(package)
+
+        # Fallback for bare packages the regex can't measure ("cartons tray pack",
+        # "bushel cartons", ...): look up the net weight by (commodity, package) in the
+        # USDA Handbook reference. Exact, lower()-normalized match — same key the
+        # Supabase historical backfill uses, so the two stay consistent.
+        if weight_lbs is None and units is None and package is not None:
+            ref = PACKAGE_WEIGHT_REFERENCE.get(
+                (str(commodity).lower().strip(), str(package).lower().strip())
+            )
+            if ref:
+                weight_lbs, weight_kgs = ref
 
         # Calculate price_avg for this single row.
         # USDA alternates between wtd_avg_price and wtd_Avg_Price across report sections.
@@ -353,6 +398,18 @@ def format_for_unified_crop_price(df):
 
         price_avg = round(sum(prices) / len(prices), 2) if prices else None
 
+        # Normalize the package price to a per-pound and/or per-unit basis so the
+        # frontend can lead with a comparable price. The choice of basis is driven
+        # entirely by what the package describes (see parse_package_measures):
+        #   - weight-based packages -> price_per_lb
+        #   - count-based packages  -> price_per_unit
+        #   - packages that yield both (e.g. "12 6-oz cups") -> both are stored
+        #   - packages with neither (e.g. "cartons tray pack", bushels) -> both None
+        price_per_lb = (round(price_avg / weight_lbs, 2)
+                        if price_avg is not None and weight_lbs and weight_lbs > 0 else None)
+        price_per_unit = (round(price_avg / units, 2)
+                          if price_avg is not None and units and units > 0 else None)
+
         # For retail, origin is often stored in the 'region' column instead
         origin = row.get('origin')
         if not origin and market_type_val in ('Retail', 'Retail - Specialty Crops'):
@@ -372,6 +429,8 @@ def format_for_unified_crop_price(df):
             'weight_lbs': weight_lbs,
             'weight_kgs': weight_kgs,
             'units': units,
+            'price_per_lb': price_per_lb,
+            'price_per_unit': price_per_unit,
             'supply_tone_comments': row.get('supply_tone_comments') if pd.notna(row.get('supply_tone_comments')) else None,
             'demand_tone_comments': row.get('demand_tone_comments') if pd.notna(row.get('demand_tone_comments')) else None,
             'market_tone_comments': row.get('market_tone_comments') if pd.notna(row.get('market_tone_comments')) else None,

@@ -1,0 +1,1170 @@
+[
+  {
+    "crop": "Aloe Leaves",
+    "package_size": "30 lb cartons",
+    "weight_lbs": 30.0,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Anise",
+    "package_size": "cartons",
+    "weight_lbs": 20,
+    "weight_kg": 9.1,
+    "units": null,
+    "source": "Anise carton estimate"
+  },
+  {
+    "crop": "Artichokes",
+    "package_size": "cartons",
+    "weight_lbs": 22,
+    "weight_kg": 10.0,
+    "units": null,
+    "source": "Artichoke carton - USDA standard"
+  },
+  {
+    "crop": "Basil",
+    "package_size": "1 lb film bags",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Basil",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Bay Leaves",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Bean Sprouts",
+    "package_size": "10 lb film bags",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Bean Sprouts",
+    "package_size": "5 lb film bags",
+    "weight_lbs": 5.0,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Beans, Dragon Tongue",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Beans, Fava",
+    "package_size": "bushel cartons/crates",
+    "weight_lbs": 30,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "USDA Handbook 697 - standard bushel"
+  },
+  {
+    "crop": "Beans, Haricot Vert (French Type)",
+    "package_size": "cartons 10 1-lb film bags",
+    "weight_lbs": 10,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Beans, Italian Type",
+    "package_size": "15 lb cartons",
+    "weight_lbs": 15.0,
+    "weight_kg": 6.8,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Beans, Round Green Type",
+    "package_size": "30 lb reusable plastic containers (RPC)",
+    "weight_lbs": 30.0,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Beans, Wax Type",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Beets",
+    "package_size": "25 lb film bags",
+    "weight_lbs": 25.0,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Beets",
+    "package_size": "cartons bunched",
+    "weight_lbs": 12,
+    "weight_kg": 5.4,
+    "units": null,
+    "source": "Bunched carton estimate"
+  },
+  {
+    "crop": "Bok Choy",
+    "package_size": "30 lb cartons",
+    "weight_lbs": 30.0,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Brussels Sprouts",
+    "package_size": "25 lb cartons",
+    "weight_lbs": 25.0,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Cabbage",
+    "package_size": "45 lb cartons",
+    "weight_lbs": 45.0,
+    "weight_kg": 20.4,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Cactus Leaf (Nopales)",
+    "package_size": "35 lb crates",
+    "weight_lbs": 35.0,
+    "weight_kg": 15.9,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Carrots",
+    "package_size": "25 lb sacks loose",
+    "weight_lbs": 25.0,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Carrots",
+    "package_size": "50 lb sacks loose",
+    "weight_lbs": 50.0,
+    "weight_kg": 22.7,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Carrots",
+    "package_size": "cartons 30 1-lb film bags",
+    "weight_lbs": 30,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Carrots",
+    "package_size": "cartons bunched",
+    "weight_lbs": 12,
+    "weight_kg": 5.4,
+    "units": null,
+    "source": "Bunched carton estimate"
+  },
+  {
+    "crop": "Carrots",
+    "package_size": "sacks 10 5-lb film bags",
+    "weight_lbs": 50,
+    "weight_kg": 22.7,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Carrots",
+    "package_size": "sacks 24 2-lb film bags",
+    "weight_lbs": 48,
+    "weight_kg": 21.8,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Celeriac (Celery Root)",
+    "package_size": "10 kg mesh sacks",
+    "weight_lbs": 22.0,
+    "weight_kg": 10.0,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Celeriac (Celery Root)",
+    "package_size": "25 lb film bags",
+    "weight_lbs": 25.0,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Chayote",
+    "package_size": "16 kg cartons",
+    "weight_lbs": 35.3,
+    "weight_kg": 16.0,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Chayote",
+    "package_size": "35 lb containers",
+    "weight_lbs": 35.0,
+    "weight_kg": 15.9,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Chayote",
+    "package_size": "40 lb containers",
+    "weight_lbs": 40.0,
+    "weight_kg": 18.1,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Chervil",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Chervil",
+    "package_size": "crates bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Chinese Cabbage",
+    "package_size": "30 lb cartons",
+    "weight_lbs": 30.0,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Chives",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Chives",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Cilantro",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Cucumbers",
+    "package_size": "22 lb cartons",
+    "weight_lbs": 22.0,
+    "weight_kg": 10.0,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Cucumbers",
+    "package_size": "bushel & 40-45 lb reusable plastic containers (RPC)",
+    "weight_lbs": 45.0,
+    "weight_kg": 20.4,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Cucumbers",
+    "package_size": "cartons film wrapped",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Generic carton estimate"
+  },
+  {
+    "crop": "Dill",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Dill",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Eggplant",
+    "package_size": "1 bu, 1 1/9 bu, 1 1/6 bu cartons wrapped",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Generic carton estimate"
+  },
+  {
+    "crop": "Eggplant",
+    "package_size": "30 lb cartons",
+    "weight_lbs": 30.0,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Endive",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Endive",
+    "package_size": "8 lb cartons",
+    "weight_lbs": 8.0,
+    "weight_kg": 3.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Endive",
+    "package_size": "cartons",
+    "weight_lbs": 18,
+    "weight_kg": 8.2,
+    "units": null,
+    "source": "Endive/Escarole carton estimate"
+  },
+  {
+    "crop": "Epasote (Epazote)",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Escarole",
+    "package_size": "cartons",
+    "weight_lbs": 18,
+    "weight_kg": 8.2,
+    "units": null,
+    "source": "Endive/Escarole carton estimate"
+  },
+  {
+    "crop": "Fenugreek (Methi)",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Garlic",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Garlic",
+    "package_size": "30 lb cartons",
+    "weight_lbs": 30.0,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Ginger Root",
+    "package_size": "30 lb cartons",
+    "weight_lbs": 30.0,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Greens, Collard",
+    "package_size": "cartons bunched",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Leafy greens bunched carton - USDA standard"
+  },
+  {
+    "crop": "Greens, Dandelion",
+    "package_size": "cartons bunched",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Leafy greens bunched carton - USDA standard"
+  },
+  {
+    "crop": "Greens, Kale",
+    "package_size": "cartons bunched",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Leafy greens bunched carton - USDA standard"
+  },
+  {
+    "crop": "Greens, Mustard",
+    "package_size": "cartons bunched",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Leafy greens bunched carton - USDA standard"
+  },
+  {
+    "crop": "Greens, Swiss Chard",
+    "package_size": "cartons bunched",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Leafy greens bunched carton - USDA standard"
+  },
+  {
+    "crop": "Horseradish",
+    "package_size": "50 lb sacks",
+    "weight_lbs": 50.0,
+    "weight_kg": 22.7,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Jerusalem Artichokes",
+    "package_size": "20 lb film bags",
+    "weight_lbs": 20.0,
+    "weight_kg": 9.1,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Jicama",
+    "package_size": "38-40 lb containers",
+    "weight_lbs": 40.0,
+    "weight_kg": 18.1,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Leeks",
+    "package_size": "5 kg containers",
+    "weight_lbs": 11.0,
+    "weight_kg": 5.0,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Leeks",
+    "package_size": "cartons bunched",
+    "weight_lbs": 12,
+    "weight_kg": 5.4,
+    "units": null,
+    "source": "Bunched carton estimate"
+  },
+  {
+    "crop": "Lettuce, Boston",
+    "package_size": "cartons film lined",
+    "weight_lbs": 24,
+    "weight_kg": 10.9,
+    "units": null,
+    "source": "USDA Handbook 697 - Lettuce cartons"
+  },
+  {
+    "crop": "Lettuce, Green Leaf",
+    "package_size": "cartons film lined",
+    "weight_lbs": 24,
+    "weight_kg": 10.9,
+    "units": null,
+    "source": "USDA Handbook 697 - Lettuce cartons"
+  },
+  {
+    "crop": "Lettuce, Iceberg",
+    "package_size": "cartons",
+    "weight_lbs": 24,
+    "weight_kg": 10.9,
+    "units": null,
+    "source": "USDA Handbook 697 - Lettuce cartons"
+  },
+  {
+    "crop": "Lettuce, Red Leaf",
+    "package_size": "cartons film lined",
+    "weight_lbs": 24,
+    "weight_kg": 10.9,
+    "units": null,
+    "source": "USDA Handbook 697 - Lettuce cartons"
+  },
+  {
+    "crop": "Lettuce, Romaine",
+    "package_size": "cartons 12 3-count packages",
+    "weight_lbs": 24,
+    "weight_kg": 10.9,
+    "units": null,
+    "source": "USDA Handbook 697 - Lettuce cartons"
+  },
+  {
+    "crop": "Lettuce, Romaine",
+    "package_size": "cartons film lined",
+    "weight_lbs": 24,
+    "weight_kg": 10.9,
+    "units": null,
+    "source": "USDA Handbook 697 - Lettuce cartons"
+  },
+  {
+    "crop": "Marjoram",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Marjoram",
+    "package_size": "film bags bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Film bags bunched estimate"
+  },
+  {
+    "crop": "Mint",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Mint",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Mushrooms",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Mushrooms",
+    "package_size": "5 lb cartons",
+    "weight_lbs": 5.0,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Mushrooms",
+    "package_size": "cartons 12 8-oz trays film wrapped",
+    "weight_lbs": 6.0,
+    "weight_kg": 2.7,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Mushrooms",
+    "package_size": "cartons 24 3 1/2-oz film bags",
+    "weight_lbs": 10,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Mushroom carton estimate"
+  },
+  {
+    "crop": "Onions, Green",
+    "package_size": "cartons 4 film bags iceless",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Generic carton estimate"
+  },
+  {
+    "crop": "Oregano",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Oregano",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Parsley",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Parsnips",
+    "package_size": "20 lb film bags loose",
+    "weight_lbs": 20.0,
+    "weight_kg": 9.1,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peas, English",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 28,
+    "weight_kg": 12.7,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel peas"
+  },
+  {
+    "crop": "Peas, Snow",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peas, Sugar Snap",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peppers, Anaheim",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 28,
+    "weight_kg": 12.7,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel peppers"
+  },
+  {
+    "crop": "Peppers, Bell Type",
+    "package_size": "25 lb cartons",
+    "weight_lbs": 25.0,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peppers, Bell Type",
+    "package_size": "25 lb cartons place pack",
+    "weight_lbs": 25.0,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peppers, Bell Type",
+    "package_size": "5 kg/11 lb cartons",
+    "weight_lbs": 11.0,
+    "weight_kg": 5.0,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peppers, Fresno",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peppers, Habanero",
+    "package_size": "10 lb reusable plastic containers (RPC)",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peppers, Jalapeno",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 28,
+    "weight_kg": 12.7,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel peppers"
+  },
+  {
+    "crop": "Peppers, Manzano",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peppers, Mixed Mini Sweet Types",
+    "package_size": "cartons 12 1-lb film bags",
+    "weight_lbs": 12,
+    "weight_kg": 5.4,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peppers, Pasilla",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 28,
+    "weight_kg": 12.7,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel peppers"
+  },
+  {
+    "crop": "Peppers, Serrano",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 28,
+    "weight_kg": 12.7,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel peppers"
+  },
+  {
+    "crop": "Peppers, Shishito",
+    "package_size": "20 lb cartons",
+    "weight_lbs": 20.0,
+    "weight_kg": 9.1,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Peppers, Yellow Chile",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 28,
+    "weight_kg": 12.7,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel peppers"
+  },
+  {
+    "crop": "Radicchio",
+    "package_size": "1 layer containers",
+    "weight_lbs": 12,
+    "weight_kg": 5.4,
+    "units": null,
+    "source": "Radicchio layer container estimate"
+  },
+  {
+    "crop": "Radishes",
+    "package_size": "25 lb film bags topped",
+    "weight_lbs": 25.0,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Radishes",
+    "package_size": "cartons bunched",
+    "weight_lbs": 12,
+    "weight_kg": 5.4,
+    "units": null,
+    "source": "Bunched carton estimate"
+  },
+  {
+    "crop": "Radishes",
+    "package_size": "cartons topped 30 6-oz film bags",
+    "weight_lbs": 11.2,
+    "weight_kg": 5.1,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Rhubarb",
+    "package_size": "6 kg containers",
+    "weight_lbs": 13.2,
+    "weight_kg": 6.0,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Rosemary",
+    "package_size": "1 lb film bags",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Rosemary",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Rutabagas",
+    "package_size": "25 lb film bags",
+    "weight_lbs": 25.0,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Sage",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Sage",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Salicornia (Sea Bean)",
+    "package_size": "cartons",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Generic carton estimate"
+  },
+  {
+    "crop": "Salsify",
+    "package_size": "cartons",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Generic carton estimate"
+  },
+  {
+    "crop": "Savory",
+    "package_size": "1 lb film bags",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Savory",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Sorrel",
+    "package_size": "1 lb film bags",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Sorrel",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Squash, Acorn",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 35,
+    "weight_kg": 15.9,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel squash"
+  },
+  {
+    "crop": "Squash, Banana",
+    "package_size": "50 lb cartons",
+    "weight_lbs": 50.0,
+    "weight_kg": 22.7,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Squash, Butternut",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 35,
+    "weight_kg": 15.9,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel squash"
+  },
+  {
+    "crop": "Squash, Delicata",
+    "package_size": "lugs",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Lug estimate"
+  },
+  {
+    "crop": "Squash, Grey",
+    "package_size": "4/7 bushel cartons",
+    "weight_lbs": 21,
+    "weight_kg": 9.5,
+    "units": null,
+    "source": "USDA Handbook 697 - 4/7 bushel"
+  },
+  {
+    "crop": "Squash, Kabocha",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 35,
+    "weight_kg": 15.9,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel squash"
+  },
+  {
+    "crop": "Squash, Red Kuri",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 35,
+    "weight_kg": 15.9,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel squash"
+  },
+  {
+    "crop": "Squash, Spaghetti",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 35,
+    "weight_kg": 15.9,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel squash"
+  },
+  {
+    "crop": "Squash, Yellow Straightneck",
+    "package_size": "1 1/9 bushel cartons/crates",
+    "weight_lbs": 35,
+    "weight_kg": 15.9,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel squash"
+  },
+  {
+    "crop": "Squash, Yellow Straightneck",
+    "package_size": "4/7 bushel cartons",
+    "weight_lbs": 21,
+    "weight_kg": 9.5,
+    "units": null,
+    "source": "USDA Handbook 697 - 4/7 bushel"
+  },
+  {
+    "crop": "Squash, Zucchini",
+    "package_size": "1 1/9 bushel cartons",
+    "weight_lbs": 35,
+    "weight_kg": 15.9,
+    "units": null,
+    "source": "USDA Handbook 697 - 1 1/9 bushel squash"
+  },
+  {
+    "crop": "Squash, Zucchini",
+    "package_size": "4/7 bushel cartons",
+    "weight_lbs": 21,
+    "weight_kg": 9.5,
+    "units": null,
+    "source": "USDA Handbook 697 - 4/7 bushel"
+  },
+  {
+    "crop": "Tarragon",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Tarragon",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Thyme",
+    "package_size": "1 lb film bags loose",
+    "weight_lbs": 1.0,
+    "weight_kg": 0.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Thyme",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Tomatillos",
+    "package_size": "20 lb containers",
+    "weight_lbs": 20.0,
+    "weight_kg": 9.1,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Tomatillos",
+    "package_size": "38 lb reusable plastic containers (RPC)",
+    "weight_lbs": 38.0,
+    "weight_kg": 17.2,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Tomatoes",
+    "package_size": "10 lb cartons",
+    "weight_lbs": 10.0,
+    "weight_kg": 4.5,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Tomatoes",
+    "package_size": "5 kg/11 lb flats",
+    "weight_lbs": 11.0,
+    "weight_kg": 5.0,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Tomatoes",
+    "package_size": "cartons 2 layer",
+    "weight_lbs": 25,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "USDA Handbook 697 - Tomato cartons"
+  },
+  {
+    "crop": "Tomatoes",
+    "package_size": "flats 1 layer",
+    "weight_lbs": 20,
+    "weight_kg": 9.1,
+    "units": null,
+    "source": "Tomato flat layer estimate"
+  },
+  {
+    "crop": "Tomatoes, Cherry",
+    "package_size": "cartons 12 10-oz cups with lids",
+    "weight_lbs": 7.5,
+    "weight_kg": 3.4,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Tomatoes, Cherry",
+    "package_size": "flats 12 1-pint baskets",
+    "weight_lbs": 10.8,
+    "weight_kg": 4.9,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Tomatoes, Cherry",
+    "package_size": "flats 12 1/2-pint cups with lids",
+    "weight_lbs": 10.8,
+    "weight_kg": 4.9,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Tomatoes, Grape Type",
+    "package_size": "20 lb cartons loose",
+    "weight_lbs": 20.0,
+    "weight_kg": 9.1,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Tomatoes, Grape Type",
+    "package_size": "flats 12 10-oz containers with lids",
+    "weight_lbs": 7.5,
+    "weight_kg": 3.4,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Turmeric",
+    "package_size": "30 lb mesh sacks",
+    "weight_lbs": 30.0,
+    "weight_kg": 13.6,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Turnips",
+    "package_size": "25 lb film bags",
+    "weight_lbs": 25.0,
+    "weight_kg": 11.3,
+    "units": null,
+    "source": "Derived from package name"
+  },
+  {
+    "crop": "Verdolaga",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Watercress",
+    "package_size": "cartons bunched",
+    "weight_lbs": 5,
+    "weight_kg": 2.3,
+    "units": null,
+    "source": "Herb bunched carton estimate"
+  },
+  {
+    "crop": "Yuca (Cassava)",
+    "package_size": "16 kg cartons",
+    "weight_lbs": 35.3,
+    "weight_kg": 16.0,
+    "units": null,
+    "source": "Derived from package name"
+  }
+]

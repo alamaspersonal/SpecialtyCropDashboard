@@ -101,7 +101,7 @@ def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_si
         for key, value in record.items():
             if isinstance(value, float) and (pd.isna(value) or value != value):
                 clean_record[key] = None
-            elif key == 'price_avg' and value is not None:
+            elif key in ('price_avg', 'price_per_lb', 'price_per_unit') and value is not None:
                 clean_record[key] = round(float(value), 2)
             else:
                 clean_record[key] = value
