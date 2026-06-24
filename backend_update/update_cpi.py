@@ -1,5 +1,8 @@
 """
-update_cpi.py — Fetch latest BLS CPI-U data and update phone_frontend/src/constants/cpiData.js
+update_cpi.py — Fetch latest BLS CPI-U data and update the frontends' cpiData.js
+
+Keeps both the phone and web copies of cpiData.js identical (they're plain data
+modules consumed by each frontend's CPI-adjustment code).
 
 Series: CUUR0000SA0 (CPI-U All Urban Consumers, All Items, 1982-84=100, NSA)
 BLS public API v2 (no key required): https://api.bls.gov/publicAPI/v2/timeseries/data/
@@ -13,8 +16,20 @@ from datetime import datetime
 from pathlib import Path
 
 SERIES_ID = 'CUUR0000SA0'
-CPI_JS = Path(__file__).parent.parent / 'phone_frontend/src/constants/cpiData.js'
+_ROOT = Path(__file__).parent.parent
+# Phone is the canonical source we read from; both copies are written identically.
+CPI_JS = _ROOT / 'phone_frontend/src/constants/cpiData.js'
+CPI_JS_TARGETS = [
+    CPI_JS,
+    _ROOT / 'web_frontend/src/constants/cpiData.js',
+]
 BLS_URL = 'https://api.bls.gov/publicAPI/v2/timeseries/data/'
+
+
+def write_all(text: str):
+    """Write the generated cpiData.js content to every frontend copy."""
+    for target in CPI_JS_TARGETS:
+        target.write_text(text)
 
 MONTH_MAP = {
     'January': '01', 'February': '02', 'March': '03', 'April': '04',
@@ -62,6 +77,9 @@ def main():
                 new_entries[key] = float(entry['value'])
 
     if not new_entries:
+        # Nothing new from BLS, but still mirror the canonical file to every copy
+        # so the web and phone modules can't drift apart.
+        write_all(text)
         print('CPI data is already up to date.')
         return
 
@@ -91,7 +109,7 @@ def main():
         text,
     )
 
-    CPI_JS.write_text(text)
+    write_all(text)
     print(f"Added months: {sorted(new_entries.keys())}")
     print(f"New base: {new_base} = {new_base_value}")
 

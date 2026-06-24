@@ -9,12 +9,13 @@
 import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Heart, Sparkles, Clock, BarChart3, GitCompare, Filter } from 'lucide-react';
+import { ArrowLeft, Heart, Sparkles, Clock, BarChart3, GitCompare, Filter, TrendingUp } from 'lucide-react';
 import { getDateRange, getPricesByDateRange } from '../../services/supabaseApi';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../../services/favorites';
 import PriceWaterfall from '../../components/PriceWaterfall/PriceWaterfall';
 import PriceBarChart from '../../components/PriceBarChart/PriceBarChart';
 import ComparisonContainer from '../../components/ComparisonContainer/ComparisonContainer';
+import PriceOverTimeChart from '../../components/PriceOverTimeChart/PriceOverTimeChart';
 import DashboardFilters from '../../components/DashboardFilters/DashboardFilters';
 import ExportDropdown from '../../components/ExportDropdown/ExportDropdown';
 import PageTransition from '../../components/PageTransition/PageTransition';
@@ -74,7 +75,8 @@ function DashboardContent() {
     const [retailDist, setRetailDist] = useState('');
 
     // UI State
-    const [compareMode, setCompareMode] = useState(false);
+    // 'overview' (waterfall) | 'compare' (price bridge) | 'timeseries' (price over time)
+    const [viewMode, setViewMode] = useState('overview');
     const [showFilters, setShowFilters] = useState(false);
 
     // Date bounds
@@ -411,9 +413,20 @@ function DashboardContent() {
                                 Filters
                             </button>
                             <button
-                                onClick={() => setCompareMode(!compareMode)}
+                                onClick={() => setViewMode(viewMode === 'timeseries' ? 'overview' : 'timeseries')}
                                 className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200
-                                    ${compareMode
+                                    ${viewMode === 'timeseries'
+                                        ? 'bg-[var(--color-accent)] text-white shadow-md'
+                                        : 'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]'
+                                    }`}
+                            >
+                                <TrendingUp size={14} />
+                                Over Time
+                            </button>
+                            <button
+                                onClick={() => setViewMode(viewMode === 'compare' ? 'overview' : 'compare')}
+                                className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200
+                                    ${viewMode === 'compare'
                                         ? 'bg-[var(--color-accent)] text-white shadow-md'
                                         : 'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]'
                                     }`}
@@ -531,7 +544,7 @@ function DashboardContent() {
                             {/* Main Content */}
                             <div className="space-y-6">
                                     <AnimatePresence mode="wait">
-                                        {compareMode ? (
+                                        {viewMode === 'compare' ? (
                                             <motion.section
                                                 key="compare"
                                                 initial={{ opacity: 0, x: -20 }}
@@ -555,6 +568,26 @@ function DashboardContent() {
                                                 <ComparisonContainer
                                                     filters={{ commodity, category, variety }}
                                                     dateBounds={dateBounds}
+                                                />
+                                            </motion.section>
+                                        ) : viewMode === 'timeseries' ? (
+                                            <motion.section
+                                                key="timeseries"
+                                                initial={{ opacity: 0, x: -20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: 20 }}
+                                                transition={{ duration: 0.25 }}
+                                                className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)]"
+                                            >
+                                                <div className="mb-4 flex items-center gap-2">
+                                                    <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)]">
+                                                        <TrendingUp size={16} className="text-[var(--color-accent)]" />
+                                                        Price Over Time
+                                                    </h2>
+                                                </div>
+                                                <PriceOverTimeChart
+                                                    filters={{ commodity, category, variety, district }}
+                                                    organicOnly={searchParams.get('organic') === 'yes'}
                                                 />
                                             </motion.section>
                                         ) : (

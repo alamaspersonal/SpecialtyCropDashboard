@@ -515,6 +515,63 @@ export const getUnifiedPrices = async (commodity, options = {}) => {
 };
 
 /**
+ * Get the full price history for a commodity, for the price-over-time chart.
+ * Paginates through ALL matching rows (oldest first) up to a safety cap, and
+ * selects only the columns the time-series aggregation needs.
+ *
+ * @param {string} commodity - Required commodity filter
+ * @param {Object} filters - Optional { district, organic }
+ * @returns {Array} All matching rows ordered by report_date ascending
+ */
+export const getTimeSeriesData = async (commodity, filters = {}) => {
+    try {
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            let query = supabase
+                .from('UnifiedCropPrice')
+                .select('report_date, market_type, price_avg, price_per_lb, price_per_unit, package, origin, variety, organic')
+                .eq('commodity', commodity)
+                .not('report_date', 'is', null)
+                .order('report_date', { ascending: true })
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+
+            if (filters.district) query = query.eq('district', filters.district);
+            if (filters.organic) query = query.eq('organic', filters.organic);
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allData = [...allData, ...data];
+                if (data.length < pageSize) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            } else {
+                hasMore = false;
+            }
+
+            // Safety cap — generous to allow multi-year trends
+            if (allData.length > 50000) {
+                console.warn('[DEBUG supabaseApi] Reached 50k row safety limit for time-series query');
+                break;
+            }
+        }
+
+        console.log('[DEBUG supabaseApi] getTimeSeriesData result:', allData.length, 'rows');
+        return allData;
+    } catch (error) {
+        console.error('Error fetching time-series data:', error);
+        throw error;
+    }
+};
+
+/**
  * Get KPI statistics for a commodity.
  * Mirrors: GET /api/v2/stats
  * 
