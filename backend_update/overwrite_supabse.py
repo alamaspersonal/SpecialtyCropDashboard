@@ -19,27 +19,62 @@ def get_supabase_client() -> Client:
     if not supabase_url or not supabase_key:
         raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY must be set in .env")
 
-    # Extend the PostgREST timeout to 5 minutes to survive large batch uploads.
+    # Client-side HTTP timeout only. Postgres still enforces its own
+    # statement_timeout on the service_role, so statements must be kept small
+    # regardless of what this is set to.
     options = ClientOptions(postgrest_client_timeout=300)
     return create_client(supabase_url, supabase_key, options=options)
 
 
-def delete_recent_rows(client: Client, table_name: str, days: int):
+import time
+
+
+def delete_recent_rows(client: Client, table_name: str, days: int, chunk_days: int = 1):
     """
     Delete only the rows whose report_date falls within the last `days` days.
     Historical data outside that window is left untouched.
+
+    The window is removed one `chunk_days`-sized slice at a time. Deleting the
+    whole window in a single statement touches ~20k rows and all nine indexes on
+    the table, which overruns Postgres' statement_timeout; per-day slices keep
+    each statement small enough to finish comfortably inside it.
     """
     from datetime import datetime, timedelta
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime('%Y-%m-%d')
-    print(f"Deleting rows in {table_name} with report_date >= {cutoff}...")
-    try:
-        client.table(table_name).delete().gte('report_date', cutoff).execute()
-        print(f"  ✔ Removed recent rows (>= {cutoff})")
-    except Exception as e:
-        print(f"  ✘ Error deleting recent rows: {e}")
-        raise
 
-import time
+    today = datetime.utcnow().date()
+    cutoff = today - timedelta(days=days)
+    # Run past today so any future-dated report rows are cleared too.
+    end = today + timedelta(days=7)
+
+    print(f"Deleting rows in {table_name} with report_date >= {cutoff} "
+          f"(in {chunk_days}-day slices)...")
+
+    max_retries = 3
+    total_deleted = 0
+    current = cutoff
+
+    while current < end:
+        nxt = min(current + timedelta(days=chunk_days), end)
+        for attempt in range(1, max_retries + 1):
+            try:
+                res = (client.table(table_name).delete()
+                       .gte('report_date', current.isoformat())
+                       .lt('report_date', nxt.isoformat())
+                       .execute())
+                total_deleted += len(res.data or [])
+                break
+            except Exception as e:
+                if attempt == max_retries:
+                    print(f"  ✘ Failed deleting {current}..{nxt} after "
+                          f"{max_retries} attempts: {e}")
+                    raise
+                wait = attempt * 5
+                print(f"  ⚠ Delete {current}..{nxt} attempt {attempt} failed: {e}. "
+                      f"Retrying in {wait}s...")
+                time.sleep(wait)
+        current = nxt
+
+    print(f"  ✔ Removed {total_deleted:,} recent rows (>= {cutoff})")
 
 
 def detect_new_columns(client: Client, table_name: str, df: pd.DataFrame) -> pd.DataFrame:
@@ -158,9 +193,17 @@ def overwrite_supabase_data(unified_crop_price_df: pd.DataFrame):
         print("\n=== Checking schema ===")
         unified_crop_price_df = detect_new_columns(client, "UnifiedCropPrice", unified_crop_price_df)
 
-        # Delete only the recent window — historical data outside 30 days is preserved
-        print("\n=== Deleting recent data window (last 30 days) ===")
-        delete_recent_rows(client, "UnifiedCropPrice", days=30)
+        # Delete exactly the window we are about to re-insert, derived from the
+        # data itself. Hardcoding the window here would let it drift out of sync
+        # with the fetch window in update_daily.py and leave stale duplicates
+        # behind. Historical data outside the window is preserved.
+        from datetime import datetime
+
+        oldest = pd.to_datetime(unified_crop_price_df['report_date']).min().date()
+        days = max((datetime.utcnow().date() - oldest).days, 0)
+
+        print(f"\n=== Deleting data window being replaced (back to {oldest}) ===")
+        delete_recent_rows(client, "UnifiedCropPrice", days=days)
 
         # Upload new data
         print("\n=== Uploading new data ===")

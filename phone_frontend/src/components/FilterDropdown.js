@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Platform, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useTheme } from '../context/ThemeContext';
 
@@ -11,27 +11,81 @@ export default function FilterDropdown({ label, options, value, onChange, color,
     const displayValue = value || 'All';
     const accentColor = disabled ? colors.border : (color || colors.accent); // Gray out label if disabled
 
-    // For Android, use the native Picker
+    // For Android, use a themed modal list instead of the native Picker.
+    // The native Android dropdown popup is drawn by the OS theme (white background)
+    // and can't be styled from JS, so in dark mode light item text is invisible.
     if (Platform.OS === 'android') {
+        const allOptions = [{ label: 'All', value: '' }, ...(options || []).map((opt) => ({ label: opt, value: opt }))];
+
+        const handleSelect = (val) => {
+            onChange(val);
+            setModalVisible(false);
+        };
+
         return (
             <View style={styles.container}>
                 <View style={[styles.labelContainer, { backgroundColor: accentColor }]}>
                     <Text style={styles.label}>{label}</Text>
                 </View>
-                <View style={[styles.pickerContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <Picker
-                        selectedValue={value}
-                        onValueChange={onChange}
-                        style={[styles.picker, { color: disabled ? colors.textMuted : colors.text }]}
-                        dropdownIconColor={disabled ? colors.textMuted : colors.textSecondary}
-                        enabled={!disabled}
+                <TouchableOpacity
+                    style={[
+                        styles.selectButton,
+                        {
+                            backgroundColor: disabled ? colors.background : colors.surface,
+                            borderColor: colors.border,
+                            opacity: disabled ? 0.7 : 1,
+                        },
+                    ]}
+                    onPress={() => setModalVisible(true)}
+                    disabled={disabled}
+                >
+                    <Text style={[styles.selectButtonText, { color: disabled ? colors.textMuted : colors.text }]}>
+                        {displayValue}
+                    </Text>
+                    <Text style={[styles.chevron, { color: colors.textSecondary }]}>▼</Text>
+                </TouchableOpacity>
+
+                <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
+                    <TouchableOpacity
+                        style={styles.androidModalOverlay}
+                        activeOpacity={1}
+                        onPress={() => setModalVisible(false)}
                     >
-                        <Picker.Item label="All" value="" color={colors.text} />
-                        {options && options.map((opt) => (
-                            <Picker.Item key={opt} label={opt} value={opt} color={colors.text} />
-                        ))}
-                    </Picker>
-                </View>
+                        <View style={[styles.androidModalContent, { backgroundColor: colors.surface }]}>
+                            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                                <Text style={[styles.modalTitle, { color: colors.text }]}>{label}</Text>
+                            </View>
+                            <ScrollView style={styles.androidOptionList}>
+                                {allOptions.map((opt) => {
+                                    const selected = opt.value === (value || '');
+                                    return (
+                                        <TouchableOpacity
+                                            key={opt.value || 'all'}
+                                            style={[
+                                                styles.androidOption,
+                                                { borderBottomColor: colors.border },
+                                                selected && { backgroundColor: colors.surfaceElevated },
+                                            ]}
+                                            onPress={() => handleSelect(opt.value)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.androidOptionText,
+                                                    { color: selected ? accentColor : colors.text },
+                                                ]}
+                                            >
+                                                {opt.label}
+                                            </Text>
+                                            {selected && (
+                                                <Text style={[styles.androidCheck, { color: accentColor }]}>✓</Text>
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+                        </View>
+                    </TouchableOpacity>
+                </Modal>
             </View>
         );
     }
@@ -184,5 +238,36 @@ const styles = StyleSheet.create({
     },
     modalPicker: {
         height: 216,
+    },
+    // Android themed modal list
+    androidModalOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    },
+    androidModalContent: {
+        width: '85%',
+        maxHeight: '70%',
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    androidOptionList: {
+        flexGrow: 0,
+    },
+    androidOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    androidOptionText: {
+        fontSize: 16,
+    },
+    androidCheck: {
+        fontSize: 16,
+        fontWeight: '700',
     },
 });

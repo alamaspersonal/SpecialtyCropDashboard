@@ -73,6 +73,9 @@ function DashboardContent() {
     const [terminalDist, setTerminalDist] = useState('');
     const [shippingDist, setShippingDist] = useState('');
     const [retailDist, setRetailDist] = useState('');
+    const [terminalVar, setTerminalVar] = useState('');
+    const [shippingVar, setShippingVar] = useState('');
+    const [retailVar, setRetailVar] = useState('');
 
     // UI State
     // 'overview' (waterfall) | 'compare' (price bridge) | 'timeseries' (price over time)
@@ -210,9 +213,9 @@ function DashboardContent() {
     };
 
     const getFilterState = (type) => {
-        if (type === 'terminal') return { pkg: terminalPkg, org: terminalOrg, dist: terminalDist };
-        if (type === 'shipping') return { pkg: shippingPkg, org: shippingOrg, dist: shippingDist };
-        return { pkg: retailPkg, org: retailOrg, dist: retailDist };
+        if (type === 'terminal') return { pkg: terminalPkg, org: terminalOrg, dist: terminalDist, vty: terminalVar };
+        if (type === 'shipping') return { pkg: shippingPkg, org: shippingOrg, dist: shippingDist, vty: shippingVar };
+        return { pkg: retailPkg, org: retailOrg, dist: retailDist, vty: retailVar };
     };
 
     const setFilterState = (type, key, val) => {
@@ -220,72 +223,94 @@ function DashboardContent() {
             if (key === 'pkg') setTerminalPkg(val);
             if (key === 'org') setTerminalOrg(val);
             if (key === 'dist') setTerminalDist(val);
+            if (key === 'vty') setTerminalVar(val);
         } else if (type === 'shipping') {
             if (key === 'pkg') setShippingPkg(val);
             if (key === 'org') setShippingOrg(val);
             if (key === 'dist') setShippingDist(val);
+            if (key === 'vty') setShippingVar(val);
         } else {
             if (key === 'pkg') setRetailPkg(val);
             if (key === 'org') setRetailOrg(val);
             if (key === 'dist') setRetailDist(val);
+            if (key === 'vty') setRetailVar(val);
         }
     };
 
-    const computeBreakdown = (data, field, priceConverter) => {
-        const groups = {};
-        data.forEach(d => {
-            const key = d[field];
-            if (!key) return;
-            const price = d.price_avg ?? ((d.low_price || 0) + (d.high_price || 0)) / 2;
-            if (price > 0) {
-                if (!groups[key]) groups[key] = { prices: [], count: 0 };
-                groups[key].prices.push(price);
-                groups[key].count++;
-            }
-        });
-        const totalCount = Object.values(groups).reduce((sum, g) => sum + g.count, 0);
-        return Object.entries(groups)
-            .map(([name, { prices, count }]) => {
-                const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
-                return {
-                    name,
-                    avgPrice,
-                    pricePerUnit: priceConverter ? priceConverter(name, avgPrice) : null,
-                    count,
-                    pct: totalCount > 0 ? count / totalCount : 0,
-                };
-            })
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 6);
+    // Average the backend-normalized price for a set of rows. Prefers $/lb, then
+    // $/unit, then the raw package price — same basis as the headline. Returns the
+    // value + which unit it is so each node can label itself.
+    const aggNormalizedPrice = (rows) => {
+        const pick = (field) => rows.map(r => r[field]).filter(v => v != null && !isNaN(v) && v > 0);
+        const lb = pick('price_per_lb');
+        if (lb.length) return { value: lb.reduce((a, b) => a + b, 0) / lb.length, unit: 'lb' };
+        const u = pick('price_per_unit');
+        if (u.length) return { value: u.reduce((a, b) => a + b, 0) / u.length, unit: 'unit' };
+        const pkg = rows
+            .map(r => r.price_avg ?? ((r.low_price || 0) + (r.high_price || 0)) / 2)
+            .filter(v => v > 0);
+        if (pkg.length) return { value: pkg.reduce((a, b) => a + b, 0) / pkg.length, unit: 'pkg' };
+        return null;
     };
 
-    const computeMarketData = (base, pkg, org, dist) => {
-        const baseForPkg = base.filter(d => (!org || d.origin === org) && (!dist || d.district === dist));
-        const baseForOrg = base.filter(d => (!pkg || d.package === pkg) && (!dist || d.district === dist));
-        const baseForDist = base.filter(d => (!pkg || d.package === pkg) && (!org || d.origin === org));
-
-        const pkgOptions = getUnique(baseForPkg, 'package');
-        const orgOptions = getUnique(baseForOrg, 'origin');
-        const distOptions = getUnique(baseForDist, 'district');
-
-        let filtered = base;
-        if (pkg) filtered = filtered.filter(d => d.package === pkg);
-        if (org) filtered = filtered.filter(d => d.origin === org);
-        if (dist) filtered = filtered.filter(d => d.district === dist);
-
-        const pkgBreakdown = computeBreakdown(base, 'package', (pkgName, avgPrice) => {
-            const w = lookupWeight(pkgName, base);
-            if (w.weight_lbs > 0) return { value: (avgPrice / w.weight_lbs).toFixed(2), unit: 'lb' };
-            if (w.units > 0) return { value: (avgPrice / w.units).toFixed(2), unit: 'unit' };
-            return null;
+    // Build a nested Package -> Origin -> District tree so each leaf is the price
+    // for that specific slice (e.g. a package's price for one origin), not a
+    // blended per-origin average. District level only appears where rows have it.
+    const BREAKDOWN_LIMIT = 8;
+    const groupByField = (rows, field) => {
+        const groups = {};
+        rows.forEach(r => {
+            const key = r[field];
+            if (!key) return;
+            (groups[key] = groups[key] || []).push(r);
         });
-        const orgBreakdown = computeBreakdown(base, 'origin', null);
-        const distBreakdown = computeBreakdown(base, 'district', null);
+        return groups;
+    };
+    const toNodes = (groups, childFn) => Object.entries(groups)
+        .map(([name, rows]) => ({
+            name,
+            price: aggNormalizedPrice(rows),
+            count: rows.length,
+            children: childFn ? childFn(rows) : [],
+        }))
+        .filter(n => n.price)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, BREAKDOWN_LIMIT);
+
+    const buildBreakdownHierarchy = (data) => toNodes(
+        groupByField(data, 'package'),
+        (pkgRows) => toNodes(
+            groupByField(pkgRows, 'origin'),
+            (orgRows) => {
+                const withDist = orgRows.filter(r => r.district);
+                return withDist.length ? toNodes(groupByField(withDist, 'district')) : [];
+            },
+        ),
+    );
+
+    const computeMarketData = (base, pkg, org, dist, vty) => {
+        // Apply only the listed selections — used so each field's option list reflects
+        // the OTHER active sub-filters (cascading), and to build the final filtered set.
+        const matches = (d, sel) =>
+            (!sel.pkg || d.package === sel.pkg) &&
+            (!sel.org || d.origin === sel.org) &&
+            (!sel.dist || d.district === sel.dist) &&
+            (!sel.vty || d.variety === sel.vty);
+
+        const pkgOptions = getUnique(base.filter(d => matches(d, { org, dist, vty })), 'package');
+        const orgOptions = getUnique(base.filter(d => matches(d, { pkg, dist, vty })), 'origin');
+        const distOptions = getUnique(base.filter(d => matches(d, { pkg, org, vty })), 'district');
+        const vtyOptions = getUnique(base.filter(d => matches(d, { pkg, org, dist })), 'variety');
+
+        const filtered = base.filter(d => matches(d, { pkg, org, dist, vty }));
+
+        const hierarchy = buildBreakdownHierarchy(base);
 
         return {
             packageData: { options: pkgOptions, selected: pkg },
             originData: { options: orgOptions, selected: org },
             districtData: { options: distOptions, selected: dist },
+            varietyData: { options: vtyOptions, selected: vty },
             filtered,
             stats: calcAvgPrice(filtered),
             normalized: {
@@ -295,7 +320,7 @@ function DashboardContent() {
             weightData: lookupWeight(pkg, filtered),
             dateRanges: getDateRangeFromData(filtered),
             reportCounts: filtered.length,
-            breakdownData: { byPackage: pkgBreakdown, byOrigin: orgBreakdown, byDistrict: distBreakdown },
+            breakdownData: { hierarchy },
         };
     };
 
@@ -303,20 +328,21 @@ function DashboardContent() {
     const shippingBase = useMemo(() => getBaseData('shipping'), [getBaseData]);
     const retailBase = useMemo(() => getBaseData('retail'), [getBaseData]);
 
-    const terminalMemo = useMemo(() => computeMarketData(terminalBase, terminalPkg, terminalOrg, terminalDist), 
-        [terminalBase, terminalPkg, terminalOrg, terminalDist]);
-        
-    const shippingMemo = useMemo(() => computeMarketData(shippingBase, shippingPkg, shippingOrg, shippingDist), 
-        [shippingBase, shippingPkg, shippingOrg, shippingDist]);
-        
-    const retailMemo = useMemo(() => computeMarketData(retailBase, retailPkg, retailOrg, retailDist), 
-        [retailBase, retailPkg, retailOrg, retailDist]);
+    const terminalMemo = useMemo(() => computeMarketData(terminalBase, terminalPkg, terminalOrg, terminalDist, terminalVar),
+        [terminalBase, terminalPkg, terminalOrg, terminalDist, terminalVar]);
+
+    const shippingMemo = useMemo(() => computeMarketData(shippingBase, shippingPkg, shippingOrg, shippingDist, shippingVar),
+        [shippingBase, shippingPkg, shippingOrg, shippingDist, shippingVar]);
+
+    const retailMemo = useMemo(() => computeMarketData(retailBase, retailPkg, retailOrg, retailDist, retailVar),
+        [retailBase, retailPkg, retailOrg, retailDist, retailVar]);
 
     const stats = { terminal: terminalMemo.stats, shipping: shippingMemo.stats, retail: retailMemo.stats };
     const normalizedData = { terminal: terminalMemo.normalized, shipping: shippingMemo.normalized, retail: retailMemo.normalized };
     const packageData = { terminal: terminalMemo.packageData, shipping: shippingMemo.packageData, retail: retailMemo.packageData };
     const originData = { terminal: terminalMemo.originData, shipping: shippingMemo.originData, retail: retailMemo.originData };
     const districtData = { terminal: terminalMemo.districtData, shipping: shippingMemo.districtData, retail: retailMemo.districtData };
+    const varietyData = { terminal: terminalMemo.varietyData, shipping: shippingMemo.varietyData, retail: retailMemo.varietyData };
     const weightData = { terminal: terminalMemo.weightData, shipping: shippingMemo.weightData, retail: retailMemo.weightData };
     const dateRanges = { terminal: terminalMemo.dateRanges, shipping: shippingMemo.dateRanges, retail: retailMemo.dateRanges };
     const reportCounts = { terminal: terminalMemo.reportCounts, shipping: shippingMemo.reportCounts, retail: retailMemo.reportCounts };
@@ -333,10 +359,11 @@ function DashboardContent() {
         // Test if the other filters are still valid under this *new* state dynamically
         const validateField = (field, key) => {
             if (!proposed[key]) return; // It's empty anyway, so it's valid
-            const testBase = base.filter(d => 
+            const testBase = base.filter(d =>
                 (key === 'pkg' || !proposed.pkg || d.package === proposed.pkg) &&
                 (key === 'org' || !proposed.org || d.origin === proposed.org) &&
-                (key === 'dist' || !proposed.dist || d.district === proposed.dist)
+                (key === 'dist' || !proposed.dist || d.district === proposed.dist) &&
+                (key === 'vty' || !proposed.vty || d.variety === proposed.vty)
             );
             // If the filtered dataset based on proposed state has no rows containing this specific prior choice, clear it
             const hasDataWithPriorSelection = testBase.some(d => d[field] === proposed[key]);
@@ -348,17 +375,20 @@ function DashboardContent() {
         if (changedKey !== 'pkg') validateField('package', 'pkg');
         if (changedKey !== 'org') validateField('origin', 'org');
         if (changedKey !== 'dist') validateField('district', 'dist');
+        if (changedKey !== 'vty') validateField('variety', 'vty');
 
         // Apply whatever the final valid state ended up being
         setFilterState(type, 'pkg', proposed.pkg);
         setFilterState(type, 'org', proposed.org);
         setFilterState(type, 'dist', proposed.dist);
+        setFilterState(type, 'vty', proposed.vty);
     };
 
     const actions = {
         setPackage: (type, val) => updateFilter(type, 'pkg', val),
         setOrigin: (type, val) => updateFilter(type, 'org', val),
         setDistrict: (type, val) => updateFilter(type, 'dist', val),
+        setVariety: (type, val) => updateFilter(type, 'vty', val),
     };
 
     if (!commodity) {
@@ -619,6 +649,7 @@ function DashboardContent() {
                                                     weightData={weightData}
                                                     originData={originData}
                                                     districtData={districtData}
+                                                    varietyData={varietyData}
                                                     dateRanges={dateRanges}
                                                     reportCounts={reportCounts}
                                                     breakdownData={breakdownData}

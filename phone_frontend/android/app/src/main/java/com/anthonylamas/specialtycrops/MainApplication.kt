@@ -1,4 +1,4 @@
-package com.anonymous.phone_frontend
+package com.anthonylamas.specialtycrops
 
 import android.app.Application
 import android.content.res.Configuration

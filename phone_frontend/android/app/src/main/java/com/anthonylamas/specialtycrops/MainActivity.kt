@@ -1,4 +1,4 @@
-package com.anonymous.phone_frontend
+package com.anthonylamas.specialtycrops
 
 import android.os.Build
 import android.os.Bundle

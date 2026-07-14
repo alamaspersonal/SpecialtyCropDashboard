@@ -1,44 +1,71 @@
 'use client';
 
+import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { ChevronRight } from 'lucide-react';
 import FilterDropdown from '../FilterDropdown/FilterDropdown';
 
-function BreakdownSection({ title, items, bg }) {
-    if (!items || items.length === 0) return null;
+const fmtNodePrice = (price) => {
+    if (!price) return '—';
+    const v = Number(price.value).toFixed(2);
+    return price.unit === 'pkg' ? `$${v}` : `$${v}/${price.unit}`;
+};
+
+// One row in the Package -> Origin -> District tree. Recurses into children;
+// packages start expanded (so per-origin prices are visible), deeper levels
+// (districts) start collapsed.
+function BreakdownNode({ node, depth }) {
+    const hasChildren = node.children && node.children.length > 0;
+    const [open, setOpen] = useState(depth === 0);
 
     return (
+        <div>
+            <div
+                className={`flex items-center justify-between gap-2 py-1 ${hasChildren ? 'cursor-pointer' : ''}`}
+                style={{ paddingLeft: depth * 14 }}
+                onClick={hasChildren ? () => setOpen(o => !o) : undefined}
+            >
+                <span className="flex min-w-0 flex-1 items-center gap-1">
+                    {hasChildren ? (
+                        <ChevronRight
+                            size={12}
+                            className={`shrink-0 text-[var(--color-text-muted)] transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
+                        />
+                    ) : (
+                        <span className="inline-block w-3 shrink-0" />
+                    )}
+                    <span
+                        className={`truncate ${depth === 0 ? 'text-xs font-medium text-[var(--color-text-primary)]' : 'text-xs text-[var(--color-text-secondary)]'}`}
+                        title={node.name}
+                    >
+                        {node.name}
+                    </span>
+                </span>
+                <span className="whitespace-nowrap text-xs font-semibold text-[var(--color-text-primary)]">
+                    {fmtNodePrice(node.price)}
+                </span>
+                <span className="w-8 whitespace-nowrap text-right text-xs text-[var(--color-text-muted)]">
+                    {node.count}
+                </span>
+            </div>
+            {hasChildren && open && node.children.map(child => (
+                <BreakdownNode key={child.name} node={child} depth={depth + 1} />
+            ))}
+        </div>
+    );
+}
+
+function BreakdownTree({ hierarchy }) {
+    if (!hierarchy || hierarchy.length === 0) return null;
+    return (
         <div className="pt-2 border-t border-[var(--color-border)]">
-            <p className="text-xs font-semibold text-[var(--color-text-secondary)] mb-2 uppercase tracking-wide">{title}</p>
-            <div className="space-y-2">
-                {items.map((item) => {
-                    const displayPrice = item.pricePerUnit
-                        ? `$${item.pricePerUnit.value}/${item.pricePerUnit.unit}`
-                        : `$${Number(item.avgPrice).toFixed(2)}`;
-                    return (
-                        <div key={item.name} className="space-y-0.5">
-                            <div className="flex items-center justify-between gap-2">
-                                <span
-                                    className="text-xs text-[var(--color-text-secondary)] truncate min-w-0 flex-1"
-                                    title={item.name}
-                                >
-                                    {item.name}
-                                </span>
-                                <span className="text-xs font-semibold text-[var(--color-text-primary)] whitespace-nowrap">
-                                    {displayPrice}
-                                </span>
-                                <span className="text-xs text-[var(--color-text-muted)] whitespace-nowrap">
-                                    {item.count}
-                                </span>
-                            </div>
-                            <div className="h-1 w-full rounded-full bg-[var(--color-surface-elevated)]">
-                                <div
-                                    className="h-1 rounded-full opacity-50 transition-all duration-500"
-                                    style={{ width: `${Math.max(item.pct * 100, 3)}%`, backgroundColor: bg }}
-                                />
-                            </div>
-                        </div>
-                    );
-                })}
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)]">
+                Package → Origin → District
+            </p>
+            <div>
+                {hierarchy.map(node => (
+                    <BreakdownNode key={node.name} node={node} depth={0} />
+                ))}
             </div>
         </div>
     );
@@ -51,6 +78,9 @@ function PriceBlock({
     pricePerUnit,
     bg,
     zIndex,
+    varietyOptions,
+    selectedVariety,
+    onVarietyChange,
     packageOptions,
     selectedPackage,
     onPackageChange,
@@ -64,9 +94,7 @@ function PriceBlock({
     units,
     dateRange,
     reportCount,
-    breakdownByPackage,
-    breakdownByOrigin,
-    breakdownByDistrict,
+    hierarchy,
 }) {
     const formatPrice = (val) => {
         if (val == null || isNaN(val)) return '—';
@@ -96,21 +124,6 @@ function PriceBlock({
     const normalized = [];
     if (perLb != null) normalized.push({ value: perLb.toFixed(2), unit: 'lb' });
     if (perUnit != null) normalized.push({ value: perUnit.toFixed(2), unit: 'unit' });
-
-    // Apply selected package weight to origin/district breakdowns
-    const applyWeightToBreakdown = (items) => {
-        if (!items || items.length === 0) return items;
-        if (!(weightLbs > 0) && !(units > 0)) return items;
-        return items.map(item => ({
-            ...item,
-            pricePerUnit: weightLbs > 0
-                ? { value: (item.avgPrice / weightLbs).toFixed(2), unit: 'lb' }
-                : { value: (item.avgPrice / units).toFixed(2), unit: 'unit' },
-        }));
-    };
-
-    const enrichedOriginBreakdown = applyWeightToBreakdown(breakdownByOrigin);
-    const enrichedDistrictBreakdown = applyWeightToBreakdown(breakdownByDistrict);
 
     return (
         <div
@@ -166,6 +179,10 @@ function PriceBlock({
 
                 {/* Sub-Filters */}
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                    {/* Variety only appears when this market spans more than one. */}
+                    {varietyOptions && varietyOptions.length > 1 && (
+                        <FilterDropdown label="Variety" options={varietyOptions} value={selectedVariety} onChange={onVarietyChange} color={bg} />
+                    )}
                     {packageOptions && packageOptions.length > 0 && (
                         <FilterDropdown label="Package" options={packageOptions} value={selectedPackage} onChange={onPackageChange} color={bg} />
                     )}
@@ -177,16 +194,8 @@ function PriceBlock({
                     )}
                 </div>
 
-                {/* Price Breakdowns */}
-                {breakdownByPackage?.length > 1 && (
-                    <BreakdownSection title="By Package" items={breakdownByPackage} bg={bg} />
-                )}
-                {enrichedOriginBreakdown?.length > 1 && (
-                    <BreakdownSection title="By Origin" items={enrichedOriginBreakdown} bg={bg} />
-                )}
-                {enrichedDistrictBreakdown?.length > 1 && (
-                    <BreakdownSection title="By District" items={enrichedDistrictBreakdown} bg={bg} />
-                )}
+                {/* Nested price breakdown: package -> origin -> district */}
+                <BreakdownTree hierarchy={hierarchy} />
             </div>
         </div>
     );
@@ -201,6 +210,7 @@ export default function PriceWaterfall({
     weightData,
     originData,
     districtData,
+    varietyData,
     dateRanges,
     reportCounts,
     breakdownData,
@@ -292,6 +302,9 @@ export default function PriceWaterfall({
                         pricePerUnit={normalizedData?.[b.key]?.pricePerUnit}
                         bg={b.bg}
                         zIndex={20 - idx}
+                        varietyOptions={varietyData?.[b.key]?.options}
+                        selectedVariety={varietyData?.[b.key]?.selected}
+                        onVarietyChange={(val) => actions?.setVariety?.(b.key, val)}
                         packageOptions={packageData?.[b.key]?.options}
                         selectedPackage={packageData?.[b.key]?.selected}
                         onPackageChange={(val) => actions?.setPackage?.(b.key, val)}
@@ -305,9 +318,7 @@ export default function PriceWaterfall({
                         units={weightData?.[b.key]?.units}
                         dateRange={dateRanges?.[b.key]}
                         reportCount={reportCounts?.[b.key]}
-                        breakdownByPackage={breakdownData?.[b.key]?.byPackage}
-                        breakdownByOrigin={breakdownData?.[b.key]?.byOrigin}
-                        breakdownByDistrict={breakdownData?.[b.key]?.byDistrict}
+                        hierarchy={breakdownData?.[b.key]?.hierarchy}
                     />
                 ))}
             </div>
