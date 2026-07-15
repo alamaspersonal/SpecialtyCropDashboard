@@ -189,7 +189,7 @@ _CONSUMED_COLS = {
     'market_location_city', 'market_location_state', 'reporting_city',
     # Product quality / condition fields not in the schema
     'appear', 'appearance', 'cond', 'condition', 'quality', 'grade',
-    'storage', 'repack', 'season', 'properties', 'environment', 'env',
+    'storage', 'repack', 'season', 'environment', 'env',
     'basis_of_sale', 'transportation_mode', 'import_export_flag',
     # Retail-specific weekly stats not in the schema
     'store_count', 'stores_with_Ads', '%_Marked_Local',
