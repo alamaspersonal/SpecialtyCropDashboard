@@ -102,12 +102,15 @@ If data for a section is missing, still include the header and state that data i
                 'Authorization': `Bearer ${CEREBRAS_API_KEY}`,
             },
             body: JSON.stringify({
-                model: 'gpt-oss-120b',
+                model: 'gemma-4-31b',
                 messages: [
                     { role: 'system', content: 'You are a concise agricultural market analyst providing factual market summaries.' },
                     { role: 'user', content: prompt }
                 ],
-                max_tokens: 300,
+                // gemma-4-31b is a small, non-reasoning model — a two-paragraph
+                // summary lands in ~50-150 tokens; 400 is a safe ceiling. (You
+                // pay for tokens actually generated, not the cap.)
+                max_tokens: 400,
                 temperature: 0.5,
             }),
         });

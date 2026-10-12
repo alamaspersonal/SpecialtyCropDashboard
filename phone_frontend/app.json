@@ -22,7 +22,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anthonylamas.specialtycrops"
+      "package": "com.anthonylamas.specialtycrops",
+      "versionCode": 7
     },
     "web": {
       "favicon": "./assets/favicon.png"

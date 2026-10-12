@@ -3,14 +3,16 @@
  * 
  * This module provides API functions that mirror the FastAPI backend endpoints,
  * but query Supabase directly. This allows the app to work without the Python backend.
- * 
- * Tables:
- * - CropPrice: Detailed crop price data with all fields
- * - UnifiedCropPrice: Simplified unified price data
+ *
+ * Table: UnifiedCropPrice
  */
 
 import { supabase } from './supabase';
-import { STATIC_FILTERS } from '../constants/staticFilters';
+import {
+    STATIC_FILTERS,
+    COMMODITIES_WITH_COMPLETE_DATA,
+    COMMODITIES_WITH_ORGANIC_DATA,
+} from '../constants/staticFilters';
 
 /**
  * Get distinct filter values for the filter UI.
@@ -154,40 +156,10 @@ export const getFilters = async (currentFilters = {}) => {
  * @returns {Set<string>} Set of commodity names with complete market data
  */
 export const getCommoditiesWithCompleteData = async () => {
-    // Fetch all unique commodity names for a given market_type keyword, paginated.
-    // Querying one market type at a time (in parallel) is far faster than a full
-    // table scan, since Supabase filters server-side and we only transfer one column.
-    const fetchCommoditiesForType = async (pattern) => {
-        const commodities = new Set();
-        let page = 0;
-        const pageSize = 1000;
-        while (true) {
-            const { data, error } = await supabase
-                .from('UnifiedCropPrice')
-                .select('commodity')
-                .ilike('market_type', `%${pattern}%`)
-                .range(page * pageSize, (page + 1) * pageSize - 1);
-            if (error) throw error;
-            if (!data || data.length === 0) break;
-            data.forEach(row => { if (row.commodity) commodities.add(row.commodity); });
-            if (data.length < pageSize) break;
-            page++;
-        }
-        return commodities;
-    };
-
-    const [terminal, shipping, retail] = await Promise.all([
-        fetchCommoditiesForType('terminal'),
-        fetchCommoditiesForType('shipping'),
-        fetchCommoditiesForType('retail'),
-    ]);
-
-    // Intersect: only keep commodities present in all three market types
-    const completeCommodities = new Set();
-    for (const c of terminal) {
-        if (shipping.has(c) && retail.has(c)) completeCommodities.add(c);
-    }
-    return completeCommodities;
+    // Precomputed offline by backend_update/extract_filters.py. Deriving this at
+    // runtime meant paginating through millions of UnifiedCropPrice rows, which
+    // hung the toggle; the static set makes it instant and works offline.
+    return new Set(COMMODITIES_WITH_COMPLETE_DATA);
 };
 
 /**
@@ -197,22 +169,9 @@ export const getCommoditiesWithCompleteData = async () => {
  * @returns {Set<string>} Set of commodity names with organic data
  */
 export const getCommoditiesWithOrganicData = async () => {
-    const commodities = new Set();
-    let page = 0;
-    const pageSize = 1000;
-    while (true) {
-        const { data, error } = await supabase
-            .from('UnifiedCropPrice')
-            .select('commodity')
-            .eq('organic', 'yes')
-            .range(page * pageSize, (page + 1) * pageSize - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        data.forEach(row => { if (row.commodity) commodities.add(row.commodity); });
-        if (data.length < pageSize) break;
-        page++;
-    }
-    return commodities;
+    // Precomputed offline by backend_update/extract_filters.py — see
+    // getCommoditiesWithCompleteData above.
+    return new Set(COMMODITIES_WITH_ORGANIC_DATA);
 };
 
 /**
@@ -610,6 +569,14 @@ export const getPriceSummary = async (options = {}) => {
 export const getTimeSeriesData = async (commodity, filters = {}) => {
     try {
 
+        // Cap history at 2 years — the price graph never needs to reach further
+        // back than that, and bounding the query here keeps ascending-order
+        // pagination from exhausting the 50k-row safety cap on oldest rows
+        // before it reaches this year's data.
+        const twoYearsAgo = new Date();
+        twoYearsAgo.setDate(twoYearsAgo.getDate() - 730);
+        const twoYearsAgoISO = twoYearsAgo.toISOString().split('T')[0];
+
         let allData = [];
         let page = 0;
         const pageSize = 1000;
@@ -621,6 +588,7 @@ export const getTimeSeriesData = async (commodity, filters = {}) => {
                 .select('report_date, market_type, price_avg, package, origin, variety, organic, weight_lbs, weight_kgs, units')
                 .eq('commodity', commodity)
                 .not('report_date', 'is', null)
+                .gte('report_date', twoYearsAgoISO)
                 .order('report_date', { ascending: true })
                 .range(page * pageSize, (page + 1) * pageSize - 1);
 

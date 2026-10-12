@@ -110,6 +110,11 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
 
     // ── Fetch date bounds ──
     useEffect(() => {
+        // Clear stale bounds immediately so the price-fetch effect below (which
+        // waits on serverDateBounds.resolved) doesn't fire a query window anchored
+        // on the *previous* commodity's max date while this one is in flight.
+        setServerDateBounds({ min: null, max: null, resolved: false });
+        let cancelled = false;
         const fetchDateBounds = async () => {
             try {
                 const apiFilters = { ...filters };
@@ -118,19 +123,40 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
                 delete apiFilters.variety;
                 delete apiFilters.category;
                 const bounds = await getDateRange(apiFilters);
+                if (cancelled) return;
                 setServerDateBounds({
                     min: bounds.minDate ? new Date(bounds.minDate) : null,
                     max: bounds.maxDate ? new Date(bounds.maxDate) : null,
+                    resolved: true,
                 });
             } catch (err) {
                 console.error('useWaterfallData: Error fetching date bounds:', err);
+                if (cancelled) return;
+                // Fall back to the device's current date so the price-fetch effect
+                // below isn't blocked forever waiting on bounds that failed to
+                // load (a transient network/timeout error here must not leave the
+                // dashboard spinner stuck indefinitely with no error shown).
+                setServerDateBounds({ min: null, max: new Date(), resolved: true });
             }
         };
         fetchDateBounds();
+        return () => { cancelled = true; };
     }, [filters.commodity, filters.district]);
 
     // ── Fetch price data ──
     useEffect(() => {
+        // For the default (non-custom) window, anchor the 90-day lookback on the
+        // commodity's actual latest report date rather than the device's current
+        // date — many commodities (almonds, cranberries, seasonal squash/melons)
+        // report infrequently, so a device-date anchor would show "No data" for
+        // them indefinitely even though history exists. Wait for serverDateBounds
+        // to resolve (cleared above on every commodity/district change) before
+        // fetching so we never query a stale prior commodity's window. Gating on
+        // `resolved` rather than `max` truthiness also ensures a commodity with
+        // genuinely zero rows (max stays null) still fetches — and correctly
+        // lands on "No data available" — instead of spinning forever.
+        if (timeRange !== 'custom' && !serverDateBounds.resolved) return;
+
         const fetchPrices = async () => {
             setLoading(true);
             setError(null);
@@ -148,8 +174,12 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
                     const endISO = customEndDate.toISOString().split('T')[0];
                     data = await getPricesByDateRange(apiFilters, startISO, endISO);
                 } else {
-                    const endDate = new Date();
-                    const startDate = new Date();
+                    // max is null when bounds resolved successfully but found zero
+                    // rows for this commodity/district — fall back to today so the
+                    // query below still runs (and correctly returns empty) instead
+                    // of constructing an Invalid Date.
+                    const endDate = serverDateBounds.max || new Date();
+                    const startDate = new Date(endDate);
                     startDate.setDate(startDate.getDate() - 90);
                     const startISO = startDate.toISOString().split('T')[0];
                     const endISO = endDate.toISOString().split('T')[0];
@@ -211,7 +241,7 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
             }
         };
         fetchPrices();
-    }, [filters.commodity, filters.district, timeRange, customStartDate?.toISOString(), customEndDate?.toISOString()]);
+    }, [filters.commodity, filters.district, timeRange, customStartDate?.toISOString(), customEndDate?.toISOString(), serverDateBounds.resolved]);
 
     // ── Cascading filter logic ──
     useEffect(() => {

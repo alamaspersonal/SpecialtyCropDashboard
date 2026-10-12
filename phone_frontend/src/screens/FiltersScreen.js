@@ -10,10 +10,22 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getFilters, getCommoditiesWithCompleteData, getCommoditiesWithOrganicData } from '../services/api';
+import { getFilters } from '../services/api';
 import FilterDropdown from '../components/FilterDropdown';
-import { CATEGORY_COMMODITIES, COMMODITY_TO_CATEGORY } from '../constants/staticFilters';
+import {
+    CATEGORY_COMMODITIES,
+    COMMODITY_TO_CATEGORY,
+    COMMODITIES_WITH_COMPLETE_DATA,
+    COMMODITIES_WITH_ORGANIC_DATA,
+} from '../constants/staticFilters';
 import { useTheme } from '../context/ThemeContext';
+
+// Precomputed sets for the "Complete Data" / "Organic Only" toggles. These
+// used to be derived by scanning millions of Supabase rows at runtime (which
+// hung the toggles); the same sets are now generated offline by
+// backend_update/extract_filters.py, so filtering is instant and offline.
+const COMPLETE_DATA_SET = new Set(COMMODITIES_WITH_COMPLETE_DATA);
+const ORGANIC_DATA_SET = new Set(COMMODITIES_WITH_ORGANIC_DATA);
 
 export default function FiltersScreen({ navigation }) {
     const { colors } = useTheme();
@@ -28,20 +40,22 @@ export default function FiltersScreen({ navigation }) {
     
     // Complete market data filter state
     const [showCompleteDataOnly, setShowCompleteDataOnly] = useState(false);
-    const [completeDataCommodities, setCompleteDataCommodities] = useState(new Set());
-    const [completeFetching, setCompleteFetching] = useState(false);
-    const [completeError, setCompleteError] = useState(false);
+    const completeDataCommodities = COMPLETE_DATA_SET;
 
     // Organic filter state
     const [organicOnly, setOrganicOnly] = useState(false);
-    const [organicCommodities, setOrganicCommodities] = useState(new Set());
-    const [organicFetching, setOrganicFetching] = useState(false);
-    const [organicError, setOrganicError] = useState(false);
+    const organicCommodities = ORGANIC_DATA_SET;
 
+    // Load the base option lists once. This screen only needs the full
+    // category/commodity lists (from STATIC_FILTERS); the category -> commodity
+    // narrowing below is done locally via CATEGORY_COMMODITIES, so there's no
+    // need to re-query on every selection. Passing no active filters keeps
+    // getFilters on its instant static path — querying the live 6M-row table
+    // per-selection previously hit the Postgres statement timeout (57014).
     useEffect(() => {
         const fetchFilters = async () => {
             try {
-                const data = await getFilters(selectedFilters);
+                const data = await getFilters();
                 setFilters(data);
                 setLoading(false);
             } catch (err) {
@@ -51,7 +65,7 @@ export default function FiltersScreen({ navigation }) {
             }
         };
         fetchFilters();
-    }, [selectedFilters.category, selectedFilters.commodity]);
+    }, []);
 
     // Clears the selected commodity (and category if it has no valid options left)
     // after a filter set is applied, so stale selections don't reach the Dashboard.
@@ -64,66 +78,16 @@ export default function FiltersScreen({ navigation }) {
         });
     }, []);
 
-    // Fetch commodities with complete market data when toggle is enabled
+    // Drop any selected commodity that isn't in the complete-data set when the
+    // toggle is enabled. Sets are precomputed, so this is instant/synchronous.
     useEffect(() => {
-        if (!showCompleteDataOnly) {
-            setCompleteError(false);
-            return;
-        }
-        if (completeDataCommodities.size > 0) {
-            // Already cached — just validate the current selection against cached data
-            clearInvalidSelection(completeDataCommodities);
-            return;
-        }
-        let cancelled = false;
-        setCompleteFetching(true);
-        setCompleteError(false);
-        getCommoditiesWithCompleteData()
-            .then(result => {
-                if (cancelled) return;
-                setCompleteDataCommodities(result);
-                clearInvalidSelection(result);
-            })
-            .catch(() => {
-                if (cancelled) return;
-                setCompleteError(true);
-                setShowCompleteDataOnly(false);
-            })
-            .finally(() => {
-                if (!cancelled) setCompleteFetching(false);
-            });
-        return () => { cancelled = true; };
-    }, [showCompleteDataOnly]);
+        if (showCompleteDataOnly) clearInvalidSelection(completeDataCommodities);
+    }, [showCompleteDataOnly, clearInvalidSelection, completeDataCommodities]);
 
-    // Fetch commodities with organic data when toggle is enabled
+    // Same for the organic set.
     useEffect(() => {
-        if (!organicOnly) {
-            setOrganicError(false);
-            return;
-        }
-        if (organicCommodities.size > 0) {
-            clearInvalidSelection(organicCommodities);
-            return;
-        }
-        let cancelled = false;
-        setOrganicFetching(true);
-        setOrganicError(false);
-        getCommoditiesWithOrganicData()
-            .then(result => {
-                if (cancelled) return;
-                setOrganicCommodities(result);
-                clearInvalidSelection(result);
-            })
-            .catch(() => {
-                if (cancelled) return;
-                setOrganicError(true);
-                setOrganicOnly(false);
-            })
-            .finally(() => {
-                if (!cancelled) setOrganicFetching(false);
-            });
-        return () => { cancelled = true; };
-    }, [organicOnly]);
+        if (organicOnly) clearInvalidSelection(organicCommodities);
+    }, [organicOnly, clearInvalidSelection, organicCommodities]);
 
     const handleFilterChange = (filterName, value) => {
         // Handle cascading filter logic based on which filter changed
@@ -233,20 +197,10 @@ export default function FiltersScreen({ navigation }) {
                         <Text style={[styles.toggleDescription, { color: colors.textSecondary }]}>
                             Show only crops with Shipping, Terminal, and Retail data
                         </Text>
-                        {completeFetching && (
-                            <View style={styles.fetchingRow}>
-                                <ActivityIndicator size="small" color={colors.accent} />
-                                <Text style={[styles.fetchingText, { color: colors.textSecondary }]}>Loading…</Text>
-                            </View>
-                        )}
-                        {completeError && (
-                            <Text style={styles.toggleErrorText}>Failed to load — please try again.</Text>
-                        )}
                     </View>
                     <Switch
                         value={showCompleteDataOnly}
-                        onValueChange={completeFetching ? undefined : setShowCompleteDataOnly}
-                        disabled={completeFetching}
+                        onValueChange={setShowCompleteDataOnly}
                         trackColor={{ false: '#64748b', true: colors.accent }}
                         thumbColor={showCompleteDataOnly ? '#fff' : '#f4f3f4'}
                     />
@@ -256,22 +210,12 @@ export default function FiltersScreen({ navigation }) {
                 <View style={[styles.organicToggleRow, { backgroundColor: colors.surfaceElevated }]}>
                     <View style={{ flex: 1 }}>
                         <Text style={[styles.organicLabel, { color: colors.text }]}>Organic</Text>
-                        {organicFetching && (
-                            <View style={styles.fetchingRow}>
-                                <ActivityIndicator size="small" color={colors.accent} />
-                                <Text style={[styles.fetchingText, { color: colors.textSecondary }]}>Loading…</Text>
-                            </View>
-                        )}
-                        {organicError && (
-                            <Text style={styles.toggleErrorText}>Failed to load — please try again.</Text>
-                        )}
                     </View>
                     <View style={styles.yesNoContainer}>
                         <Text style={[styles.yesNoText, { color: organicOnly ? colors.textMuted : colors.text }]}>No</Text>
                         <Switch
                             value={organicOnly}
-                            onValueChange={organicFetching ? undefined : setOrganicOnly}
-                            disabled={organicFetching}
+                            onValueChange={setOrganicOnly}
                             trackColor={{ false: '#64748b', true: colors.accent }}
                             thumbColor={organicOnly ? '#fff' : '#f4f3f4'}
                             style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
@@ -284,7 +228,6 @@ export default function FiltersScreen({ navigation }) {
                     <View style={styles.filtersContainer}>
                         <FilterDropdown
                             label="Category"
-                            disabled={completeFetching || organicFetching}
                             options={
                                 (() => {
                                     let categoryList = filters.categories;
@@ -313,7 +256,6 @@ export default function FiltersScreen({ navigation }) {
                         />
                         <FilterDropdown
                             label="Commodity"
-                            disabled={completeFetching || organicFetching}
                             options={
                                 (() => {
                                     let commodityList = selectedFilters.category 

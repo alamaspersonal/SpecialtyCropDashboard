@@ -68,7 +68,7 @@ SpecialtyCropDashboard/
 │       │   │                             getCommoditiesWithCompleteData/OrganicData
 │       │   ├── useQueries.js           # TanStack Query hooks (caching, offline support)
 │       │   ├── api.js                  # Re-exports from supabaseApi + useQueries
-│       │   ├── cerebrasApi.js          # Cerebras AI market insights (llama3.1-8b)
+│       │   ├── cerebrasApi.js          # Cerebras AI market insights (gemma-4-31b)
 │       │   ├── favorites.js            # AsyncStorage watchlist CRUD
 │       │   ├── userStorage.js          # AsyncStorage user prefs (name, onboarding, profile image)
 │       │   └── __tests__/

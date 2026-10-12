@@ -526,7 +526,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                     <View>
                         {headerStats ? (
                             <Text style={[styles.headerSubtitle, { color: headerStats.color, fontWeight: '700', fontSize: 16 }]}>
-                                {headerStats.net} ({headerStats.pct}) Past {selectedRange === 'All' ? 'All Time' : selectedRange}
+                                {headerStats.net} ({headerStats.pct}) Past {selectedRange}
                             </Text>
                         ) : dateSpan.min && dateSpan.max ? (
                             <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>

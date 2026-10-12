@@ -35,6 +35,11 @@ yarn-error.*
 .env*.local
 .env.local
 
+# Google Play service account keys
+*service-account*.json
+google-play-*.json
+pc-api-*.json
+
 # typescript
 *.tsbuildinfo
 

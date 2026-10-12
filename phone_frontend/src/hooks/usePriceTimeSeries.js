@@ -3,12 +3,12 @@ import { getTimeSeriesData, getPricesByDateRange } from '../services/api';
 import { adjustToCurrent } from '../shared/cpiAdjust';
 
 // ── Time range presets ──────────────────────────────────────────
+// getTimeSeriesData caps fetched history at 2 years, so 2Y is the max range.
 const RANGE_PRESETS = [
     { key: '3M', label: '3M', days: 90 },
     { key: '6M', label: '6M', days: 180 },
     { key: '1Y', label: '1Y', days: 365 },
     { key: '2Y', label: '2Y', days: 730 },
-    { key: 'All', label: 'All', days: Infinity },
 ];
 
 const MARKET_TYPES = ['retail', 'terminal', 'shipping'];
@@ -216,9 +216,9 @@ export default function usePriceTimeSeries(filters, options = {}) {
         let filtered = rawData;
         if (organicOnly) filtered = filtered.filter(d => d.organic === 'yes');
 
-        if (selectedRange !== 'All' && dateSpan.max) {
+        if (dateSpan.max) {
             const preset = RANGE_PRESETS.find(p => p.key === selectedRange);
-            if (preset?.days !== Infinity) {
+            if (preset) {
                 const cutoff = new Date(dateSpan.max);
                 cutoff.setDate(cutoff.getDate() - preset.days);
                 const cutoffStr = cutoff.toISOString().split('T')[0];
@@ -286,17 +286,17 @@ export default function usePriceTimeSeries(filters, options = {}) {
 
     // ── Available range presets ──
     const availableRanges = useMemo(() =>
-        RANGE_PRESETS.filter(p => p.key === 'All' || dateSpan.spanDays >= p.days),
+        RANGE_PRESETS.filter(p => dateSpan.spanDays >= p.days),
     [dateSpan.spanDays]);
 
     useEffect(() => {
         const keys = availableRanges.map(r => r.key);
-        if (!keys.includes(selectedRange)) setSelectedRange(keys[0] || 'All');
+        if (!keys.includes(selectedRange)) setSelectedRange(keys[0] || '3M');
     }, [availableRanges]); // intentionally omit selectedRange — only reset when available ranges change
 
     // ── Series: apply per-type package/origin filters after partitioning ──
     const series = useMemo(() => {
-        const longRange = selectedRange === '1Y' || selectedRange === '2Y' || selectedRange === 'All';
+        const longRange = selectedRange === '1Y' || selectedRange === '2Y';
         const shouldApplyCpi = cpiAdjusted && longRange;
 
         const applyCpi = (points) => shouldApplyCpi

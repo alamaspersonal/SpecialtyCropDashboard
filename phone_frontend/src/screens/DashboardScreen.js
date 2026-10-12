@@ -21,6 +21,9 @@ import { generateMarketInsights } from '../services/cerebrasApi';
 import { useTheme } from '../context/ThemeContext';
 import useWaterfallData from '../hooks/useWaterfallData';
 
+// Temporarily disabled — flip back to true to re-enable AI Market Insights
+// (both the Cerebras fetch and its UI card) without touching the rest of the code.
+const AI_INSIGHTS_ENABLED = false;
 
 export default function DashboardScreen({ route, navigation }) {
     const { colors, isDark } = useTheme();
@@ -107,6 +110,7 @@ export default function DashboardScreen({ route, navigation }) {
     // ── AI Insights ──
     const aiCacheKey = `${filters.commodity}|${selectedVariety}|${organicOnly}|${JSON.stringify(selectedOrigins)}|${JSON.stringify(selectedPackages)}`;
     useEffect(() => {
+        if (!AI_INSIGHTS_ENABLED) return;
         if (timeRange !== 'daily') {
             if (cachedDailyInsights.current) setAiInsights(cachedDailyInsights.current);
             return;
@@ -366,8 +370,8 @@ export default function DashboardScreen({ route, navigation }) {
                             </ErrorBoundary>
                         )}
 
-                        {/* AI Market Insights — shown in waterfall mode */}
-                        {viewMode === 'waterfall' && (
+                        {/* AI Market Insights — shown in waterfall mode (temporarily disabled, see AI_INSIGHTS_ENABLED) */}
+                        {viewMode === 'waterfall' && AI_INSIGHTS_ENABLED && (
                             <View style={[styles.notesContainer, { backgroundColor: isDark ? colors.surfaceElevated : '#dcfce7', borderColor: isDark ? colors.border : '#bbf7d0' }]}>
                                 <View style={styles.notesTitleRow}>
                                     <Ionicons name="sparkles" size={18} color={isDark ? colors.accent : '#166534'} />
