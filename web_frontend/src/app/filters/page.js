@@ -8,10 +8,22 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Filter, Zap, Leaf, Trash2, ArrowRight } from 'lucide-react';
-import { getFilters, getCommoditiesWithCompleteData, getCommoditiesWithOrganicData } from '../../services/supabaseApi';
+import { getFilters } from '../../services/supabaseApi';
 import FilterDropdown from '../../components/FilterDropdown/FilterDropdown';
-import { CATEGORY_COMMODITIES, COMMODITY_TO_CATEGORY } from '../../constants/staticFilters';
+import {
+    CATEGORY_COMMODITIES,
+    COMMODITY_TO_CATEGORY,
+    COMMODITIES_WITH_COMPLETE_DATA,
+    COMMODITIES_WITH_ORGANIC_DATA,
+} from '../../constants/staticFilters';
 import PageTransition from '../../components/PageTransition/PageTransition';
+
+// Precomputed, synchronous sets for the toggles. Building these from the static
+// arrays at module load (instead of fetching them lazily after a toggle) means
+// the filter is active on the very first render the checkbox is checked — no
+// empty-Set flash where every commodity leaks through.
+const COMPLETE_SET = new Set(COMMODITIES_WITH_COMPLETE_DATA);
+const ORGANIC_SET = new Set(COMMODITIES_WITH_ORGANIC_DATA);
 
 export default function FiltersPage() {
     const router = useRouter();
@@ -27,8 +39,8 @@ export default function FiltersPage() {
     const [organicOnly, setOrganicOnly] = useState(false);
 
     const [filterOptions, setFilterOptions] = useState({});
-    const [completeCommodities, setCompleteCommodities] = useState(new Set());
-    const [organicCommodities, setOrganicCommodities] = useState(new Set());
+    const completeCommodities = COMPLETE_SET;
+    const organicCommodities = ORGANIC_SET;
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -44,16 +56,6 @@ export default function FiltersPage() {
         };
         fetchFilters();
     }, [category, commodity, variety, district, organic]);
-
-    useEffect(() => {
-        getCommoditiesWithCompleteData().then(setCompleteCommodities).catch(console.error);
-    }, []);
-
-    useEffect(() => {
-        if (organicOnly) {
-            getCommoditiesWithOrganicData().then(setOrganicCommodities).catch(console.error);
-        }
-    }, [organicOnly]);
 
     const handleFilterChange = (name, value) => {
         switch (name) {

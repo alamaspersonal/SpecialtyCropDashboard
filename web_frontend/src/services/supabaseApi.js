@@ -3,14 +3,17 @@
  * 
  * This module provides API functions that mirror the FastAPI backend endpoints,
  * but query Supabase directly. This allows the app to work without the Python backend.
- * 
- * Tables:
- * - CropPrice: Detailed crop price data with all fields
- * - UnifiedCropPrice: Simplified unified price data
+ *
+ * Table: UnifiedCropPrice
  */
 
 import { supabase } from './supabase';
-import { STATIC_FILTERS, CATEGORY_COMMODITIES } from '../constants/staticFilters';
+import {
+    STATIC_FILTERS,
+    FILTER_COMBOS,
+    COMMODITIES_WITH_COMPLETE_DATA,
+    COMMODITIES_WITH_ORGANIC_DATA,
+} from '../constants/staticFilters';
 
 // Simple API response cache for filter endpoints to prevent redundant network requests
 const apiCache = {
@@ -20,177 +23,50 @@ const apiCache = {
 };
 
 /**
- * Get distinct filter values for the filter UI.
- * Mirrors: GET /api/filters
- * 
- * When fetching options for a filter, we exclude that filter's current value
- * but keep parent filters applied. This ensures users see all available options
- * within their parent filter selections, not just their previous choice.
- * 
- * Filter hierarchy: category -> commodity -> variety
- * Independent filters: district, organic
- * 
- * @param {Object} currentFilters - Currently selected filters
- * @returns {Object} Object containing arrays of distinct values for each filter field
+ * Get cascading filter options, computed locally from FILTER_COMBOS (every distinct
+ * category/commodity/variety/district/organic combination in the table, generated
+ * by backend_update/extract_filters.py). No network round-trip.
+ *
+ * Each field's options honour the other relevant selections but ignore its own
+ * (and, for parents, its children), so the user can always change a choice.
  */
+const FIELD_INDEX = { category: 0, commodity: 1, variety: 2, district: 3, organic: 4 };
+const FIELD_PARENTS = {
+    category: ['district', 'organic'],
+    commodity: ['category', 'district', 'organic'],
+    variety: ['category', 'commodity', 'district', 'organic'],
+    district: ['category', 'commodity', 'variety', 'organic'],
+    organic: ['category', 'commodity', 'variety', 'district'],
+};
+
 export const getFilters = async (currentFilters = {}) => {
-    try {
-        // Check if any filters are actually active
-        const hasActiveFilters = Object.values(currentFilters).some(
-            val => val !== null && val !== undefined && val !== ''
-        );
+    const hasActiveFilters = Object.values(currentFilters).some(
+        val => val !== null && val !== undefined && val !== ''
+    );
+    if (!hasActiveFilters) return STATIC_FILTERS;
 
-        if (!hasActiveFilters) {
-            console.log('[DEBUG] No active filters, returning STATIC_FILTERS');
-            return STATIC_FILTERS;
+    const optionsFor = (field) => {
+        const active = FIELD_PARENTS[field]
+            .filter(k => currentFilters[k])
+            .map(k => [FIELD_INDEX[k], currentFilters[k]]);
+        const idx = FIELD_INDEX[field];
+        const values = new Set();
+        for (const combo of FILTER_COMBOS) {
+            if (active.every(([i, v]) => combo[i] === v) && combo[idx] && combo[idx] !== 'N/A') {
+                values.add(combo[idx]);
+            }
         }
+        return [...values].sort();
+    };
 
-        const cacheKey = JSON.stringify(currentFilters || {});
-        if (apiCache.filters.has(cacheKey)) {
-            console.log('[DEBUG] Returning cached filters for:', cacheKey);
-            return apiCache.filters.get(cacheKey);
-        }
-
-        console.log('[DEBUG] Active filters detected, querying Supabase:', currentFilters);
-        
-        // Helper function to fetch options for a specific field
-        // excludeField: don't apply filter for this field (so user sees all options)
-        // applyFilters: which filters to apply (parent/sibling filters)
-        const fetchOptionsForField = async (field, applyFilters) => {
-            const activeFilterKeys = Object.keys(applyFilters).filter(k => applyFilters[k]);
-            
-            // OPTIMIZATION: Avoid huge DB scans for completely static top-level relationships
-            if (activeFilterKeys.length === 0) {
-                if (field === 'category') return STATIC_FILTERS.categories;
-                if (field === 'commodity') return STATIC_FILTERS.commodities;
-                if (field === 'district') return STATIC_FILTERS.districts;
-                if (field === 'organic') return STATIC_FILTERS.organics;
-            }
-
-            // OPTIMIZATION: If we only have category, we statically know the exact commodities
-            if (field === 'commodity' && activeFilterKeys.length === 1 && activeFilterKeys[0] === 'category') {
-                const cat = applyFilters.category;
-                if (CATEGORY_COMMODITIES[cat]) {
-                    return [...CATEGORY_COMMODITIES[cat]].sort();
-                }
-            }
-
-            let allData = [];
-            let page = 0;
-            const pageSize = 1000;
-            let hasMore = true;
-
-            while (hasMore) {
-                let query = supabase
-                    .from('unique_filters')
-                    .select(field)
-                    .range(page * pageSize, (page + 1) * pageSize - 1);
-
-                // Apply only the specified filters (not the field being fetched)
-                if (applyFilters.category) query = query.eq('category', applyFilters.category);
-                if (applyFilters.commodity) query = query.eq('commodity', applyFilters.commodity);
-                if (applyFilters.variety) query = query.eq('variety', applyFilters.variety);
-                if (applyFilters.district) query = query.eq('district', applyFilters.district);
-                if (applyFilters.organic) query = query.eq('organic', applyFilters.organic);
-
-                const { data, error } = await query;
-                if (error) throw error;
-
-                if (data && data.length > 0) {
-                    allData = [...allData, ...data];
-                    if (data.length < pageSize) {
-                        hasMore = false;
-                    } else {
-                        page++;
-                    }
-                } else {
-                    hasMore = false;
-                }
-
-                if (allData.length > 50000) {
-                    console.warn('[DEBUG] Reached safety limit of 50k rows, stopping fetch.');
-                    break;
-                }
-            }
-
-            // Extract unique values
-            const values = allData
-                .map(row => row[field])
-                .filter(val => val && val !== 'N/A');
-            return [...new Set(values)].sort();
-        };
-
-        // Build filter sets for each field, excluding the field itself
-        // Category: no parent filters, just use other independent filters
-        const categoryFilters = {
-            district: currentFilters.district,
-            organic: currentFilters.organic,
-        };
-
-        // Commodity: apply category filter (parent), exclude commodity itself
-        const commodityFilters = {
-            category: currentFilters.category,
-            district: currentFilters.district,
-            organic: currentFilters.organic,
-        };
-
-        // Variety: apply category and commodity filters (parents), exclude variety itself
-        const varietyFilters = {
-            category: currentFilters.category,
-            commodity: currentFilters.commodity,
-            district: currentFilters.district,
-            organic: currentFilters.organic,
-        };
-
-        // District: apply main filters but exclude district itself
-        const districtFilters = {
-            category: currentFilters.category,
-            commodity: currentFilters.commodity,
-            variety: currentFilters.variety,
-            organic: currentFilters.organic,
-        };
-
-        // Organic: apply main filters but exclude organic itself
-        const organicFilters = {
-            category: currentFilters.category,
-            commodity: currentFilters.commodity,
-            variety: currentFilters.variety,
-            district: currentFilters.district,
-        };
-
-        // Fetch all filter options in parallel
-        const [categories, commodities, varieties, districts, organics] = await Promise.all([
-            fetchOptionsForField('category', categoryFilters),
-            fetchOptionsForField('commodity', commodityFilters),
-            fetchOptionsForField('variety', varietyFilters),
-            fetchOptionsForField('district', districtFilters),
-            fetchOptionsForField('organic', organicFilters),
-        ]);
-
-        const result = {
-            categories,
-            commodities,
-            varieties,
-            packages: [], // Not needed in filter UI
-            districts,
-            organics,
-        };
-        
-        console.log('[DEBUG] Filter options fetched:', {
-            categories: categories.length,
-            commodities: commodities.length,
-            varieties: varieties.length,
-            districts: districts.length,
-            organics: organics.length,
-        });
-
-        apiCache.filters.set(cacheKey, result);
-        return result;
-
-    } catch (error) {
-        console.error('Error fetching filters:', error);
-        throw error;
-    }
+    return {
+        categories: optionsFor('category'),
+        commodities: optionsFor('commodity'),
+        varieties: optionsFor('variety'),
+        packages: [], // Not needed in filter UI
+        districts: optionsFor('district'),
+        organics: optionsFor('organic'),
+    };
 };
 
 /**
@@ -200,33 +76,10 @@ export const getFilters = async (currentFilters = {}) => {
  * @returns {Set<string>} Set of commodity names with complete market data
  */
 export const getCommoditiesWithCompleteData = async () => {
-    try {
-        if (apiCache.completeCommodities) {
-            console.log('[DEBUG] Returning cached complete commodities');
-            return apiCache.completeCommodities;
-        }
-
-        console.log('[DEBUG] Fetching complete market data from commodity_metadata...');
-        
-        const { data, error } = await supabase
-            .from('commodity_metadata')
-            .select('commodity')
-            .eq('has_complete_data', true);
-            
-        if (error) throw error;
-        
-        const completeCommodities = new Set(data?.map(row => row.commodity).filter(Boolean) || []);
-        
-        console.log('[DEBUG] Commodities with complete data:', completeCommodities.size);
-        console.log('[DEBUG] Complete commodities list:', [...completeCommodities].slice(0, 10));
-        
-        apiCache.completeCommodities = completeCommodities;
-        return completeCommodities;
-        
-    } catch (error) {
-        console.error('Error fetching complete data commodities:', error);
-        return new Set(); // Return empty set on error
-    }
+    // Precomputed offline by backend_update/extract_filters.py, so no runtime
+    // query is needed. (Previously read from a commodity_metadata table that
+    // was never kept in sync, which left the toggle showing wrong/no results.)
+    return new Set(COMMODITIES_WITH_COMPLETE_DATA);
 };
 
 /**
@@ -236,36 +89,9 @@ export const getCommoditiesWithCompleteData = async () => {
  * @returns {Set<string>} Set of commodity names with organic data
  */
 export const getCommoditiesWithOrganicData = async () => {
-    try {
-        if (apiCache.organicCommodities) {
-            console.log('[DEBUG] Returning cached organic commodities');
-            return apiCache.organicCommodities;
-        }
-
-        console.log('[DEBUG] Fetching organic data from commodity_metadata...');
-        
-        const { data, error } = await supabase
-            .from('commodity_metadata')
-            .select('commodity')
-            .eq('has_organic_data', true);
-        
-        if (error) throw error;
-        
-        // Extract unique commodities
-        const organicCommodities = new Set(
-            data?.map(row => row.commodity).filter(Boolean) || []
-        );
-        
-        console.log('[DEBUG] Commodities with organic data:', organicCommodities.size);
-        console.log('[DEBUG] Organic commodities list:', [...organicCommodities].slice(0, 10));
-        
-        apiCache.organicCommodities = organicCommodities;
-        return organicCommodities;
-        
-    } catch (error) {
-        console.error('Error fetching organic commodities:', error);
-        return new Set(); // Return empty set on error
-    }
+    // Precomputed offline by backend_update/extract_filters.py — see
+    // getCommoditiesWithCompleteData above.
+    return new Set(COMMODITIES_WITH_ORGANIC_DATA);
 };
 
 /**

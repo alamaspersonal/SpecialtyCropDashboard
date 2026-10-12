@@ -4,9 +4,18 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Filter, Zap, Leaf, Check, X } from 'lucide-react';
-import { getFilters, getCommoditiesWithCompleteData, getCommoditiesWithOrganicData } from '../../services/supabaseApi';
+import { getFilters } from '../../services/supabaseApi';
 import FilterDropdown from '../FilterDropdown/FilterDropdown';
-import { CATEGORY_COMMODITIES } from '../../constants/staticFilters';
+import {
+    CATEGORY_COMMODITIES,
+    COMMODITIES_WITH_COMPLETE_DATA,
+    COMMODITIES_WITH_ORGANIC_DATA,
+} from '../../constants/staticFilters';
+
+// Synchronous sets so the toggles filter on the first checked render (see
+// filters/page.js for the rationale).
+const COMPLETE_SET = new Set(COMMODITIES_WITH_COMPLETE_DATA);
+const ORGANIC_SET = new Set(COMMODITIES_WITH_ORGANIC_DATA);
 
 export default function DashboardFilters({ currentFilters, isOpen, onClose }) {
     const router = useRouter();
@@ -21,20 +30,9 @@ export default function DashboardFilters({ currentFilters, isOpen, onClose }) {
     const [organicOnly, setOrganicOnly] = useState(false);
 
     const [filterOptions, setFilterOptions] = useState({});
-    const [completeCommodities, setCompleteCommodities] = useState(new Set());
-    const [organicCommodities, setOrganicCommodities] = useState(new Set());
+    const completeCommodities = COMPLETE_SET;
+    const organicCommodities = ORGANIC_SET;
     const [loading, setLoading] = useState(false);
-
-    // Initial load
-    useEffect(() => {
-        getCommoditiesWithCompleteData().then(setCompleteCommodities).catch(console.error);
-    }, []);
-
-    useEffect(() => {
-        if (organicOnly) {
-            getCommoditiesWithOrganicData().then(setOrganicCommodities).catch(console.error);
-        }
-    }, [organicOnly]);
 
     // Fetch filters when selections change
     useEffect(() => {
