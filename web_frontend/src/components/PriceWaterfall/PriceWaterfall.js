@@ -279,6 +279,10 @@ export default function PriceWaterfall({
                                         fontSize: '13px',
                                         boxShadow: 'var(--shadow-dropdown)',
                                     }}
+                                    // Bars are coloured per-Cell, so recharts has no series colour for the
+                                    // item and falls back to black — unreadable on the dark-mode surface.
+                                    labelStyle={{ color: 'var(--color-text-primary)', fontWeight: 600 }}
+                                    itemStyle={{ color: 'var(--color-text-primary)' }}
                                 />
                                 <Bar dataKey="price" radius={[0, 6, 6, 0]} barSize={32}>
                                     {chartData.map((entry, index) => (
