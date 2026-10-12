@@ -98,7 +98,7 @@ All navigation state is URL-encoded. `/dashboard` reads commodity, category, var
 - Server-only POST endpoint — the `CEREBRAS_API_KEY` never reaches the browser.
 - Accepts `{ commodity, shippingData, terminalData, dateInfo, filterContext }`.
 - Builds a structured prompt with Shipping Point and Terminal Market sections.
-- Calls Cerebras (`llama3.1-8b`, max 300 tokens, temp 0.5).
+- Calls Cerebras (`gemma-4-31b`, max 400 tokens, temp 0.5).
 - Returns `{ insight: "..." }` or a graceful fallback string.
 
 ---
