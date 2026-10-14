@@ -169,6 +169,39 @@ def upload_dataframe(client: Client, table_name: str, df: pd.DataFrame, batch_si
     print(f"  ✔ Successfully uploaded {total_uploaded:,} records to {table_name}")
 
 
+def refresh_monthly_rollup(client: Client, from_date, to_date=None):
+    """
+    Rebuild UnifiedCropPriceMonthly (the monthly rollup behind the web chart's
+    1Y/2Y/All ranges and the raw-export row counts) for every month from the one
+    containing `from_date` up to, but not including, the month containing
+    `to_date` (None = through the latest data).
+
+    Must run after ANY change to UnifiedCropPrice rows, or the rollup drifts out
+    of sync. The refresh_price_monthly() Postgres function does the work in one
+    transaction and is idempotent, so retrying is safe.
+    """
+    params = {'from_month': from_date.replace(day=1).isoformat()}
+    if to_date is not None:
+        params['to_month'] = to_date.replace(day=1).isoformat()
+
+    span = f"{params['from_month']} → {params.get('to_month', 'latest')}"
+    print(f"Refreshing UnifiedCropPriceMonthly ({span})...")
+
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            written = client.rpc('refresh_price_monthly', params).execute().data
+            print(f"  ✔ Rebuilt {written:,} monthly rollup rows")
+            return
+        except Exception as e:
+            if attempt == max_retries:
+                print(f"  ✘ Monthly rollup refresh failed after {max_retries} attempts: {e}")
+                raise
+            wait = attempt * 5
+            print(f"  ⚠ Rollup refresh attempt {attempt} failed: {e}. Retrying in {wait}s...")
+            time.sleep(wait)
+
+
 def overwrite_supabase_data(unified_crop_price_df: pd.DataFrame):
     """
     Main function to overwrite all data in the UnifiedCropPrice Supabase table.
@@ -208,6 +241,11 @@ def overwrite_supabase_data(unified_crop_price_df: pd.DataFrame):
         # Upload new data
         print("\n=== Uploading new data ===")
         upload_dataframe(client, "UnifiedCropPrice", unified_crop_price_df)
+
+        # Rebuild the monthly rollup for every month the delete/re-insert touched
+        # (the delete starts at `oldest`, so start from the 1st of its month).
+        print("\n=== Refreshing monthly rollup ===")
+        refresh_monthly_rollup(client, oldest)
 
         print("\n✔ Supabase upload completed successfully!")
         return True

@@ -327,6 +327,22 @@ def main():
     if conn:
         conn.close()
 
+    # Historical rows changed, so rebuild the monthly rollup the web chart and
+    # export read from. We don't track which years each slug touched, so rebuild
+    # everything in 3-year chunks (each call stays well inside the timeout).
+    if grand_total > 0:
+        from datetime import date
+        from overwrite_supabse import get_supabase_client, refresh_monthly_rollup
+
+        print(f"\n{'─' * 60}")
+        client = get_supabase_client()
+        start = date(1990, 1, 1)
+        while start.year + 3 <= datetime.now().year:
+            end = date(start.year + 3, 1, 1)
+            refresh_monthly_rollup(client, start, end)
+            start = end
+        refresh_monthly_rollup(client, start)  # final chunk, open-ended through today
+
     elapsed = time.time() - grand_t0
     print(f"\n{'=' * 60}")
     print("BACKFILL COMPLETE")
