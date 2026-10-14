@@ -497,7 +497,9 @@ function DashboardContent() {
                         onClose={() => setShowFilters(false)} 
                     />
 
-                    {/* Time Range Selector */}
+                    {/* Time Range Selector — drives the waterfall fetch only; the
+                        price-over-time chart has its own range presets. */}
+                    {viewMode === 'overview' && (
                     <motion.div
                         initial={{ opacity: 0, y: 15 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -560,8 +562,11 @@ function DashboardContent() {
                             )}
                         </AnimatePresence>
                     </motion.div>
+                    )}
 
-                    {loading ? (
+                    {/* The waterfall fetch doesn't feed the time-series chart, so don't
+                        unmount it (and force a full history refetch) while that loads. */}
+                    {loading && viewMode !== 'timeseries' ? (
                         <div className="space-y-6">
                             <SkeletonChart />
                         </div>
