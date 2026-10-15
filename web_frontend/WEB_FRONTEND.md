@@ -36,6 +36,7 @@ src/
 ├── components/              # All UI components (see below)
 ├── context/ThemeContext.js  # Dark/light mode via data-theme attribute
 ├── hooks/usePriceBridge.js  # Period A vs B comparison hook
+├── hooks/usePriceTimeSeries.js # Price-over-time data (raw windows / monthly rollup)
 ├── services/                # Data access + external APIs
 ├── shared/priceBridge.js    # Platform-agnostic price decomposition engine
 ├── utils/exportUtils.js     # CSV generation + browser download
@@ -81,10 +82,10 @@ All navigation state is URL-encoded. `/dashboard` reads commodity, category, var
 ### `/dashboard` (`dashboard/page.js`)
 
 - Reads filter params from `useSearchParams()`.
-- Time range: preset buttons (1d, 7d, 30d) or custom date picker.
-- View modes: **Overview** (waterfall + price blocks) and **Compare** (Period A vs B bridge).
+- Time range (Overview only): preset buttons (1d, 7d, 30d) or custom date picker.
+- View modes: **Overview** (waterfall + price blocks), **Over Time** (`PriceOverTimeChart`, with its own ranges) and **Compare** (Period A vs B bridge).
 - Favorite toggle writes to localStorage.
-- Export dropdown generates CSVs per market type.
+- Export dropdown generates CSVs per market type from the Overview data. The Over Time view has its own raw export (`RawCsvExport`).
 - Inline `DashboardFilters` panel lets you change commodity without going back to `/filters`.
 
 ### `/account` (`account/page.js`)
@@ -154,6 +155,12 @@ Expandable card for saved favorites. Chevron rotates on expand. "View Dashboard"
 ### `ExportDropdown/ExportDropdown.js`
 Four export options: Combined, Terminal, Retail, Shipping. Each calls `exportToCSV()` with the appropriate data slice. Shows record count next to each option.
 
+### `PriceOverTimeChart/PriceOverTimeChart.js`
+Terminal/Shipping/Retail lines over time, driven by `usePriceTimeSeries`. Ranges 3M (default) and 6M plot daily averages of raw rows; 1Y/2Y/All plot the `UnifiedCropPriceMonthly` rollup. Each range loads on first use, counted back from the commodity's latest report. Prices are never mixed across units: a $/lb · $/each · $/package selector picks one basis for all lines (default: the most common), with a note when a market has no prices in that unit. Also: package sub-filter, CPI adjustment, per-line toggles.
+
+### `RawCsvExport/RawCsvExport.js`
+"Export CSV" in the Over Time view: every raw row and column (all units) behind the chart's current range, filters and package, even for monthly ranges. Exports over 20k rows ask first, with the row count and estimated size; all show progress with Cancel. Files are named like `Apples_organic_2005-01_2026-10_raw.csv`.
+
 ### `LoadingSkeleton/LoadingSkeleton.js`
 Four exports: `SkeletonBlock`, `SkeletonCard`, `SkeletonChart`, `SkeletonText`. All apply the CSS `.skeleton` shimmer class.
 
@@ -175,6 +182,10 @@ All database access. Key functions:
 | `getStats(filters, cutoff)` | Computes current-week vs prior-week averages and % delta per market type |
 | `getCommoditiesWithCompleteData()` | Queries `commodity_metadata` for `has_complete_data = true` |
 | `getCommoditiesWithOrganicData()` | Queries `commodity_metadata` for `has_organic_data = true` |
+| `getTimeSeriesBounds(commodity, filters)` | First and last `report_date` for the chart's range buttons |
+| `getTimeSeriesWindow(commodity, filters, start)` | Raw rows from `start` on (3M/6M); first page returns the count, the rest load in parallel |
+| `getMonthlyPriceRollup(commodity, filters)` | All `UnifiedCropPriceMonthly` rows for a commodity (1Y/2Y/All, export row counts) |
+| `downloadRawPriceCsv(commodity, filters, monthChunks, opts)` | Raw export as CSV text: month windows in parallel, keyset-paged; a window whose query hits the 3 s anon statement timeout is split in half and retried |
 
 All paginating functions use a `while (true)` loop fetching 1000 rows at a time until Supabase returns fewer than 1000 (end of data) or the safety cap is hit.
 

@@ -4,7 +4,8 @@
  * PriceOverTimeChart — line chart of Terminal/Shipping/Retail prices over time.
  * Time-range presets (loaded on demand), per-line visibility toggles, a shared
  * package sub-filter, a price-unit selector ($/lb, $/each, $/package — never
- * mixed), and an optional CPI inflation adjustment.
+ * mixed), an optional CPI inflation adjustment, and a raw CSV export of the
+ * rows behind the current view.
  */
 
 import { useState, useMemo } from 'react';
@@ -15,6 +16,7 @@ import { motion } from 'framer-motion';
 import { Clock, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
 import usePriceTimeSeries, { PRICE_UNITS } from '../../hooks/usePriceTimeSeries';
 import FilterDropdown from '../FilterDropdown/FilterDropdown';
+import RawCsvExport from '../RawCsvExport/RawCsvExport';
 import { CPI_BASE_KEY } from '../../constants/cpiData';
 
 const MARKETS = [
@@ -53,7 +55,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
         packageOptions, selectedPackage,
         unitOptions, unit, unitGaps,
         selectedRange, availableRanges, granularity,
-        cpiAdjusted, actions,
+        cpiAdjusted, exportPlan, actions,
     } = usePriceTimeSeries(filters, { organicOnly });
 
     const [visible, setVisible] = useState({ terminal: true, shipping: true, retail: true });
@@ -163,7 +165,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                 </div>
             </div>
 
-            {/* Controls: time range + CPI toggle */}
+            {/* Controls: time range, CPI toggle, raw export */}
             <div className="flex flex-wrap items-center gap-3">
                 <Clock size={14} className="text-[var(--color-text-muted)]" />
                 <div className="flex gap-1 rounded-xl bg-[var(--color-surface-elevated)] p-1">
@@ -200,6 +202,13 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                         Inflation-adjusted{cpiAdjusted ? ` (${CPI_BASE_KEY} $)` : ''}
                     </span>
                 </label>
+
+                <RawCsvExport
+                    commodity={filters?.commodity}
+                    plan={exportPlan}
+                    cpiAdjusted={cpiAdjusted}
+                    disabled={loading || !!error}
+                />
             </div>
 
             {/* Chart */}

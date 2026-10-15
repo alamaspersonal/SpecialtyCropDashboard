@@ -9,6 +9,9 @@ Specialty Crop Dashboard — displays USDA specialty crop pricing data (fruits, 
 One Supabase table drives the app:
 - **UnifiedCropPrice** — simplified schema with `price_avg` for charts and time-series analysis (also carries market tone comments and supply/demand notes)
 
+Plus one derived table:
+- **UnifiedCropPriceMonthly** — monthly price sums/counts per commodity × market type × variety × package × district × organic × price basis ($/lb, $/each, $/package). Backs the web chart's 1Y/2Y/All ranges and raw-export row counts. Rebuilt by `refresh_price_monthly()` (see `backend_update/sql/unified_crop_price_monthly.sql`), which `overwrite_supabse.refresh_monthly_rollup()` calls after every upload — any other change to UnifiedCropPrice rows must refresh it too.
+
 Three market types throughout: **Terminal**, **Shipping Point**, **Retail**.
 
 ## Common Commands

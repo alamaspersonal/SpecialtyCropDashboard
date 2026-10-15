@@ -453,6 +453,223 @@ export const getMonthlyPriceRollup = async (commodity, filters = {}) => {
         .order('district').order('organic').order('price_basis'));
 };
 
+// ── Raw CSV export ────────────────────────────────────────────────────────────
+// Exports always hand over every raw row (all columns) for the chosen range,
+// even when the chart itself only showed the monthly rollup.
+//
+// The anon role has a 3 s statement timeout and most history is cold on disk
+// (each row is roughly one random read), so no single request may scan many
+// rows. Two rules keep requests small:
+//   - Keyset paging ("rows after the last (report_date, id) seen") instead of
+//     offsets, which make Postgres read and discard every skipped row.
+//   - A request that still times out — typically a selective filter, where a
+//     page scans many non-matching rows — splits what is left of its date
+//     window in half, down to a single day, and both halves are retried.
+
+const EXPORT_CONCURRENCY = 10;  // measured: more parallel requests got slower, not faster
+const EXPORT_RETRIES = 2;       // per page, for transient network/server errors
+const EXPORT_CHUNK_ROWS = 5000; // merge consecutive sparse months up to this many rows
+const STATEMENT_TIMEOUT = '57014';
+const DAY_MS = 86400000;
+
+// Merge runs of consecutive month windows up to EXPORT_CHUNK_ROWS rows each, so
+// sparse commodities don't spend a whole request per month on a few hundred rows.
+function mergeExportChunks(chunks) {
+    const merged = [];
+    for (const c of chunks) {
+        const last = merged[merged.length - 1];
+        if (last && last.to === c.from && last.rows + c.rows <= EXPORT_CHUNK_ROWS) {
+            last.to = c.to;
+            last.rows += c.rows;
+        } else {
+            merged.push({ ...c });
+        }
+    }
+    return merged;
+}
+
+// Data rows in a PostgREST CSV page, and where the last one starts. Newlines
+// inside quoted fields (comment columns can hold line breaks) don't count. The
+// header ends with one, each row after the first starts with one, and a page
+// with no rows comes back as just "\n".
+function scanCsvPage(csv) {
+    if (!csv || !csv.trim()) return { rows: 0, lastRowStart: -1 };
+    let rows = 0;
+    let lastRowStart = -1;
+    let quoted = false;
+    for (let i = 0; i < csv.length; i++) {
+        const c = csv.charCodeAt(i);
+        if (c === 34) quoted = !quoted; // "
+        else if (c === 10 && !quoted) { rows++; lastRowStart = i + 1; } // \n
+    }
+    return { rows, lastRowStart };
+}
+
+// The first `count` fields of one CSV record, unquoted.
+function leadingCsvFields(record, count) {
+    const fields = [];
+    let i = 0;
+    while (fields.length < count && i <= record.length) {
+        let value = '';
+        if (record[i] === '"') {
+            for (i++; i < record.length; i++) {
+                if (record[i] !== '"') value += record[i];
+                else if (record[i + 1] === '"') value += record[i++];
+                else { i++; break; }
+            }
+        } else {
+            while (i < record.length && record[i] !== ',') value += record[i++];
+        }
+        fields.push(value);
+        i++; // the comma
+    }
+    return fields;
+}
+
+// Epoch ms of a YYYY-MM-DD bound or a Postgres timestamptz ("2026-09-01 00:00:00+00").
+const toMs = (ts) => Date.parse(ts.length === 10
+    ? `${ts}T00:00:00Z`
+    : ts.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00'));
+
+// Order of window segments in the file: a split segment's halves sort right
+// after it (key [3] < [3,0] < [3,1] < [4]).
+function compareKeys(a, b) {
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+        if (a[i] !== b[i]) return a[i] - b[i];
+    }
+    return a.length - b.length;
+}
+
+/**
+ * Download every raw UnifiedCropPrice row (all columns) for an export, as CSV.
+ *
+ * `monthChunks` are the months that have rows, each with its expected row
+ * count (from the rollup, or the rows the chart already loaded). Consecutive
+ * sparse months are merged, then windows download in parallel
+ * (EXPORT_CONCURRENCY at a time, largest first), each paged by keyset until a
+ * page comes back short. Counts only size the windows and the progress total,
+ * so a stale count can't drop rows inside a window. The last window should be
+ * open-ended to pick up rows newer than the counts.
+ *
+ * @param {string} commodity
+ * @param {Object} filters - Optional { district, organic, variety, package }
+ * @param {Array<{from: string, to: string|null, rows: number}>} monthChunks -
+ *        Ascending, non-overlapping windows [from, to); to = null means open-ended
+ * @param {Object} options - { signal: AbortSignal, onProgress: (rowsDone) => void }
+ * @returns {{ parts: string[], rows: number }} CSV text in file order (header
+ *          first), ready for `new Blob(parts)`; parts is empty when rows is 0
+ */
+export const downloadRawPriceCsv = async (commodity, filters, monthChunks, { signal, onProgress } = {}) => {
+    // One page of a window: its first rows, or the rows after `after`.
+    const fetchPage = async ({ from, to }, after) => {
+        for (let attempt = 0; ; attempt++) {
+            let query = applySeriesFilters(
+                supabase.from('UnifiedCropPrice').select('*').eq('commodity', commodity),
+                filters,
+            );
+            if (filters.package) query = query.eq('package', filters.package);
+            if (to) query = query.lt('report_date', to);
+            query = after
+                // The plain gte lets the (commodity, report_date) index start the
+                // scan at the last date; the or() skips rows already taken on it.
+                ? query.gte('report_date', after.date)
+                    .or(`report_date.gt."${after.date}",and(report_date.eq."${after.date}",id.gt.${after.id})`)
+                : query.gte('report_date', from);
+            const { data, error, status } = await query
+                .order('report_date', { ascending: true })
+                .order('id', { ascending: true })
+                .limit(PAGE_SIZE)
+                .abortSignal(signal)
+                .csv();
+            signal?.throwIfAborted();
+            if (!error) return data || '';
+            // Timeouts aren't transient: the caller shrinks the window instead.
+            // CSV-mode errors can arrive with an empty body, so keep the status.
+            if (error.code === STATEMENT_TIMEOUT || attempt === EXPORT_RETRIES) {
+                throw Object.assign(
+                    new Error(error.message || `request failed (HTTP ${status})`, { cause: error }),
+                    { code: error.code },
+                );
+            }
+            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        }
+    };
+
+    const windows = mergeExportChunks(monthChunks).map((w, i) => ({ ...w, after: null, key: [i] }));
+    const segments = []; // { key, pages } — every window or half-window, in any order
+    let header = null;
+    let keyCols = null;  // positions of id and report_date in each row
+    let rows = 0;
+    let failed = false;
+
+    // Largest windows first, so a long one isn't left running alone at the end.
+    const queue = [...windows].sort((a, b) => b.rows - a.rows);
+
+    const downloadWindow = async (win) => {
+        const segment = { key: win.key, pages: [] };
+        segments.push(segment);
+        let { after } = win;
+        while (!failed) {
+            let csv;
+            try {
+                csv = await fetchPage(win, after);
+            } catch (e) {
+                if (e.code !== STATEMENT_TIMEOUT) throw e;
+                // Too many rows to scan in one statement: split what's left of
+                // this window at its midpoint and queue both halves (next up).
+                const start = toMs(after ? after.date : win.from);
+                const end = win.to ? toMs(win.to) : Math.max(Date.now(), start) + DAY_MS;
+                if (end - start <= DAY_MS) throw e;
+                // Whole days, at least one, so both halves are non-empty.
+                const halfDays = Math.max(1, Math.floor((end - start) / 2 / DAY_MS));
+                const mid = new Date(start + halfDays * DAY_MS).toISOString().substring(0, 10);
+                queue.unshift(
+                    { from: win.from, to: mid, after, key: [...win.key, 0] },
+                    { from: mid, to: win.to, after: null, key: [...win.key, 1] },
+                );
+                return;
+            }
+            const { rows: n, lastRowStart } = scanCsvPage(csv);
+            if (!n) return;
+            const headerEnd = csv.indexOf('\n');
+            if (!header) {
+                header = csv.slice(0, headerEnd);
+                const cols = header.split(',');
+                keyCols = { id: cols.indexOf('id'), date: cols.indexOf('report_date') };
+            }
+            segment.pages.push(csv.slice(headerEnd + 1));
+            rows += n;
+            onProgress?.(rows);
+            if (n < PAGE_SIZE) return;
+            const last = leadingCsvFields(csv.slice(lastRowStart), Math.max(keyCols.id, keyCols.date) + 1);
+            after = { id: last[keyCols.id], date: last[keyCols.date] };
+        }
+    };
+
+    const worker = async () => {
+        while (queue.length && !failed) {
+            try {
+                await downloadWindow(queue.shift());
+            } catch (e) {
+                failed = true; // stop the other workers from starting new pages
+                throw e;
+            }
+        }
+    };
+    // A split can refill the queue after some workers have already exited, so
+    // keep going until a full round finds nothing left to do.
+    while (queue.length) {
+        await Promise.all(Array.from({ length: EXPORT_CONCURRENCY }, worker));
+    }
+
+    if (!header) return { parts: [], rows: 0 };
+    const parts = [header];
+    for (const { pages } of segments.sort((a, b) => compareKeys(a.key, b.key))) {
+        for (const body of pages) parts.push('\n', body);
+    }
+    return { parts, rows };
+};
+
 /**
  * Get KPI statistics for a commodity.
  * Mirrors: GET /api/v2/stats

@@ -12,6 +12,9 @@
  * rollup uses. All three market lines plot one basis at a time (the one with
  * the most rows unless the user picks another), so they stay comparable.
  *
+ * `exportPlan` describes the raw rows behind the current view (same range,
+ * filters and package, every unit) for the raw CSV export.
+ *
  * @param {Object} filters  - { commodity, variety, district }
  * @param {Object} options  - { organicOnly }
  */
@@ -63,6 +66,7 @@ function rawEntry(row) {
         package: row.package || '',
         sum: priced ? price : 0,
         count: priced ? 1 : 0,
+        rows: 1,
     };
 }
 
@@ -76,6 +80,7 @@ function rollupEntry(row) {
         package: row.package || '',
         sum: row.price_sum,
         count: row.price_count,
+        rows: row.row_count,
     };
 }
 
@@ -84,6 +89,12 @@ function cutoffDay(maxDate, days) {
     const d = new Date(maxDate);
     d.setUTCDate(d.getUTCDate() - days);
     return d.toISOString().substring(0, 10);
+}
+
+// First day of the month after a YYYY-MM month, as YYYY-MM-DD.
+function nextMonthStart(month) {
+    const [y, m] = month.split('-').map(Number);
+    return new Date(Date.UTC(y, m, 1)).toISOString().substring(0, 10);
 }
 
 // Basis with the most priced rows in a { lb, unit, pkg } tally.
@@ -215,6 +226,32 @@ export default function usePriceTimeSeries(filters, options = {}) {
         return out;
     }, [rangeEntries, unit, pkg, cpiAdjusted]);
 
+    // Raw rows per UTC month for the export: one window per month that has
+    // rows (so a filtered export never scans months it has nothing in), the
+    // last one open-ended for rows newer than the counts.
+    const exportPlan = useMemo(() => {
+        const perMonth = new Map();
+        for (const e of rangeEntries) {
+            if (pkg && e.package !== pkg) continue;
+            const month = e.date.substring(0, 7);
+            perMonth.set(month, (perMonth.get(month) || 0) + e.rows);
+        }
+        const months = [...perMonth.keys()].sort();
+        const chunks = months.map((m, i) => ({
+            from: i === 0 && preset.source === 'raw' ? cutoff : `${m}-01`,
+            to: i < months.length - 1 ? nextMonthStart(m) : null,
+            rows: perMonth.get(m),
+        }));
+        return {
+            chunks,
+            rows: chunks.reduce((s, c) => s + c.rows, 0),
+            // Span for labels/filenames: days for raw ranges, months otherwise.
+            from: preset.source === 'raw' ? cutoff : months[0] || null,
+            to: preset.source === 'raw' ? maxDate?.substring(0, 10) || null : months[months.length - 1] || null,
+            filters: { ...serverFilters, package: pkg || undefined },
+        };
+    }, [rangeEntries, pkg, preset.source, cutoff, maxDate, serverFilters]);
+
     return {
         series,
         loading: boundsQuery.isLoading || activeQuery.isLoading,
@@ -230,6 +267,7 @@ export default function usePriceTimeSeries(filters, options = {}) {
         cpiAdjusted,
         cpiActive: cpiAdjusted,
         dateSpan,
+        exportPlan,
         actions: { setSelectedPackage, setSelectedRange, setSelectedUnit, setCpiAdjusted },
     };
 }

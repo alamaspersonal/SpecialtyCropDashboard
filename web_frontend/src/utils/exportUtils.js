@@ -70,3 +70,21 @@ export function exportToCSV(data, filename) {
         console.error('Browser does not support HTML5 download attribute.');
     }
 }
+
+/**
+ * Triggers a browser download of a Blob (e.g. a CSV assembled from pages).
+ * @param {Blob} blob - The file contents.
+ * @param {string} filename - The name to save as, including the extension.
+ */
+export function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    // Free the (possibly large) blob once the download has picked it up.
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
