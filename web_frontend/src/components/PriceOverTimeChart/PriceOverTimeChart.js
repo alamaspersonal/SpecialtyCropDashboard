@@ -62,7 +62,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
         if (isNaN(dt)) return d;
         return granularity === 'month'
             ? dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-            : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
     };
 
     // Merge the three series into one row per date for recharts.
