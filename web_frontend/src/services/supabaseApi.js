@@ -340,61 +340,117 @@ export const getUnifiedPrices = async (commodity, options = {}) => {
     }
 };
 
+// ── Price-over-time chart ─────────────────────────────────────────────────────
+// The chart never pulls a commodity's full raw history (Apples alone is ~574k
+// rows). Short ranges read a date-bounded window of raw rows; long ranges read
+// the monthly rollup table, which the daily pipeline keeps in sync.
+
+const PAGE_SIZE = 1000;       // PostgREST's per-request row cap
+const PAGE_CONCURRENCY = 10;  // parallel page requests after the first
+
 /**
- * Get the full price history for a commodity, for the price-over-time chart.
- * Paginates through ALL matching rows (oldest first) up to a safety cap, and
- * selects only the columns the time-series aggregation needs.
- *
- * @param {string} commodity - Required commodity filter
- * @param {Object} filters - Optional { district, organic }
- * @returns {Array} All matching rows ordered by report_date ascending
+ * Fetch every row of a query. The first page also returns the exact total, so
+ * the remaining pages are requested in parallel (a few at a time) instead of
+ * one after another. `buildQuery(selectOptions)` must return a fresh query with
+ * a fully deterministic order, or rows can repeat or go missing across pages.
  */
-export const getTimeSeriesData = async (commodity, filters = {}) => {
-    try {
-        let allData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
+async function fetchAllPages(buildQuery, { maxRows = 100000 } = {}) {
+    const first = await buildQuery({ count: 'exact' }).range(0, PAGE_SIZE - 1);
+    if (first.error) throw first.error;
 
-        while (hasMore) {
-            let query = supabase
-                .from('UnifiedCropPrice')
-                .select('report_date, market_type, price_avg, price_per_lb, price_per_unit, package, origin, variety, organic')
-                .eq('commodity', commodity)
-                .not('report_date', 'is', null)
-                .order('report_date', { ascending: true })
-                .range(page * pageSize, (page + 1) * pageSize - 1);
-
-            if (filters.district) query = query.eq('district', filters.district);
-            if (filters.organic) query = query.eq('organic', filters.organic);
-
-            const { data, error } = await query;
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-                allData = [...allData, ...data];
-                if (data.length < pageSize) {
-                    hasMore = false;
-                } else {
-                    page++;
-                }
-            } else {
-                hasMore = false;
-            }
-
-            // Safety cap — generous to allow multi-year trends
-            if (allData.length > 50000) {
-                console.warn('[DEBUG supabaseApi] Reached 50k row safety limit for time-series query');
-                break;
-            }
-        }
-
-        console.log('[DEBUG supabaseApi] getTimeSeriesData result:', allData.length, 'rows');
-        return allData;
-    } catch (error) {
-        console.error('Error fetching time-series data:', error);
-        throw error;
+    const total = first.count ?? (first.data || []).length;
+    if (total > maxRows) {
+        console.warn(`[supabaseApi] ${total} rows exceeds the ${maxRows}-row cap; truncating.`);
     }
+    const end = Math.min(total, maxRows);
+
+    const offsets = [];
+    for (let from = PAGE_SIZE; from < end; from += PAGE_SIZE) offsets.push(from);
+
+    const pages = [];
+    for (let i = 0; i < offsets.length; i += PAGE_CONCURRENCY) {
+        const batch = offsets.slice(i, i + PAGE_CONCURRENCY);
+        const results = await Promise.all(
+            batch.map(from => buildQuery().range(from, from + PAGE_SIZE - 1))
+        );
+        for (const res of results) {
+            if (res.error) throw res.error;
+            pages.push(res.data || []);
+        }
+    }
+    return (first.data || []).concat(...pages);
+}
+
+// Server-side filters shared by every time-series query.
+function applySeriesFilters(query, { district, organic, variety } = {}) {
+    if (district) query = query.eq('district', district);
+    if (organic) query = query.eq('organic', organic);
+    if (variety) query = query.eq('variety', variety);
+    return query;
+}
+
+/**
+ * First and latest report_date for a commodity (and filters). The chart's
+ * ranges count back from the latest report, not from today, so seasonal crops
+ * don't open on an empty window.
+ *
+ * @param {string} commodity
+ * @param {Object} filters - Optional { district, organic, variety }
+ * @returns {{ minDate: string|null, maxDate: string|null }}
+ */
+export const getTimeSeriesBounds = async (commodity, filters = {}) => {
+    const edge = (ascending) => applySeriesFilters(
+        supabase.from('UnifiedCropPrice').select('report_date').eq('commodity', commodity),
+        filters,
+    ).order('report_date', { ascending }).limit(1);
+
+    const [minRes, maxRes] = await Promise.all([edge(true), edge(false)]);
+    if (minRes.error) throw minRes.error;
+    if (maxRes.error) throw maxRes.error;
+    return {
+        minDate: minRes.data?.[0]?.report_date || null,
+        maxDate: maxRes.data?.[0]?.report_date || null,
+    };
+};
+
+/**
+ * Raw rows from `startDate` onward, for the chart's short (daily) ranges.
+ *
+ * @param {string} commodity
+ * @param {Object} filters - Optional { district, organic, variety }
+ * @param {string} startDate - Inclusive lower bound, YYYY-MM-DD
+ * @returns {Array} Rows ordered by report_date ascending
+ */
+export const getTimeSeriesWindow = async (commodity, filters, startDate) => {
+    return fetchAllPages((selectOptions) => applySeriesFilters(
+        supabase
+            .from('UnifiedCropPrice')
+            .select('report_date, market_type, price_avg, price_per_lb, price_per_unit, package', selectOptions)
+            .eq('commodity', commodity)
+            .gte('report_date', startDate),
+        filters,
+    ).order('report_date', { ascending: true }).order('id', { ascending: true }));
+};
+
+/**
+ * Every monthly rollup row for a commodity (and filters), for the chart's long
+ * ranges and the raw export's row counts. A full history is ~15k rows at most.
+ *
+ * @param {string} commodity
+ * @param {Object} filters - Optional { district, organic, variety }
+ * @returns {Array} Rows of UnifiedCropPriceMonthly ordered by month ascending
+ */
+export const getMonthlyPriceRollup = async (commodity, filters = {}) => {
+    return fetchAllPages((selectOptions) => applySeriesFilters(
+        supabase
+            .from('UnifiedCropPriceMonthly')
+            .select('month, market_type, package, price_basis, price_sum, price_count, row_count', selectOptions)
+            .eq('commodity', commodity),
+        filters,
+    )
+        // Full primary-key order: deterministic paging, served by the PK index.
+        .order('month').order('market_type').order('variety').order('package')
+        .order('district').order('organic').order('price_basis'));
 };
 
 /**

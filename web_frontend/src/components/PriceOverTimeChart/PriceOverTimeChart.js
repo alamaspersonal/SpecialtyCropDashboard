@@ -2,9 +2,9 @@
 
 /**
  * PriceOverTimeChart — line chart of Terminal/Shipping/Retail prices over time.
- * Mirrors the mobile price-over-time feature: time-range presets, per-line
- * visibility toggles, a shared package sub-filter, and an optional CPI
- * inflation adjustment. Plots the backend-normalized $/lb (or $/unit) price.
+ * Time-range presets (loaded on demand), per-line visibility toggles, a shared
+ * package sub-filter, a price-unit selector ($/lb, $/each, $/package — never
+ * mixed), and an optional CPI inflation adjustment.
  */
 
 import { useState, useMemo } from 'react';
@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { motion } from 'framer-motion';
 import { Clock, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
-import usePriceTimeSeries from '../../hooks/usePriceTimeSeries';
+import usePriceTimeSeries, { PRICE_UNITS } from '../../hooks/usePriceTimeSeries';
 import FilterDropdown from '../FilterDropdown/FilterDropdown';
 import { CPI_BASE_KEY } from '../../constants/cpiData';
 
@@ -51,18 +51,21 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
     const {
         series, loading, error,
         packageOptions, selectedPackage,
+        unitOptions, unit, unitGaps,
         selectedRange, availableRanges, granularity,
-        cpiAdjusted, dateSpan, actions,
+        cpiAdjusted, actions,
     } = usePriceTimeSeries(filters, { organicOnly });
 
     const [visible, setVisible] = useState({ terminal: true, shipping: true, retail: true });
 
+    // Bucket dates are UTC (YYYY-MM-DD); format them in UTC too, or US time
+    // zones show every point a day (or a month, for 1st-of-month buckets) early.
     const fmtDate = (d) => {
         const dt = new Date(d);
         if (isNaN(dt)) return d;
         return granularity === 'month'
-            ? dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-            : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            ? dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+            : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
     };
 
     // Merge the three series into one row per date for recharts.
@@ -78,15 +81,8 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
         return [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
     }, [series]);
 
-    const unitLabel = useMemo(() => {
-        const units = series._units || {};
-        const counts = {};
-        for (const m of MARKETS) {
-            if (visible[m.key] && units[m.key]) counts[units[m.key]] = (counts[units[m.key]] || 0) + 1;
-        }
-        const u = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || units.terminal || 'lb';
-        return u === 'lb' ? 'Price / lb' : u === 'unit' ? 'Price / unit' : 'Avg package price';
-    }, [series, visible]);
+    const unitInfo = (key) => PRICE_UNITS.find(u => u.key === key);
+    const unitLabel = unitInfo(unit)?.title || 'Price';
 
     // Net change of the most-populated visible series (Stocks-style readout).
     const netChange = useMemo(() => {
@@ -104,6 +100,10 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
     }, [series, visible]);
 
     const hasData = chartData.length > 0;
+    // Markets report on different schedules (Retail weekly, Terminal on
+    // weekdays), so most daily rows lack some markets. Bridge those gaps and
+    // dot the real report days, or a weekly series draws no line at all.
+    const daily = granularity === 'day';
 
     return (
         <div className="space-y-5">
@@ -123,18 +123,44 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                     )}
                 </div>
 
-                {/* Package sub-filter */}
-                {packageOptions.length > 1 && (
-                    <div className="w-48">
-                        <FilterDropdown
-                            label="Package"
-                            options={packageOptions}
-                            value={selectedPackage}
-                            onChange={(v) => actions.setSelectedPackage(v)}
-                            color="var(--color-accent)"
-                        />
-                    </div>
-                )}
+                <div className="flex flex-wrap items-end gap-3">
+                    {/* Price unit — all three lines share one unit */}
+                    {unitOptions.length > 1 && (
+                        <div className="flex gap-1 rounded-xl bg-[var(--color-surface-elevated)] p-1" role="group" aria-label="Price unit">
+                            {unitOptions.map(u => (
+                                <button
+                                    key={u.key}
+                                    onClick={() => actions.setSelectedUnit(u.key)}
+                                    aria-pressed={unit === u.key}
+                                    className={`relative rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors duration-200
+                                        ${unit === u.key ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'}`}
+                                >
+                                    {unit === u.key && (
+                                        <motion.div
+                                            layoutId="ts-unit-indicator"
+                                            className="absolute inset-0 rounded-lg bg-[var(--color-surface)] shadow-sm"
+                                            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                                        />
+                                    )}
+                                    <span className="relative z-10">{u.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Package sub-filter */}
+                    {packageOptions.length > 1 && (
+                        <div className="w-48">
+                            <FilterDropdown
+                                label="Package"
+                                options={packageOptions}
+                                value={selectedPackage}
+                                onChange={(v) => actions.setSelectedPackage(v)}
+                                color="var(--color-accent)"
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Controls: time range + CPI toggle */}
@@ -218,9 +244,9 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                                     dataKey={m.key}
                                     stroke={m.color}
                                     strokeWidth={2}
-                                    dot={false}
+                                    dot={daily ? { r: 1.75, fill: m.color, strokeWidth: 0 } : false}
                                     activeDot={{ r: 4 }}
-                                    connectNulls={false}
+                                    connectNulls={daily}
                                     isAnimationActive={false}
                                 />
                             ))}
@@ -251,6 +277,23 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                         );
                     })}
                 </div>
+
+                {/* Markets with prices in this range, but none in the selected unit */}
+                {!loading && !error && Object.keys(unitGaps).length > 0 && (
+                    <div className="mt-2 space-y-0.5 text-center text-xs text-[var(--color-text-muted)]">
+                        {MARKETS.filter(m => unitGaps[m.key]).map(m => (
+                            <p key={m.key}>
+                                {m.label} has no {unitInfo(unit)?.label} prices in this range —{' '}
+                                <button
+                                    onClick={() => actions.setSelectedUnit(unitGaps[m.key])}
+                                    className="font-semibold text-[var(--color-accent)] hover:underline"
+                                >
+                                    switch to {unitInfo(unitGaps[m.key])?.label}
+                                </button>
+                            </p>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );
