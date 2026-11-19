@@ -18,15 +18,25 @@ LB_PER_KG = 2.20462
 # Path to the data directory (local to backend_update/)
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "APP_CROP_DATA"))
 
-# Canonical (crop, package) -> net weight reference, sourced from USDA Handbook 697
-# plus explicit report weights. Used as a fallback for bare package descriptions
-# ("cartons tray pack", "bushel cartons", ...) that the regex parser cannot measure.
-# Keeps the daily pipeline's weights consistent with the historical Supabase backfill.
+# Net weights for bare package descriptions ("cartons tray pack", "1 1/9 bushel
+# cartons", ...) that the regex parser cannot measure. Every entry comes from one
+# source only: USDA AMS Fresh Fruit and Vegetable Shipments, Calendar Year 2023
+# ("Container Approximate Net Weights"), cited in its `source`. Never add estimates
+# or figures from other publications: a package that table doesn't list stays
+# unweighted and is shown per package instead of per pound.
+#
+# USDA often qualifies a weight by bunch/count ("Carton 48's bunched") or origin
+# ("Carton (AZ & CA)"), so an entry may carry:
+#   item_count — int, or [min, max]: the row's item_size must state that count
+#                ("24s", "film lined 24s", "48s medium")
+#   origins    — list: the row's origin (or, for shipping-point rows, the origin
+#                implied by the district) must be one of these
+# A row gets a weight only when the matching entries agree on exactly one value.
 _PACKAGE_UNITS_PATH = os.path.join(os.path.dirname(__file__), "package_units.json")
 
 
 def _load_package_weight_reference():
-    """Build {(crop_lower, package_lower): (weight_lbs, weight_kgs)} from package_units.json."""
+    """Build {(crop_lower, package_lower): [rule, ...]} from package_units.json."""
     try:
         with open(_PACKAGE_UNITS_PATH, "r") as f:
             entries = json.load(f)
@@ -37,19 +47,72 @@ def _load_package_weight_reference():
     for entry in entries:
         crop = str(entry.get("crop", "")).lower().strip()
         pkg = str(entry.get("package_size", "")).lower().strip()
-        if not crop or not pkg:
-            continue
         lbs = entry.get("weight_lbs")
-        kgs = entry.get("weight_kg")
-        if lbs is None:
+        if not crop or not pkg or lbs is None:
             continue
         lbs = round(float(lbs), 2)
+        kgs = entry.get("weight_kg")
         kgs = round(float(kgs), 2) if kgs is not None else round(lbs / LB_PER_KG, 2)
-        ref[(crop, pkg)] = (lbs, kgs)
+
+        count = entry.get("item_count")
+        if isinstance(count, list):
+            count = (int(count[0]), int(count[1]))
+        elif count is not None:
+            count = (int(count), int(count))
+
+        origins = entry.get("origins")
+        origins = {str(o).lower().strip() for o in origins} if origins else None
+
+        ref.setdefault((crop, pkg), []).append(
+            {"lbs": lbs, "kgs": kgs, "count": count, "origins": origins})
     return ref
 
 
 PACKAGE_WEIGHT_REFERENCE = _load_package_weight_reference()
+
+
+def _item_count(item_size):
+    """Pack count stated in a USDA item_size ('24s', 'film lined 24s', '48s medium'), else None.
+
+    Dimensional sizes like tomatoes' '4x5s' are not counts and return None.
+    """
+    if item_size is None or (isinstance(item_size, float) and pd.isna(item_size)):
+        return None
+    m = re.search(r'(?<![\dx./])(\d+)s\b', str(item_size).lower())
+    return int(m.group(1)) if m else None
+
+
+def _source_place(origin, district):
+    """Where the product was grown: the origin, or for shipping-point rows (which
+    have no origin) the place their district names. Returns lowercase or None."""
+    if origin is not None and not (isinstance(origin, float) and pd.isna(origin)) and str(origin).strip():
+        return str(origin).lower().strip()
+    if district is None or (isinstance(district, float) and pd.isna(district)):
+        return None
+    d = str(district).lower().strip()
+    if d.startswith('mexico'):                 # 'Mexico Crossings Through Texas', 'Mexico Imports - ...'
+        return 'mexico'
+    if 'mexico' in d:                          # domestic and Mexican product reported together
+        return None
+    if d.endswith('california'):               # 'South District California', 'Kern District California'
+        return 'california'
+    return d                                   # e.g. 'georgia', 'north carolina'
+
+
+def reference_weight(commodity, package, item_size=None, origin=None, district=None):
+    """USDA-verified (weight_lbs, weight_kgs) for a bare package, or None if unverified."""
+    rules = PACKAGE_WEIGHT_REFERENCE.get(
+        (str(commodity).lower().strip(), str(package).lower().strip()))
+    if not rules:
+        return None
+    count = _item_count(item_size)
+    place = _source_place(origin, district)
+    weights = {
+        (r["lbs"], r["kgs"]) for r in rules
+        if (r["count"] is None or (count is not None and r["count"][0] <= count <= r["count"][1]))
+        and (r["origins"] is None or place in r["origins"])
+    }
+    return weights.pop() if len(weights) == 1 else None
 
 
 def clean_price(price_val):
@@ -364,13 +427,11 @@ def format_for_unified_crop_price(df):
         weight_lbs, weight_kgs, units = parse_package_measures(package)
 
         # Fallback for bare packages the regex can't measure ("cartons tray pack",
-        # "bushel cartons", ...): look up the net weight by (commodity, package) in the
-        # USDA Handbook reference. Exact, lower()-normalized match — same key the
-        # Supabase historical backfill uses, so the two stay consistent.
+        # "1 1/9 bushel cartons", ...): the USDA-published net weight, if any, for this
+        # commodity + package (+ the count / origin USDA qualifies it by).
         if weight_lbs is None and units is None and package is not None:
-            ref = PACKAGE_WEIGHT_REFERENCE.get(
-                (str(commodity).lower().strip(), str(package).lower().strip())
-            )
+            ref = reference_weight(commodity, package, row.get('item_size'),
+                                   row.get('origin'), row.get('district'))
             if ref:
                 weight_lbs, weight_kgs = ref
 
