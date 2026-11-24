@@ -7,8 +7,12 @@ const mockSupabaseQuery = {
   eq: jest.fn().mockReturnThis(),
   gte: jest.fn().mockReturnThis(),
   lte: jest.fn().mockReturnThis(),
+  lt: jest.fn().mockReturnThis(),
+  not: jest.fn().mockReturnThis(),
+  or: jest.fn().mockReturnThis(),
   order: jest.fn().mockReturnThis(),
   limit: jest.fn().mockReturnThis(),
+  range: jest.fn().mockReturnThis(),
   then: jest.fn(function(onFulfilled) {
     return Promise.resolve({ data: [], error: null }).then(onFulfilled);
   }),

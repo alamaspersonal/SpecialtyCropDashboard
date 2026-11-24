@@ -145,7 +145,6 @@ Here is the reasoning for each data type Apple asks about:
 | SDK / Service | Data Practice |
 |---|---|
 | **Supabase JS** (`@supabase/supabase-js`) | The app makes anonymous read-only queries to your Supabase project using the public anon key. No user identifier is sent. Supabase may log IP addresses server-side as part of normal infrastructure operation — this is standard for any internet service and is not considered "data collection" under Apple's guidelines. |
-| **Cerebras AI** (`cerebrasApi.js`) | When a user views market insights, the app sends USDA market notes (supply/demand/tone text from government reports) to the Cerebras API. No personal data is included in these requests. Filter context (variety, origin, package type) refers to agricultural data categories, not user identity. |
 | **AsyncStorage** (`@react-native-async-storage/async-storage`) | All data (display name, profile image URI, watchlist, theme preference, onboarding state) stored locally on device. Nothing is transmitted. |
 | **expo-image-picker** | Accesses photo library with user permission. Selected image URI stored locally only. |
 | **React Navigation, Skia, Victory Native, Reanimated, Gesture Handler** | UI/rendering libraries with no data collection. |

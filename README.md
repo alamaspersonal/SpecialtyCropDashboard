@@ -6,8 +6,8 @@ A dashboard for USDA specialty crop pricing data, featuring a React Native mobil
 
 ```
 USDA MARS API  -->  backend_update (Python)  -->  Supabase  -->  phone_frontend / web_frontend
-                    (fetch, format, upload)       (CropPrice,    (React Native / Next.js)
-                                                   UnifiedCropPrice)
+                    (fetch, format, upload)       (UnifiedCropPrice +        (React Native / Next.js)
+                                                   UnifiedCropPriceMonthly)
 ```
 
 ---
@@ -18,123 +18,82 @@ USDA MARS API  -->  backend_update (Python)  -->  Supabase  -->  phone_frontend 
 SpecialtyCropDashboard/
 │
 ├── phone_frontend/                     # React Native mobile app (Expo 54)
-│   ├── App.js                          # Root: SafeAreaProvider > QueryClientProvider > ThemeProvider > Navigator
+│   ├── App.js                          # Root: SafeAreaProvider > ThemeProvider > Navigator
 │   ├── index.js                        # Expo entry point (registerRootComponent)
-│   ├── app.json                        # Expo config (portrait, new arch enabled)
+│   ├── app.json / eas.json             # Expo + EAS build config
 │   ├── package.json                    # Dependencies & Jest config
 │   ├── babel.config.js                 # babel-preset-expo + reanimated plugin
-│   ├── jest.setup.js                   # Mocks: Supabase, AsyncStorage, env vars
-│   ├── .env                            # EXPO_PUBLIC_SUPABASE_URL, _KEY, CEREBRAS_API_KEY
-│   ├── assets/                         # App icons, splash screen
+│   ├── jest.setup.js / jest.globals.js # Mocks: Supabase, AsyncStorage, env vars
+│   ├── assets/                         # App icons, splash screen, fonts
 │   ├── android/ & ios/                 # Native project files
 │   └── src/
 │       ├── screens/
-│       │   ├── OnboardingScreen.js     # First-launch name input, saves to AsyncStorage
+│       │   ├── OnboardingScreen.js     # First-launch name input
+│       │   ├── WelcomeScreen.js        # Static welcome/about screen
 │       │   ├── HomeScreen.js           # Watchlist (favorites), search bar, profile link
 │       │   ├── FiltersScreen.js        # Category/commodity/variety dropdowns, organic & complete-data toggles
-│       │   ├── DashboardScreen.js      # Main dashboard — 3 view modes: waterfall, chart, compare
-│       │   │                             Manages time range, variety, organic filters
-│       │   │                             Triggers AI insights via Cerebras API
-│       │   ├── AccountScreen.js        # Profile image, name edit, dark mode toggle
-│       │   └── WelcomeScreen.js        # Static welcome/about screen
-│       │
+│       │   ├── DashboardScreen.js      # Two views: waterfall (default) and price over time
+│       │   ├── AccountScreen.js        # Profile image, name, dark mode toggle
+│       │   └── PrivacyPolicyScreen.js
 │       ├── components/
-│       │   ├── PriceWaterfallMobile.js # Waterfall bars for terminal/shipping/retail prices
+│       │   ├── PriceWaterfallMobile.js # Terminal/shipping/retail price bars
 │       │   ├── PriceOverTimeChart.js   # Time-series line chart (Victory Native)
-│       │   ├── PriceBridgeChart.js     # Price bridge visualization (bar chart decomposition)
-│       │   ├── ComparisonContainer.js  # Period A vs B comparison wrapper
-│       │   ├── PriceBarChart.js        # Generic price bar chart component
-│       │   ├── PriceCard.js            # Single price display card
-│       │   ├── FilterDropdown.js       # Reusable dropdown selector
 │       │   ├── WatchlistAccordionItem.js # Expandable watchlist row on HomeScreen
 │       │   ├── ExpandableBottomSheet.js  # Gesture-driven bottom sheet (reanimated)
-│       │   ├── ErrorBoundary.js        # React error boundary for chart crash isolation
-│       │   └── __tests__/
-│       │       └── WaterfallComparison.test.js
-│       │
+│       │   ├── FilterDropdown.js       # Reusable dropdown selector
+│       │   └── ErrorBoundary.js        # Isolates chart crashes
 │       ├── hooks/
-│       │   ├── useWaterfallData.js     # Core data hook: fetch, partition by market type,
-│       │   │                             cascading sub-filters (pkg/origin/district per type),
-│       │   │                             stat calculation, package weight lookup
-│       │   ├── usePriceTimeSeries.js   # Full commodity history, monthly aggregation,
-│       │   │                             time range presets (3M/6M/1Y/2Y/All), sub-filters
-│       │   └── usePriceBridge.js       # Parallel fetch for 2 date ranges, runs priceBridge engine
-│       │
+│       │   ├── useWaterfallData.js     # Waterfall data: fetch, partition by market type, sub-filters, stats
+│       │   └── usePriceTimeSeries.js   # Chart data: 3M/6M raw rows, 1Y/2Y monthly rollup
 │       ├── services/
-│       │   ├── supabase.js             # Supabase client init (AsyncStorage session)
-│       │   ├── supabaseApi.js          # All DB queries: getFilters, getPrices, getStats,
-│       │   │                             getUnifiedPrices, getTimeSeriesData, getDateRange,
-│       │   │                             getPricesByDateRange, getPriceSummary,
-│       │   │                             getCommoditiesWithCompleteData/OrganicData
-│       │   ├── useQueries.js           # TanStack Query hooks (caching, offline support)
-│       │   ├── api.js                  # Re-exports from supabaseApi + useQueries
-│       │   ├── cerebrasApi.js          # Cerebras AI market insights (gemma-4-31b)
-│       │   ├── favorites.js            # AsyncStorage watchlist CRUD
-│       │   ├── userStorage.js          # AsyncStorage user prefs (name, onboarding, profile image)
-│       │   └── __tests__/
-│       │       └── supabaseApi.test.js
-│       │
-│       ├── shared/
-│       │   ├── priceBridge.js          # Platform-agnostic price bridge decomposition:
-│       │   │                             Price Level + Package Mix + Origin Mix + Residual
-│       │   └── __tests__/
-│       │       └── priceBridge.test.js
-│       │
+│       │   ├── supabase.js             # Supabase client init
+│       │   ├── supabaseApi.js          # All Supabase queries
+│       │   ├── api.js                  # Re-exports the queries screens/hooks use (mocked in tests)
+│       │   ├── favorites.js            # AsyncStorage watchlist
+│       │   └── userStorage.js          # AsyncStorage user prefs (name, onboarding, profile image)
+│       ├── shared/                     # Framework-free logic (unit tested)
+│       │   ├── priceEntries.js         # $/lb vs $/each vs $/package grouping
+│       │   ├── dates.js                # Date-key helpers
+│       │   └── cpiAdjust.js            # Inflation adjustment (CPI-U)
 │       ├── constants/
-│       │   └── staticFilters.js        # Pre-computed filter options (generated by extract_filters.py)
-│       │                                 STATIC_FILTERS, CATEGORY_COMMODITIES, COMMODITY_TO_CATEGORY
-│       │
-│       └── context/
-│           └── ThemeContext.js          # Dark/light theme with AsyncStorage persistence
+│       │   ├── staticFilters.js        # Generated by backend_update/extract_filters.py
+│       │   └── cpiData.js              # Generated by backend_update/update_cpi.py
+│       └── context/ThemeContext.js     # Dark/light theme, persisted
 │
-├── backend_update/                     # Python data pipeline
+├── web_frontend/                       # Next.js 16 web app (see web_frontend/WEB_FRONTEND.md)
+│   └── src/
+│       ├── app/                        # App Router pages: home, onboarding, filters, dashboard, account, privacy
+│       ├── components/                 # Waterfall, price-over-time, comparison, CSV export, ...
+│       ├── hooks/                      # usePriceTimeSeries, usePriceBridge
+│       ├── services/                   # Supabase queries, favorites, user prefs (localStorage)
+│       ├── shared/                     # priceBridge.js engine, cpiAdjust.js
+│       ├── constants/                  # staticFilters.js, cpiData.js (generated)
+│       ├── context/                    # Theme context
+│       └── utils/                      # CSV export helpers
+│
+├── backend_update/                     # Python data pipeline (see DATAPIPELINE.md)
 │   ├── update_daily.py                 # Orchestrator: fetch -> format -> upload (run this)
 │   ├── get_recent_data.py              # Fetches last 60 days from USDA MARS API
-│   │                                     Slug IDs: 2306, 2307, 2308, 2309, 2390, 2391, 3324
-│   │                                     Flattens nested JSON sections -> CSV
-│   ├── format_data.py                  # CSV -> CropPrice & UnifiedCropPrice schemas
-│   │                                     Normalizes: categories, organic, title case, price_avg
-│   ├── overwrite_supabse.py            # Clears + batch-uploads to Supabase (service role key)
-│   ├── extract_filters.py              # Generates staticFilters.js for phone_frontend
-│   ├── upload_recent_slugs.py          # Alt upload from sibling SpecialtyCropPrices project
-│   ├── requirements.txt                # requests, pandas, python-dotenv, supabase
-│   ├── .env                            # SUPABASE_URL, SUPABASE_SECRET_KEY, USDA_API_KEY
-│   └── APP_CROP_DATA/                  # Downloaded CSV files ({slug}_recent.csv)
+│   ├── format_data.py                  # CSV -> UnifiedCropPrice schema, price_avg, package weights
+│   ├── package_units.json              # USDA 2023 container net weights (see PACKAGE_WEIGHTS.md)
+│   ├── PACKAGE_WEIGHTS.md              # How package weights are assigned, and every assumption
+│   ├── package_weight_conflicts.csv    # Where USDA sources disagree on a container's weight
+│   ├── overwrite_supabase.py           # Replaces recent rows in Supabase, refreshes the monthly rollup
+│   ├── upload_historical.py            # Full historical rebuild from the SpecialtyCropPrices project
+│   ├── extract_filters.py              # Regenerates both apps' staticFilters.js
+│   ├── update_cpi.py                   # Regenerates both apps' cpiData.js from BLS
+│   ├── sql/                            # UnifiedCropPriceMonthly table + refresh_price_monthly()
+│   └── requirements.txt
 │
-├── backend/                            # Original FastAPI backend (superseded by Supabase)
-│   ├── main.py                         # FastAPI endpoints (/api/filters, /api/prices, etc.)
-│   ├── database.py                     # SQLAlchemy models + SQLite engine
-│   ├── db_models.py                    # Pydantic schemas
-│   ├── data_ingestion.py               # CSV -> SQLite importer
-│   ├── populate_db.py                  # DB population script
-│   ├── requirements.txt                # fastapi, uvicorn, sqlalchemy, pydantic
-│   └── various debug/fix scripts       # check_dates, debug_retail, find_missing_packages, etc.
+├── docs/index.html                     # GitHub Pages site
+├── privacy-policy.html                 # Privacy policy (linked from the app stores)
+├── app-store-submission.md             # Store listing notes
+├── historical-cpi-u-202601.xlsx        # BLS CPI-U source for cpiData.js
+├── SpecialtyCropLogo*.png              # Logo assets
 │
-├── web_frontend/                       # Next.js 16 web app
-│   ├── src/
-│   │   ├── app/                        # Next.js App Router pages
-│   │   ├── components/                 # React components (Recharts-based charts)
-│   │   ├── services/                   # Supabase queries (mirrors phone_frontend pattern)
-│   │   ├── hooks/                      # Data hooks
-│   │   ├── shared/                     # priceBridge.js (shared with phone_frontend)
-│   │   ├── constants/                  # Static filter data
-│   │   ├── context/                    # Theme context
-│   │   └── utils/                      # Utility functions
-│   ├── package.json                    # next, react, recharts, tailwindcss, framer-motion
-│   └── .env.local                      # NEXT_PUBLIC_SUPABASE_URL, _KEY
-│
-├── APP_CROP_DATA/                      # Top-level CSV data (from USDA API)
-├── specialty_crop_data/                # Historical report CSVs
-├── scripts/
-│   └── analyze_market_notes.py         # CLI tool: analyze market note patterns in Supabase
-├── analyze_cats.py                     # Category analysis utility
-├── specialty_crop.db                   # SQLite database (original backend)
-├── SpecialtyCropLogo.png               # Project logo assets
-├── SpecialtyCropLogoTransparent.png
-│
-└── .github/
-    └── workflows/
-        └── daily_update.yml            # GitHub Actions: runs update_daily.py at 21:30 UTC daily
+└── .github/workflows/
+    ├── daily_update.yml                # Runs update_daily.py at 21:30 UTC daily
+    └── monthly_cpi_update.yml          # Runs update_cpi.py monthly
 ```
 
 ---
@@ -175,22 +134,22 @@ npm run dev
 
 ## Database Tables (Supabase)
 
-| Table              | Purpose                                                  |
-| ------------------ | -------------------------------------------------------- |
-| `CropPrice`        | Full USDA data: all price fields, market notes, comments |
-| `UnifiedCropPrice` | Simplified: `price_avg`, used for charts and time-series |
+| Table                     | Purpose                                                                 |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `UnifiedCropPrice`        | One row per USDA price quote: `price_avg`, `price_per_lb` / `price_per_unit`, market notes |
+| `UnifiedCropPriceMonthly` | Monthly sums/counts per commodity × market × variety × package × district × organic × price basis; rebuilt by `refresh_price_monthly()` |
 
-Both tables share: `report_date`, `market_type`, `commodity`, `variety`, `package`, `district`, `origin`, `organic`.
+Package weights (and so $/lb prices) come only from the package name or the USDA 2023 container table — see [`backend_update/PACKAGE_WEIGHTS.md`](backend_update/PACKAGE_WEIGHTS.md).
 
 ---
 
 ## Key Features
 
 - **Waterfall View**: Terminal/Shipping/Retail price breakdown with per-type sub-filters (package, origin, district)
-- **Price Over Time**: Monthly aggregated line chart with 3M/6M/1Y/2Y/All presets
-- **Price Bridge Comparison**: Decomposes price changes between two periods into Price Level, Package Mix, Origin Mix, and Residual effects
-- **AI Market Insights**: Cerebras-powered summaries from USDA market notes
-- **Offline Support**: TanStack Query caching + static filter fallbacks
+- **Price Over Time**: Line chart in $/lb, $/each or $/package, with 3M/6M (daily) and 1Y/2Y (monthly) presets; the web app adds All
+- **Price Bridge Comparison** (web): Decomposes price changes between two periods into Price Level, Package Mix, Origin Mix, and Residual effects
+- **Inflation adjustment**: Optional CPI-U adjustment to current dollars
+- **Offline filters**: Filter options are pre-computed, so dropdowns work without a network round-trip
 - **Dark Mode**: System-aware with manual override, persisted to AsyncStorage
 
 ---
@@ -199,7 +158,7 @@ Both tables share: `report_date`, `market_type`, `commodity`, `variety`, `packag
 
 | Location               | Variables                                                          |
 | ---------------------- | ------------------------------------------------------------------ |
-| `phone_frontend/.env`  | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_KEY`, `EXPO_PUBLIC_CEREBRAS_API_KEY` |
+| `phone_frontend/.env`  | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_KEY`                             |
 | `backend_update/.env`  | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `USDA_API_KEY`              |
 | `web_frontend/.env.local` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_KEY`          |
 

@@ -16,7 +16,7 @@ get_recent_data.py   ──► APP_CROP_DATA/{slug}_recent.csv
 format_data.py       ──► pandas DataFrame (unified schema)
      │
      ▼
-overwrite_supabse.py ──► Supabase: UnifiedCropPrice table
+overwrite_supabase.py ──► Supabase: UnifiedCropPrice table
                               │
                     ┌─────────┴─────────┐
                     ▼                   ▼
@@ -88,6 +88,10 @@ Reads every `*_recent.csv` from `APP_CROP_DATA/` and calls `format_for_unified_c
 | `district` | `district` | Title-cased |
 | `organic` | `organic` | Normalized → `"yes"` / `"no"` |
 | `price_avg` | `low_price`, `high_price`, `mostly_low_price`, `mostly_high_price`, `wtd_avg_price` | Mean of all non-null price fields |
+| `weight_lbs`, `weight_kgs` | `package` (+ `item_size`, `origin`, `district`) | Net package weight: parsed from the package name, else the USDA 2023 container table in `package_units.json`, else null. See [`PACKAGE_WEIGHTS.md`](backend_update/PACKAGE_WEIGHTS.md) |
+| `units` | `package` | Count of sellable items ("12 1-pint baskets" → 12, "each" → 1) |
+| `price_per_lb` | `price_avg`, `weight_lbs` | `price_avg / weight_lbs` when a weight is known |
+| `price_per_unit` | `price_avg`, `units` | `price_avg / units` only when there is a count and no weight |
 | `low_price` | `low_price` | Cleaned float |
 | `high_price` | `high_price` | Cleaned float |
 | `mostly_low_price` | `mostly_low_price` | Cleaned float |
@@ -110,7 +114,7 @@ Reads every `*_recent.csv` from `APP_CROP_DATA/` and calls `format_for_unified_c
 
 ---
 
-## Step 3 — Upload: `overwrite_supabse.py`
+## Step 3 — Upload: `overwrite_supabase.py`
 
 Clears and re-populates `UnifiedCropPrice` in Supabase.
 
@@ -170,13 +174,13 @@ Exit code `0` = success, `1` = failure at any step.
 
 ---
 
-## Alternate Entry Point: `upload_recent_slugs.py`
+## Historical Rebuild: `upload_historical.py`
 
-Used when CSVs already exist in a sibling `SpecialtyCropPrices/recent_slugs/` project. Skips the API fetch step and goes directly to format → upload.
+Rebuilds history from the combined `*-Full.csv` files in the sibling `SpecialtyCropPrices/ReportsBySlugID/SlugIDFullFile/` project, using the same `format_for_unified_crop_price()` logic, then refreshes the monthly rollup. Rows from the last 60 days are skipped (the daily pipeline owns them). Idempotent: it deletes each slug + year window before inserting. Set `DB_CONNECTION_STRING` in `.env` for the fast psycopg2 path.
 
 ```bash
 cd backend_update
-python upload_recent_slugs.py
+python upload_historical.py
 ```
 
 ---
@@ -234,9 +238,11 @@ python backend_update/extract_filters.py
 | `offerings_comments` | text | Offerings narrative |
 | `reporter_comment` | text | Reporter notes |
 | `commodity_comments` | text | Commodity-level notes |
-| `weight_lbs` | real | Not populated from CSV |
-| `weight_kgs` | real | Not populated from CSV |
-| `units` | real | Not populated from CSV |
+| `weight_lbs` | real | Net package weight, or null if unknown (see `PACKAGE_WEIGHTS.md`) |
+| `weight_kgs` | real | Same weight in kg |
+| `units` | real | Sellable items per package, if stated |
+| `price_per_lb` | real | `price_avg / weight_lbs` |
+| `price_per_unit` | real | `price_avg / units`, only when there is no weight |
 
 ---
 
@@ -266,7 +272,7 @@ python backend_update/extract_filters.py
 | File | Keys | Used By |
 |------|------|---------|
 | `backend_update/.env` | `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `USDA_API_KEY` | Pipeline scripts |
-| `phone_frontend/.env` | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_KEY` (anon), `EXPO_PUBLIC_CEREBRAS_API_KEY` | React Native app |
+| `phone_frontend/.env` | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_KEY` (anon) | React Native app |
 | `web_frontend/.env.local` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_KEY` (anon) | Next.js app |
 
 > The backend uses the **service role key** to write. Both frontends use the **anon key** to read.
@@ -296,5 +302,5 @@ python backend_update/extract_filters.py
 cd backend_update
 python get_recent_data.py --all    # Step 1 only: fetch CSVs
 python format_data.py              # Step 2 only: test formatting
-python overwrite_supabse.py        # Step 3 only: test Supabase connection
+python overwrite_supabase.py        # Step 3 only: test Supabase connection
 ```

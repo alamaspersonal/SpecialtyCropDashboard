@@ -30,10 +30,10 @@ export default function ComparisonContainer({ filters, organicOnly, selectedVari
         if (dateBounds.maxDate && !startA) {
             const maxD = new Date(dateBounds.maxDate);
             const bStart = new Date(maxD);
-            bStart.setDate(bStart.getDate() - 7);
+            bStart.setUTCDate(bStart.getUTCDate() - 7);
             
             const aStart = new Date(bStart);
-            aStart.setDate(aStart.getDate() - 7);
+            aStart.setUTCDate(aStart.getUTCDate() - 7);
             
             setStartA(aStart);
             setEndA(bStart);
@@ -51,7 +51,7 @@ export default function ComparisonContainer({ filters, organicOnly, selectedVari
             if (days !== 'custom' && dateBounds.maxDate) {
                 const maxD = new Date(dateBounds.maxDate);
                 const aStart = new Date(maxD);
-                aStart.setDate(aStart.getDate() - days);
+                aStart.setUTCDate(aStart.getUTCDate() - days);
                 setStartA(aStart);
                 setEndA(maxD);
             }
@@ -60,7 +60,7 @@ export default function ComparisonContainer({ filters, organicOnly, selectedVari
             if (days !== 'custom' && dateBounds.maxDate) {
                 const maxD = new Date(dateBounds.maxDate);
                 const bStart = new Date(maxD);
-                bStart.setDate(bStart.getDate() - days);
+                bStart.setUTCDate(bStart.getUTCDate() - days);
                 setStartB(bStart);
                 setEndB(maxD);
             }

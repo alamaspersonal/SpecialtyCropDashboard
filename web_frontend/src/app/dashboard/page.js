@@ -118,7 +118,7 @@ function DashboardContent() {
             } else if (bounds.maxDate) {
                 const endDate = new Date(bounds.maxDate);
                 const startDate = new Date(endDate);
-                startDate.setDate(startDate.getDate() - timeRange);
+                startDate.setUTCDate(startDate.getUTCDate() - timeRange);
 
                 fetchStart = startDate.toISOString().split('T')[0];
                 fetchEnd = endDate.toISOString().split('T')[0];
@@ -595,7 +595,7 @@ function DashboardContent() {
                                                     </h2>
                                                     {dateBounds.minDate && (
                                                         <p className="text-xs text-[var(--color-text-muted)] bg-[var(--color-surface-elevated)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] inline-flex items-center justify-center">
-                                                            Data: {new Date(dateBounds.minDate).toLocaleDateString()} — {new Date(dateBounds.maxDate).toLocaleDateString()}
+                                                            Data: {new Date(dateBounds.minDate).toLocaleDateString(undefined, { timeZone: 'UTC' })} — {new Date(dateBounds.maxDate).toLocaleDateString(undefined, { timeZone: 'UTC' })}
                                                             <span className="ml-1.5 font-semibold text-[var(--color-text-secondary)]">· {priceData.length} records</span>
                                                         </p>
                                                     )}
@@ -641,7 +641,7 @@ function DashboardContent() {
                                                     </h2>
                                                     {dateBounds.minDate && (
                                                         <p className="text-xs text-[var(--color-text-muted)] bg-[var(--color-surface-elevated)] px-3 py-1.5 rounded-lg border border-[var(--color-border)] inline-flex items-center justify-center">
-                                                            Data: {new Date(dateBounds.minDate).toLocaleDateString()} — {new Date(dateBounds.maxDate).toLocaleDateString()}
+                                                            Data: {new Date(dateBounds.minDate).toLocaleDateString(undefined, { timeZone: 'UTC' })} — {new Date(dateBounds.maxDate).toLocaleDateString(undefined, { timeZone: 'UTC' })}
                                                             <span className="ml-1.5 font-semibold text-[var(--color-text-secondary)]">· {priceData.length} records</span>
                                                         </p>
                                                     )}

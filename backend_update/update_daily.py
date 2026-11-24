@@ -21,7 +21,7 @@ load_dotenv()
 # Import local modules
 from get_recent_data import fetch_recent_data, REQUIRED_SLUG_IDS
 from format_data import load_and_format_all_data
-from overwrite_supabse import overwrite_supabase_data
+from overwrite_supabase import overwrite_supabase_data
 
 
 def main():

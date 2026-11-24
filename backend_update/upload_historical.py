@@ -201,7 +201,7 @@ def process_slug_pg(conn, full_csv: str, slug_id: str, table_cols: list[str]) ->
 # ── REST API fallback path ─────────────────────────────────────────────────────
 
 def process_slug_rest(full_csv: str, slug_id: str) -> int:
-    from overwrite_supabse import get_supabase_client, upload_dataframe
+    from overwrite_supabase import get_supabase_client, upload_dataframe
 
     client = get_supabase_client()
     total = 0
@@ -332,7 +332,7 @@ def main():
     # everything in 3-year chunks (each call stays well inside the timeout).
     if grand_total > 0:
         from datetime import date
-        from overwrite_supabse import get_supabase_client, refresh_monthly_rollup
+        from overwrite_supabase import get_supabase_client, refresh_monthly_rollup
 
         print(f"\n{'─' * 60}")
         client = get_supabase_client()

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Shield } from 'lucide-react';
 import PageTransition from '../../components/PageTransition/PageTransition';
 
-const LAST_UPDATED = 'June 3, 2025';
+const LAST_UPDATED = 'November 19, 2026';
 
 const sections = [
     {
@@ -29,10 +29,6 @@ We do not collect your email address, location, device identifiers, or any other
     {
         title: 'USDA Market Data',
         body: `Crop pricing data is sourced from the USDA Agricultural Marketing Service (AMS) public API and stored in our Supabase database. This data is entirely public and contains no personal information.`,
-    },
-    {
-        title: 'AI Market Insights (Cerebras)',
-        body: `When you request an AI-generated market summary, anonymized crop market notes from the USDA report are sent to the Cerebras AI inference API. No personal information (name, preferences, account data) is ever included in these requests. Cerebras's own privacy policy governs how they handle API request data.`,
     },
     {
         title: 'Cookies and Tracking',

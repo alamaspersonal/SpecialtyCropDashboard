@@ -10,7 +10,7 @@ One Supabase table drives the app:
 - **UnifiedCropPrice** — simplified schema with `price_avg` for charts and time-series analysis (also carries market tone comments and supply/demand notes)
 
 Plus one derived table:
-- **UnifiedCropPriceMonthly** — monthly price sums/counts per commodity × market type × variety × package × district × organic × price basis ($/lb, $/each, $/package). Backs the web chart's 1Y/2Y/All ranges and raw-export row counts. Rebuilt by `refresh_price_monthly()` (see `backend_update/sql/unified_crop_price_monthly.sql`), which `overwrite_supabse.refresh_monthly_rollup()` calls after every upload — any other change to UnifiedCropPrice rows must refresh it too.
+- **UnifiedCropPriceMonthly** — monthly price sums/counts per commodity × market type × variety × package × district × organic × price basis ($/lb, $/each, $/package). Backs the web chart's 1Y/2Y/All ranges, the phone chart's 1Y/2Y ranges, phone custom waterfall ranges too large for raw rows, and raw-export row counts. Rebuilt by `refresh_price_monthly()` (see `backend_update/sql/unified_crop_price_monthly.sql`), which `overwrite_supabase.refresh_monthly_rollup()` calls after every upload — any other change to UnifiedCropPrice rows must refresh it too.
 
 Three market types throughout: **Terminal**, **Shipping Point**, **Retail**.
 
@@ -34,7 +34,7 @@ pip install -r requirements.txt   # requests, pandas, python-dotenv, supabase
 python update_daily.py            # Full pipeline: fetch USDA -> format -> upload Supabase
 python get_recent_data.py         # Step 1 only: fetch CSVs from USDA API
 python format_data.py             # Step 2 only: test formatting logic
-python overwrite_supabse.py       # Step 3 only: test Supabase connection
+python overwrite_supabase.py      # Step 3 only: test Supabase connection
 python extract_filters.py        # Regenerate phone_frontend/src/constants/staticFilters.js
 ```
 
@@ -47,33 +47,23 @@ npm run build            # Production build
 npm run lint             # ESLint
 ```
 
-### Original Backend (FastAPI) — largely superseded by direct Supabase queries
-```bash
-cd backend
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
 ## Architecture
 
 ### phone_frontend (Primary Focus)
 
-**Stack**: Expo 54, React Native 0.81, React 19, TanStack React Query, Supabase JS, Victory Native (charts), Shopify React Native Skia.
+**Stack**: Expo 54, React Native 0.81, React 19, Supabase JS, Victory Native (charts), Shopify React Native Skia.
 
 **Navigation flow**: `Onboarding -> Home -> Filters -> Dashboard` (also `Account` from Home).
 
 **Data layer** (`src/services/`):
 - `supabase.js` — client init using `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_KEY`
-- `supabaseApi.js` — all Supabase queries (getFilters, getPrices, getStats, getUnifiedPrices, getTimeSeriesData, getPricesByDateRange, getDateRange). Queries the UnifiedCropPrice table directly. Implements pagination (1000 rows/page) with safety limits. `getTimeSeriesData` caps history at 2 years (phone app only — web_frontend allows full history).
-- `useQueries.js` — TanStack Query hooks wrapping supabaseApi functions. 5-minute stale time, 30-minute cache, offlineFirst mode.
-- `api.js` — re-exports everything from supabaseApi.js and useQueries.js. Legacy axios instance kept for backward compat but unused.
-- `cerebrasApi.js` — calls Cerebras AI (gemma-4-31b) to generate market insight summaries from shipping/terminal market notes.
+- `supabaseApi.js` — all Supabase queries (getFilters, getStats, getPricesByDateRange, countPricesByDateRange, getTimeSeriesWindow, getMonthlyPriceRollup, getDateRange). Raw UnifiedCropPrice queries page newest-first with a (report_date, id) cursor — OFFSET paging timed out past the anon role's 3s limit on large commodities — with row safety caps. `getMonthlyPriceRollup` reads UnifiedCropPriceMonthly.
+- `api.js` — re-exports the supabaseApi.js functions screens and hooks use; tests mock this module.
 - `favorites.js` / `userStorage.js` — AsyncStorage-based local persistence for watchlist and user prefs.
 
 **Custom hooks** (`src/hooks/`):
-- `useWaterfallData` — core data hook for DashboardScreen waterfall view. Fetches from UnifiedCropPrice via `getPricesByDateRange`, partitions by market type, implements cascading sub-filters (package/origin/district per market type), calculates stats. Each instance runs independently for dual-waterfall comparison.
-- `usePriceTimeSeries` — fetches history from `getTimeSeriesData` (capped at 2 years), aggregates to monthly averages per market type. Cascading sub-filters for package/origin. Time range presets (3M/6M/1Y/2Y).
+- `useWaterfallData` — core data hook for DashboardScreen waterfall view. Presets (Daily/7/30 days) use 90 days of raw rows ending on the commodity's latest report; a custom range over 20k raw rows uses the monthly rollup plus raw rows for its partial end months (no Origin filter then). Partitions by market type, cascading sub-filters (package/origin/district/variety per market type; package defaults to All), calculates stats. Prices are grouped by unit via `shared/priceEntries.js`: one $/lb average across weighed packages, $/each and $/package kept separate per package. Each instance runs independently for dual-waterfall comparison.
+- `usePriceTimeSeries` — 3M/6M from raw rows (`getTimeSeriesWindow`, daily points), 1Y/2Y from the monthly rollup (monthly points). One unit ($/lb, $/each, $/package) for all lines, chosen by a selector; in $/each and $/package each line shows a single package. Per-market sub-filters for variety/package/origin (origin only for 3M/6M).
 
 **Key components** (`src/components/`):
 - `PriceWaterfallMobile` — waterfall chart showing terminal/shipping/retail price bars
@@ -90,14 +80,16 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 **Pipeline** (`update_daily.py` orchestrates):
 1. `get_recent_data.py` — fetches last 60 days from USDA MARS API (`marsapi.ams.usda.gov/services/v1.2/reports`) for configured slug IDs. Flattens nested JSON sections into flat DataFrames. Saves CSVs to `APP_CROP_DATA/`.
-2. `format_data.py` — transforms raw CSV columns to the UnifiedCropPrice schema. Normalizes categories (Vegetables/Fruits/Nuts/Potatoes & Onions/Other), title-cases commodity/variety/package, normalizes organic to yes/no, calculates `price_avg` as mean of available price fields.
-3. `overwrite_supabse.py` — clears the UnifiedCropPrice table (batch delete by ID), then batch-inserts new data (500 rows/batch). Uses `SUPABASE_SECRET_KEY` (service role key, not anon key).
+2. `format_data.py` — transforms raw CSV columns to the UnifiedCropPrice schema. Normalizes categories (Vegetables/Fruits/Nuts/Potatoes & Onions/Other), title-cases commodity/variety/package, normalizes organic to yes/no, calculates `price_avg` as mean of available price fields, and derives package weight → `price_per_lb` / `price_per_unit`. Weights come only from the package name or the USDA 2023 container table in `package_units.json` — see `backend_update/PACKAGE_WEIGHTS.md` before touching weights.
+3. `overwrite_supabase.py` — clears the UnifiedCropPrice table (batch delete by ID), then batch-inserts new data (500 rows/batch). Uses `SUPABASE_SECRET_KEY` (service role key, not anon key).
 
 **USDA Slug IDs**: 2306, 2307, 2308, 2309, 2390, 2391, 3324 — each represents a different USDA market report.
 
 `extract_filters.py` — generates `phone_frontend/src/constants/staticFilters.js` from the formatted data. Run after data changes to keep offline filter options current. Also generates `CATEGORY_COMMODITIES` and `COMMODITY_TO_CATEGORY` lookup maps.
 
-`upload_recent_slugs.py` — alternative upload path that reads from sibling project `SpecialtyCropPrices/recent_slugs/`.
+`upload_historical.py` — full historical rebuild from the sibling project's `SpecialtyCropPrices/ReportsBySlugID/SlugIDFullFile/*-Full.csv` files (skips the last 60 days, which the daily pipeline owns).
+
+`update_cpi.py` — refreshes both frontends' `cpiData.js` from the BLS CPI-U series (monthly workflow).
 
 ### web_frontend
 
@@ -109,7 +101,7 @@ GitHub Actions workflow (`.github/workflows/daily_update.yml`) runs `backend_upd
 
 ## Environment Variables
 
-**phone_frontend/.env**: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_KEY` (anon key), `EXPO_PUBLIC_CEREBRAS_API_KEY`
+**phone_frontend/.env**: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_KEY` (anon key)
 
 **backend_update/.env**: `SUPABASE_URL`, `SUPABASE_SECRET_KEY` (service role), `USDA_API_KEY`
 
@@ -122,4 +114,4 @@ GitHub Actions workflow (`.github/workflows/daily_update.yml`) runs `backend_upd
 - Price data is partitioned by market_type (Terminal/Shipping/Retail) throughout the app — stats, filters, and charts all operate per-market-type
 - `useWaterfallData` can be instantiated multiple times for side-by-side comparison
 - The `priceBridge` engine (web_frontend only — see above) is intentionally framework-agnostic
-- The backend (FastAPI + SQLite) is the original architecture; the app has migrated to querying Supabase directly from the frontends
+- Both frontends query Supabase directly; there is no app server

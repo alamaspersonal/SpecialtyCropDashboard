@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getStats } from '../services/supabaseApi';
 import { useTheme } from '../context/ThemeContext';
+import { formatReportDate } from '../shared/dates';
 
 export default function WatchlistAccordionItem({ item, expanded, onToggle, onPressDashboard }) {
     const { colors } = useTheme();
@@ -34,7 +35,7 @@ export default function WatchlistAccordionItem({ item, expanded, onToggle, onPre
                     {stats?.market_note && (
                         <View style={[styles.marketNoteCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
                             <Text style={[styles.marketNoteLabel, { color: colors.textSecondary }]}>
-                                Latest Market Note from {stats?.date ? new Date(stats.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''}
+                                Latest Market Note from {stats?.date ? formatReportDate(stats.date, { month: 'long', day: 'numeric', year: 'numeric' }) : ''}
                             </Text>
                             <Text style={[styles.marketNoteText, { color: colors.text }]}>
                                 {stats.market_note}

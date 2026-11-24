@@ -187,30 +187,6 @@ def get_field(row, *field_names):
     return None
 
 
-def calculate_price_avg(df):
-    """
-    Calculate price_avg for a DataFrame.
-    
-    1. Calculate average for each price field (excluding nulls)
-    2. Average only the field averages that have data
-    
-    Returns: int or None
-    """
-    field_avgs = []
-    
-    for field in ['low_price', 'high_price', 'mostly_low_price', 'mostly_high_price', 'wtd_avg_price']:
-        if field in df.columns:
-            non_null = df[field].dropna()
-            if len(non_null) > 0:
-                field_avgs.append(non_null.mean())
-    
-    if not field_avgs:
-        return None
-    
-    # Average the field averages (divide by count of fields with data, not always 4)
-    return round(sum(field_avgs) / len(field_avgs), 2)
-
-
 # Columns consumed by the explicit field mappings below, plus internal/alias columns
 # that should never be passed through to UnifiedCropPrice as raw values.
 _CONSUMED_COLS = {

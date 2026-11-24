@@ -1,0 +1,46 @@
+name: Monthly CPI Update
+
+on:
+  schedule:
+    # 15th of each month at 15:00 UTC — BLS typically releases prior-month CPI by the 15th
+    - cron: "0 15 15 * *"
+  workflow_dispatch: # Allow manual runs for testing
+
+permissions:
+  contents: write
+
+jobs:
+  update-cpi:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch latest CPI data from BLS
+        run: python3 backend_update/update_cpi.py
+
+      - name: Commit and push if cpiData.js changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add phone_frontend/src/constants/cpiData.js web_frontend/src/constants/cpiData.js
+          if git diff --cached --quiet; then
+            echo "No new CPI data — nothing to commit."
+          else
+            MONTH=$(date -u +"%B %Y")
+            git commit -m "chore: update CPI-U data through $MONTH"
+            git push
+          fi

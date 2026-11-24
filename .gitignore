@@ -9,6 +9,7 @@ __pycache__/
 APP_CROP_DATA/
 specialty_crop_data/
 backend_update/APP_CROP_DATA/
+screenshots
 
 # Environment variables
 .env

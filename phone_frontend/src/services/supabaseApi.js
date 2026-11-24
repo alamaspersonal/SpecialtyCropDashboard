@@ -1,22 +1,55 @@
 /**
  * Supabase API Service
- * 
- * This module provides API functions that mirror the FastAPI backend endpoints,
- * but query Supabase directly. This allows the app to work without the Python backend.
  *
- * Table: UnifiedCropPrice
+ * All price reads: UnifiedCropPrice (raw rows) and UnifiedCropPriceMonthly (monthly rollup).
  */
 
 import { supabase } from './supabase';
 import {
     STATIC_FILTERS,
-    COMMODITIES_WITH_COMPLETE_DATA,
-    COMMODITIES_WITH_ORGANIC_DATA,
 } from '../constants/staticFilters';
+import { toDateKey, addDaysToKey } from '../shared/dates';
+
+const PAGE_SIZE = 1000; // PostgREST's max rows per request
+
+/**
+ * Fetch up to maxRows rows newest-first, paging with a (report_date, id)
+ * cursor. The query from buildQuery() must select `id` and `report_date`.
+ *
+ * OFFSET paging re-scans every earlier row on each page, so deep pages for
+ * large commodities (Apples: ~86k rows over 2 years) ran past the anon role's
+ * 3s statement timeout; sorting on report_date alone could also repeat or skip
+ * rows that share a date at a page boundary. Each cursor page is an index
+ * range scan of ~1000 rows.
+ */
+async function fetchNewestFirst(buildQuery, maxRows) {
+    const rows = [];
+    let cursor = null;
+    while (rows.length < maxRows) {
+        let query = buildQuery()
+            .order('report_date', { ascending: false })
+            .order('id', { ascending: false })
+            .limit(PAGE_SIZE);
+        if (cursor) {
+            // The lte is redundant with the or() but lets Postgres use it as an
+            // index bound instead of filtering every newer row.
+            query = query
+                .lte('report_date', cursor.date)
+                .or(`report_date.lt."${cursor.date}",and(report_date.eq."${cursor.date}",id.lt.${cursor.id})`);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        rows.push(...data);
+        if (data.length < PAGE_SIZE) break;
+        const last = data[data.length - 1];
+        cursor = { date: last.report_date, id: last.id };
+    }
+    return rows;
+}
 
 /**
  * Get distinct filter values for the filter UI.
- * Mirrors: GET /api/filters
  * 
  * When fetching options for a filter, we exclude that filter's current value
  * but keep parent filters applied. This ensures users see all available options
@@ -150,109 +183,6 @@ export const getFilters = async (currentFilters = {}) => {
 };
 
 /**
- * Get commodities that have data for all 3 market types (Shipping Point, Terminal, Retail).
- * Used to filter the commodity dropdown when "complete data only" toggle is enabled.
- * 
- * @returns {Set<string>} Set of commodity names with complete market data
- */
-export const getCommoditiesWithCompleteData = async () => {
-    // Precomputed offline by backend_update/extract_filters.py. Deriving this at
-    // runtime meant paginating through millions of UnifiedCropPrice rows, which
-    // hung the toggle; the static set makes it instant and works offline.
-    return new Set(COMMODITIES_WITH_COMPLETE_DATA);
-};
-
-/**
- * Get commodities that have organic data available.
- * Used to filter the commodity dropdown when "organic only" toggle is enabled.
- * 
- * @returns {Set<string>} Set of commodity names with organic data
- */
-export const getCommoditiesWithOrganicData = async () => {
-    // Precomputed offline by backend_update/extract_filters.py — see
-    // getCommoditiesWithCompleteData above.
-    return new Set(COMMODITIES_WITH_ORGANIC_DATA);
-};
-
-/**
- * Get crop prices with optional filters.
- * Mirrors: GET /api/prices
- * 
- * @param {Object} filters - Filter criteria
- * @param {number} limit - Maximum number of results
- * @param {number} days - Number of days to look back
- * @returns {Array} Array of price records
- */
-export const getPrices = async (filters = {}, limit = 100, days = null) => {
-    try {
-        
-        let query = supabase
-            .from('UnifiedCropPrice')
-            .select('*')
-            .order('report_date', { ascending: false })
-            .limit(limit);
-
-        // Apply filters
-        if (filters.commodity) {
-            query = query.eq('commodity', filters.commodity);
-        }
-        if (filters.variety) {
-            query = query.eq('variety', filters.variety);
-        }
-        if (filters.category) {
-            query = query.eq('category', filters.category);
-        }
-        if (filters.package) {
-            query = query.eq('package', filters.package);
-        }
-        if (filters.district) {
-            query = query.eq('district', filters.district);
-        }
-        if (filters.organic) {
-            query = query.eq('organic', filters.organic);
-        }
-
-        // Date filtering
-        if (days) {
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - days);
-            query = query.gte('report_date', cutoffDate.toISOString());
-        }
-
-        let { data, error } = await query;
-
-        // FALLBACK: If date filter returns no data, retry without date filter
-        // This handles cases where database has stale data
-        if (days && (!data || data.length === 0) && !error) {
-            // Rebuild query without date filter
-            let fallbackQuery = supabase
-                .from('UnifiedCropPrice')
-                .select('*')
-                .order('report_date', { ascending: false })
-                .limit(limit);
-            
-            // Re-apply commodity filters
-            if (filters.commodity) fallbackQuery = fallbackQuery.eq('commodity', filters.commodity);
-            if (filters.variety) fallbackQuery = fallbackQuery.eq('variety', filters.variety);
-            if (filters.category) fallbackQuery = fallbackQuery.eq('category', filters.category);
-            if (filters.package) fallbackQuery = fallbackQuery.eq('package', filters.package);
-            if (filters.district) fallbackQuery = fallbackQuery.eq('district', filters.district);
-            if (filters.organic) fallbackQuery = fallbackQuery.eq('organic', filters.organic);
-            
-            const fallbackResult = await fallbackQuery;
-            data = fallbackResult.data;
-            error = fallbackResult.error;
-        }
-
-        if (error) throw error;
-        return data || [];
-    } catch (error) {
-        console.error('Error fetching prices:', error);
-        throw error;
-    }
-};
-
-/**
  * Get the date range (oldest and newest report_date) for a given set of filters.
  * Uses two efficient single-row queries instead of scanning the full table.
  * 
@@ -313,47 +243,21 @@ export const getDateRange = async (filters = {}) => {
  */
 export const getPricesByDateRange = async (filters = {}, startDate, endDate) => {
     try {
-
-        let allData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
+        // Rows come back newest-first, so the 20k safety cap drops the oldest.
+        return await fetchNewestFirst(() => {
             let query = supabase
                 .from('UnifiedCropPrice')
                 .select('*')
                 .gte('report_date', startDate)
-                .lte('report_date', endDate)
-                .order('report_date', { ascending: false })
-                .range(page * pageSize, (page + 1) * pageSize - 1);
+                .lte('report_date', endDate);
 
             // Apply filters (only columns that exist on UnifiedCropPrice)
             if (filters.commodity) query = query.eq('commodity', filters.commodity);
             if (filters.variety) query = query.eq('variety', filters.variety);
             if (filters.district) query = query.eq('district', filters.district);
             if (filters.package) query = query.eq('package', filters.package);
-
-            const { data, error } = await query;
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-                allData = [...allData, ...data];
-                if (data.length < pageSize) {
-                    hasMore = false;
-                } else {
-                    page++;
-                }
-            } else {
-                hasMore = false;
-            }
-
-            if (allData.length > 20000) {
-                break;
-            }
-        }
-
-        return allData;
+            return query;
+        }, 20000);
     } catch (error) {
         console.error('Error fetching prices by date range:', error);
         throw error;
@@ -361,71 +265,30 @@ export const getPricesByDateRange = async (filters = {}, startDate, endDate) => 
 };
 
 /**
- * Get unified prices for charts and analysis.
- * Mirrors: GET /api/v2/prices
- * 
- * @param {string} commodity - Required commodity filter
- * @param {Object} options - Optional filters (variety, package, startDate, endDate)
- * @returns {Array} Array of unified price records
- */
-export const getUnifiedPrices = async (commodity, options = {}) => {
-    try {
-        let query = supabase
-            .from('UnifiedCropPrice')
-            .select('*')
-            .eq('commodity', commodity)
-            .order('report_date', { ascending: true })
-            .limit(2000);
-
-        if (options.variety) {
-            query = query.eq('variety', options.variety);
-        }
-        if (options.package) {
-            query = query.eq('package', options.package);
-        }
-        if (options.startDate) {
-            query = query.gte('report_date', options.startDate);
-        }
-        if (options.endDate) {
-            query = query.lte('report_date', options.endDate);
-        }
-
-        const { data, error } = await query;
-
-        if (error) throw error;
-        return data || [];
-    } catch (error) {
-        console.error('Error fetching unified prices:', error);
-        throw error;
-    }
-};
-
-/**
  * Get KPI statistics for a commodity.
- * Mirrors: GET /api/v2/stats
  * 
  * @param {string} commodity - Commodity to get stats for
  * @returns {Object} Statistics including terminal/shipping averages and spread
  */
 export const getStats = async (commodity) => {
     try {
-        // Calculate date ranges
-        const now = new Date();
-        const twoWeeksAgo = new Date();
-        twoWeeksAgo.setDate(now.getDate() - 14);
-        
-        // Fetch last 14 days of data for this commodity
-        const { data, error } = await supabase
+        // Fetch the most recent rows for this commodity, then keep the 14 days
+        // ending on its latest report. (Anchoring on the device's date returned
+        // nothing for any commodity that hadn't reported in the last 2 weeks.)
+        const { data: recent, error } = await supabase
             .from('UnifiedCropPrice')
             .select('*')
             .eq('commodity', commodity)
-            .gte('report_date', twoWeeksAgo.toISOString())
-            .order('report_date', { ascending: false });
+            .not('report_date', 'is', null)
+            .order('report_date', { ascending: false })
+            .limit(1000);
 
         if (error) throw error;
-        if (!data || data.length === 0) {
+        if (!recent || recent.length === 0) {
             return { error: 'No data found' };
         }
+        const windowStartKey = addDaysToKey(toDateKey(recent[0].report_date), -14);
+        const data = recent.filter(d => toDateKey(d.report_date) >= windowStartKey);
 
         // Get the most frequent package type (mode) to display appropriate units
         const packageCounts = {};
@@ -505,118 +368,95 @@ export const getStats = async (commodity) => {
 };
 
 /**
- * Get price summary aggregated by commodity and variety.
- * Mirrors: GET /api/price_summary
- * 
- * @param {Object} options - Filter options (commodity, date)
- * @returns {Array} Aggregated price summaries
+ * Raw price rows for the chart's short (daily) ranges: report dates from
+ * `startDate` (inclusive) through `beforeDate` (exclusive; omit for the
+ * latest). Only the columns the chart needs. Rows are fetched newest-first so
+ * the 50k safety cap trims the oldest, and returned oldest-first.
+ *
+ * @param {string} commodity
+ * @param {Object} filters - Optional { district }
+ * @param {string} startDate - 'YYYY-MM-DD'
+ * @param {string} [beforeDate] - 'YYYY-MM-DD'
  */
-export const getPriceSummary = async (options = {}) => {
+export const getTimeSeriesWindow = async (commodity, filters = {}, startDate, beforeDate = null) => {
     try {
-        let query = supabase
-            .from('UnifiedCropPrice')
-            .select('commodity, variety, price_avg, market_tone_comments');
-
-        if (options.commodity) {
-            query = query.eq('commodity', options.commodity);
-        }
-
-        const { data, error } = await query.limit(1000);
-
-        if (error) throw error;
-
-        // Group by commodity + variety and calculate averages
-        const groups = {};
-        data.forEach(row => {
-            const key = `${row.commodity}|${row.variety}`;
-            if (!groups[key]) {
-                groups[key] = {
-                    commodity: row.commodity,
-                    variety: row.variety,
-                    prices: [],
-                    marketTone: row.market_tone_comments,
-                };
-            }
-            if (row.price_avg != null) groups[key].prices.push(row.price_avg);
-        });
-
-        return Object.values(groups).map(g => ({
-            commodity: g.commodity,
-            variety: g.variety,
-            avg_price: g.prices.length > 0
-                ? Math.round((g.prices.reduce((a, b) => a + b, 0) / g.prices.length) * 100) / 100
-                : null,
-            price_count: g.prices.length,
-            market_tone: g.marketTone,
-        })).slice(0, 50);
+        const rows = await fetchNewestFirst(() => {
+            let query = supabase
+                .from('UnifiedCropPrice')
+                .select('id, report_date, market_type, price_avg, price_per_lb, price_per_unit, package, origin, variety, organic')
+                .eq('commodity', commodity)
+                .not('report_date', 'is', null)
+                .gte('report_date', startDate);
+            if (beforeDate) query = query.lt('report_date', beforeDate);
+            if (filters.district) query = query.eq('district', filters.district);
+            return query;
+        }, 50000);
+        return rows.reverse();
     } catch (error) {
-        console.error('Error fetching price summary:', error);
+        console.error('Error fetching time series window:', error);
         throw error;
     }
 };
 
 /**
- * Get full time-series price data for a commodity.
- * Fetches ALL rows from UnifiedCropPrice for the given commodity
- * (paginated), returning the fields needed for chart aggregation.
- *
- * Designed for the Price Over Time chart.
- *
- * @param {string} commodity - Required commodity name
- * @param {Object} filters - Optional { district, organic }
- * @returns {Array} Array of { report_date, market_type, price_avg, package, origin, variety, organic }
+ * Number of raw rows getPricesByDateRange would return (same filters), so a
+ * caller can switch to the monthly rollup before fetching a huge range.
  */
-export const getTimeSeriesData = async (commodity, filters = {}) => {
+export const countPricesByDateRange = async (filters = {}, startDate, endDate) => {
     try {
-
-        // Cap history at 2 years — the price graph never needs to reach further
-        // back than that, and bounding the query here keeps ascending-order
-        // pagination from exhausting the 50k-row safety cap on oldest rows
-        // before it reaches this year's data.
-        const twoYearsAgo = new Date();
-        twoYearsAgo.setDate(twoYearsAgo.getDate() - 730);
-        const twoYearsAgoISO = twoYearsAgo.toISOString().split('T')[0];
-
-        let allData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-            let query = supabase
-                .from('UnifiedCropPrice')
-                .select('report_date, market_type, price_avg, package, origin, variety, organic, weight_lbs, weight_kgs, units')
-                .eq('commodity', commodity)
-                .not('report_date', 'is', null)
-                .gte('report_date', twoYearsAgoISO)
-                .order('report_date', { ascending: true })
-                .range(page * pageSize, (page + 1) * pageSize - 1);
-
-            if (filters.district) query = query.eq('district', filters.district);
-
-            const { data, error } = await query;
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-                allData = [...allData, ...data];
-                if (data.length < pageSize) {
-                    hasMore = false;
-                } else {
-                    page++;
-                }
-            } else {
-                hasMore = false;
-            }
-
-            if (allData.length > 50000) {
-                break;
-            }
-        }
-
-        return allData;
+        let query = supabase
+            .from('UnifiedCropPrice')
+            .select('id', { count: 'exact', head: true })
+            .gte('report_date', startDate)
+            .lte('report_date', endDate);
+        if (filters.commodity) query = query.eq('commodity', filters.commodity);
+        if (filters.variety) query = query.eq('variety', filters.variety);
+        if (filters.district) query = query.eq('district', filters.district);
+        if (filters.package) query = query.eq('package', filters.package);
+        const { count, error } = await query;
+        if (error) throw error;
+        return count ?? 0;
     } catch (error) {
-        console.error('Error fetching time series data:', error);
+        console.error('Error counting prices by date range:', error);
         throw error;
     }
 };
 
+// Primary-key order of UnifiedCropPriceMonthly: deterministic paging, served
+// by the PK index.
+const MONTHLY_ORDER = ['month', 'market_type', 'variety', 'package', 'district', 'organic', 'price_basis'];
+
+/**
+ * Monthly rollup rows (UnifiedCropPriceMonthly) for a commodity: month in
+ * [fromMonth, toMonth), either bound optional. Used by the chart's 1Y/2Y
+ * ranges and by custom waterfall ranges too large for raw rows. A full
+ * commodity history is ~15k rows at most.
+ *
+ * @param {string} commodity
+ * @param {Object} filters - Optional { district }
+ * @param {string} [fromMonth] - 'YYYY-MM-01', inclusive
+ * @param {string} [toMonth] - 'YYYY-MM-01', exclusive
+ */
+export const getMonthlyPriceRollup = async (commodity, filters = {}, fromMonth = null, toMonth = null) => {
+    try {
+        const rows = [];
+        for (let from = 0; from < 50000; from += PAGE_SIZE) {
+            let query = supabase
+                .from('UnifiedCropPriceMonthly')
+                .select('month, market_type, variety, package, district, organic, price_basis, price_sum, price_count, row_count')
+                .eq('commodity', commodity);
+            if (filters.district) query = query.eq('district', filters.district);
+            if (fromMonth) query = query.gte('month', fromMonth);
+            if (toMonth) query = query.lt('month', toMonth);
+            for (const col of MONTHLY_ORDER) query = query.order(col, { ascending: true });
+            const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+            if (error) throw error;
+            if (data?.length) rows.push(...data);
+            if (!data || data.length < PAGE_SIZE) break;
+        }
+        return rows;
+    } catch (error) {
+        console.error('Error fetching monthly price rollup:', error);
+        throw error;
+    }
+};

@@ -1,15 +1,34 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { getTimeSeriesData, getPricesByDateRange } from '../services/api';
-import { adjustToCurrent } from '../shared/cpiAdjust';
+/**
+ * usePriceTimeSeries — price history for the phone price-over-time chart.
+ *
+ * Data loads per range, counting back from the commodity's latest report:
+ *   3M / 6M   raw rows, one point per day. Widening 3M → 6M only fetches the
+ *             missing older months.
+ *   1Y / 2Y   the monthly rollup (UnifiedCropPriceMonthly), one point per
+ *             month — a few thousand rows instead of up to ~86k raw rows, and
+ *             the same source the web chart uses. The rollup has no origin, so
+ *             the Origin filter only applies to 3M / 6M.
+ *
+ * Units are never mixed (see shared/priceEntries). All three lines plot one
+ * unit at a time — $/lb, $/each or $/package; the most common unless the user
+ * picks another. In $/lb, "All" packages average together. $/each and
+ * $/package prices can't be compared across packages, so in those units each
+ * line shows a single package: the user's pick, else its most-reported one.
+ */
 
-// ── Time range presets ──────────────────────────────────────────
-// getTimeSeriesData caps fetched history at 2 years, so 2Y is the max range.
-const RANGE_PRESETS = [
-    { key: '3M', label: '3M', days: 90 },
-    { key: '6M', label: '6M', days: 180 },
-    { key: '1Y', label: '1Y', days: 365 },
-    { key: '2Y', label: '2Y', days: 730 },
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { getDateRange, getTimeSeriesWindow, getMonthlyPriceRollup } from '../services/api';
+import { adjustToCurrent } from '../shared/cpiAdjust';
+import { addDaysToKey, toDateKey } from '../shared/dates';
+import { PRICE_UNITS, entryFromRow, entryFromRollup } from '../shared/priceEntries';
+
+export const RANGE_PRESETS = [
+    { key: '3M', label: '3M', days: 90, source: 'raw' },
+    { key: '6M', label: '6M', days: 180, source: 'raw' },
+    { key: '1Y', label: '1Y', days: 365, source: 'monthly' },
+    { key: '2Y', label: '2Y', days: 730, source: 'monthly' },
 ];
+const LONGEST_DAYS = 730;
 
 const MARKET_TYPES = ['retail', 'terminal', 'shipping'];
 const EMPTY_TYPE_STATE = { retail: '', terminal: '', shipping: '' };
@@ -20,310 +39,253 @@ function getUnique(arr, field) {
     return [...new Set(arr.map(d => d[field]).filter(Boolean))].sort();
 }
 
-const PACKAGE_WEIGHTS = {
-    '25 lb cartons': { weight_lbs: 25, units: null },
-    '50 lb cartons': { weight_lbs: 50, units: null },
-    '40 lb cartons': { weight_lbs: 40, units: null },
-    '30 lb cartons': { weight_lbs: 30, units: null },
-    'cartons': { weight_lbs: 25, units: null },
-    'bushel cartons': { weight_lbs: 30, units: null },
-    '1 1/9 bushel cartons': { weight_lbs: 30, units: null },
-    'flats 12 1-pint baskets': { weight_lbs: 12, units: null },
-    'flats 8 1-lb containers': { weight_lbs: 8, units: null },
-    'cartons 2 layer': { weight_lbs: 25, units: null },
-    '4 count mesh bags': { weight_lbs: null, units: 4 },
-    '5 count mesh bags': { weight_lbs: null, units: 5 },
-    '3 count mesh bags': { weight_lbs: null, units: 3 },
-    '3 count filmbag': { weight_lbs: null, units: 3 },
-    '6 ct trays filmwrapped': { weight_lbs: null, units: 6 },
-    'each': { weight_lbs: null, units: 1 },
-    'per each': { weight_lbs: null, units: 1 },
-    'per lb': { weight_lbs: 1, units: null },
-};
-
-function lookupWeight(row) {
-    if (!row) return null;
-    // Prefer the weight_lbs / weight_kgs / units columns computed by the backend
-    // pipeline (present on each row); fall back to the legacy map by package string.
-    if (typeof row === 'object') {
-        if (row.weight_lbs != null || row.weight_kgs != null || row.units != null) {
-            return {
-                weight_lbs: row.weight_lbs ?? null,
-                weight_kgs: row.weight_kgs ?? null,
-                units: row.units ?? null,
-            };
+// Package with the most priced observations (ties: alphabetical).
+function mostReportedPackage(entries) {
+    const counts = new Map();
+    for (const e of entries) counts.set(e.package, (counts.get(e.package) || 0) + e.count);
+    let best = '';
+    let bestCount = 0;
+    for (const [pkg, count] of counts) {
+        if (count > bestCount || (count === bestCount && pkg < best)) {
+            best = pkg;
+            bestCount = count;
         }
     }
-    const pkg = typeof row === 'string' ? row : row.package;
-    if (!pkg) return null;
-    const lower = pkg.toLowerCase().trim();
-    for (const [key, val] of Object.entries(PACKAGE_WEIGHTS)) {
-        if (lower === key || lower.includes(key)) return val;
-    }
-    const match = pkg.match(/(\d+)\s*(?:lb|lbs)/i);
-    if (match) return { weight_lbs: parseInt(match[1]), units: null };
-    return null;
+    return best;
 }
 
-function classifyMarketType(mt) {
-    if (!mt) return null;
-    const lower = mt.toLowerCase();
-    if (lower.includes('retail')) return 'retail';
-    if (lower.includes('terminal')) return 'terminal';
-    if (lower.includes('shipping')) return 'shipping';
-    return null;
-}
-
-/**
- * Aggregate rows into daily averages, normalizing each row to price/lb or
- * price/unit where the package weight is known.
- */
-function aggregateDailyAverages(rows) {
-    const byDay = {};
-    let totalLb = 0, totalUnit = 0;
-
-    for (const row of rows) {
-        if (!row.report_date || row.price_avg == null) continue;
-        const dayKey = row.report_date.split('T')[0];
-        if (!byDay[dayKey]) {
-            byDay[dayKey] = { sum: 0, count: 0, packages: {}, origins: {}, varieties: {} };
+/** One point per date (day or month): the average price in the chosen unit. */
+function aggregatePoints(entries) {
+    const byDate = new Map();
+    for (const e of entries) {
+        let p = byDate.get(e.date);
+        if (!p) {
+            p = { sum: 0, count: 0, packages: {}, origins: {}, varieties: {} };
+            byDate.set(e.date, p);
         }
-
-        const weight = lookupWeight(row);
-        let normalizedPrice;
-        if (weight?.weight_lbs > 0) {
-            normalizedPrice = row.price_avg / weight.weight_lbs;
-            totalLb++;
-        } else if (weight?.units > 0) {
-            normalizedPrice = row.price_avg / weight.units;
-            totalUnit++;
-        } else {
-            normalizedPrice = row.price_avg;
-        }
-
-        byDay[dayKey].sum += normalizedPrice;
-        byDay[dayKey].count += 1;
-
-        const pkg = row.package || 'Unknown';
-        const org = row.origin || 'Unknown';
-        const v   = row.variety || 'Unknown';
-        byDay[dayKey].packages[pkg] = (byDay[dayKey].packages[pkg] || 0) + 1;
-        byDay[dayKey].origins[org]  = (byDay[dayKey].origins[org]  || 0) + 1;
-        byDay[dayKey].varieties[v]  = (byDay[dayKey].varieties[v]  || 0) + 1;
+        p.sum += e.sum;
+        p.count += e.count;
+        p.packages[e.package || 'Unknown'] = (p.packages[e.package || 'Unknown'] || 0) + e.count;
+        p.varieties[e.variety || 'Unknown'] = (p.varieties[e.variety || 'Unknown'] || 0) + e.count;
+        if (e.origin !== null) p.origins[e.origin || 'Unknown'] = (p.origins[e.origin || 'Unknown'] || 0) + e.count;
     }
-
-    let seriesUnit = 'package';
-    if (totalLb > 0 && totalLb >= totalUnit) seriesUnit = 'lb';
-    else if (totalUnit > 0) seriesUnit = 'unit';
-
-    const points = Object.entries(byDay)
-        .map(([date, data]) => ({
+    return [...byDate.entries()]
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([date, p]) => ({
             date,
-            price: Math.round((data.sum / data.count) * 100) / 100,
-            pointCount: data.count,
-            packagesCount: data.packages,
-            originsCount: data.origins,
-            varietiesCount: data.varieties,
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-    return { points, seriesUnit };
+            price: Math.round((p.sum / p.count) * 100) / 100,
+            pointCount: p.count,
+            packagesCount: p.packages,
+            originsCount: p.origins,
+            varietiesCount: p.varieties,
+        }));
 }
 
 // ── Hook ────────────────────────────────────────────────────────
 
 export default function usePriceTimeSeries(filters, options = {}) {
-    const {
-        organicOnly = false,
-        selectedVariety = '',
-        cpiAdjusted = false,
-    } = options;
+    const { organicOnly = false, cpiAdjusted = false } = options;
+    const commodity = filters.commodity || '';
+    const district = filters.district || '';
 
-    const [rawData, setRawData] = useState([]);
-    const [filterData, setFilterData] = useState([]);
+    const [bounds, setBounds] = useState({ minKey: null, maxKey: null, resolved: false });
+    // Raw entries from fromKey through the latest report, and monthly entries
+    // for the last 2 years — each fetched the first time a range needs it.
+    const [rawData, setRawData] = useState({ fromKey: null, entries: [] });
+    const [monthlyData, setMonthlyData] = useState({ loaded: false, entries: [] });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Per-market-type sub-filter state
+    // Per-market-type sub-filter state ('' = All / automatic)
     const [selectedVarieties, setSelectedVarieties] = useState(EMPTY_TYPE_STATE);
     const [selectedPackages,  setSelectedPackages]  = useState(EMPTY_TYPE_STATE);
     const [selectedOrigins,   setSelectedOrigins]   = useState(EMPTY_TYPE_STATE);
-
+    const [selectedUnit, setSelectedUnit] = useState(''); // '' = most common
     const [selectedRange, setSelectedRange] = useState('3M');
 
-    // ── Fetch ──
+    // ── Date bounds; everything resets on commodity/district change ──
     useEffect(() => {
-        const fetchData = async () => {
-            if (!filters.commodity) { setRawData([]); setLoading(false); return; }
-            setLoading(true);
-            setError(null);
-            try {
-                const data = await getTimeSeriesData(filters.commodity, { district: filters.district || '' });
-                setRawData(data);
-            } catch (err) {
-                console.error('usePriceTimeSeries: fetch error', err);
-                setError(err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [filters.commodity, filters.district]);
-
-    // ── Fetch recent data for filter options (same source as waterfall) ──
-    useEffect(() => {
-        const fetchFilterData = async () => {
-            if (!filters.commodity) { setFilterData([]); return; }
-            try {
-                const end = new Date();
-                const start = new Date();
-                start.setDate(start.getDate() - 90);
-                const data = await getPricesByDateRange(
-                    { commodity: filters.commodity, district: filters.district || '' },
-                    start.toISOString().split('T')[0],
-                    end.toISOString().split('T')[0],
-                );
-                setFilterData(data);
-            } catch (err) {
-                console.error('usePriceTimeSeries: error fetching filter data', err);
-            }
-        };
-        fetchFilterData();
-    }, [filters.commodity, filters.district]);
-
-    // Reset per-type filters on commodity change
-    useEffect(() => {
+        let cancelled = false;
+        setBounds({ minKey: null, maxKey: null, resolved: false });
+        setRawData({ fromKey: null, entries: [] });
+        setMonthlyData({ loaded: false, entries: [] });
         setSelectedVarieties(EMPTY_TYPE_STATE);
         setSelectedPackages(EMPTY_TYPE_STATE);
         setSelectedOrigins(EMPTY_TYPE_STATE);
-    }, [filters.commodity]);
+        setSelectedUnit('');
+        setError(null);
+        if (!commodity) { setLoading(false); return undefined; }
+        setLoading(true);
+        getDateRange({ commodity, district })
+            .then(b => {
+                if (cancelled) return;
+                setBounds({ minKey: toDateKey(b.minDate), maxKey: toDateKey(b.maxDate), resolved: true });
+            })
+            .catch(err => {
+                if (cancelled) return;
+                console.error('usePriceTimeSeries: bounds error', err);
+                setError(err);
+                setLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [commodity, district]);
 
-    // ── Date span ──
+    // ── Date span & ranges ──
     const dateSpan = useMemo(() => {
-        if (!rawData.length) return { min: null, max: null, spanDays: 0 };
-        const dates = rawData.map(d => d.report_date?.split('T')[0]).filter(Boolean).sort();
-        if (!dates.length) return { min: null, max: null, spanDays: 0 };
-        const min = dates[0], max = dates[dates.length - 1];
-        const spanDays = Math.round((new Date(max) - new Date(min)) / (1000 * 60 * 60 * 24));
-        return { min, max, spanDays };
-    }, [rawData]);
+        if (!bounds.minKey || !bounds.maxKey) return { min: null, max: null, spanDays: 0 };
+        const spanDays = Math.round((new Date(bounds.maxKey) - new Date(bounds.minKey)) / 86400000);
+        return { min: bounds.minKey, max: bounds.maxKey, spanDays };
+    }, [bounds.minKey, bounds.maxKey]);
 
-    // ── Base data: organic + variety + time range applied, then partitioned ──
-    const timePartitioned = useMemo(() => {
-        const result = { retail: [], terminal: [], shipping: [] };
-        if (!rawData.length) return result;
+    // Only offer ranges the data can fill (always keep 3M).
+    const availableRanges = useMemo(() => {
+        const ranges = RANGE_PRESETS.filter(p => p.days <= dateSpan.spanDays);
+        return ranges.length ? ranges : [RANGE_PRESETS[0]];
+    }, [dateSpan.spanDays]);
 
-        let filtered = rawData;
-        if (organicOnly) filtered = filtered.filter(d => d.organic === 'yes');
+    const preset = availableRanges.find(p => p.key === selectedRange) || availableRanges[0];
+    const cutoff = bounds.maxKey ? addDaysToKey(bounds.maxKey, -preset.days) : null;
+    const isMonthly = preset.source === 'monthly';
 
-        if (dateSpan.max) {
-            const preset = RANGE_PRESETS.find(p => p.key === selectedRange);
-            if (preset) {
-                const cutoff = new Date(dateSpan.max);
-                cutoff.setDate(cutoff.getDate() - preset.days);
-                const cutoffStr = cutoff.toISOString().split('T')[0];
-                filtered = filtered.filter(d => {
-                    const dk = d.report_date?.split('T')[0];
-                    return dk && dk >= cutoffStr;
-                });
+    // ── Fetch whatever the active range is missing ──
+    useEffect(() => {
+        if (!bounds.resolved) return undefined;
+        if (!bounds.maxKey) { setLoading(false); return undefined; }
+        const haveRaw = rawData.fromKey && rawData.fromKey <= cutoff;
+        if ((isMonthly && monthlyData.loaded) || (!isMonthly && haveRaw)) {
+            setLoading(false);
+            return undefined;
+        }
+        let cancelled = false;
+        const load = async () => {
+            setLoading(true);
+            try {
+                if (isMonthly) {
+                    const fromMonth = `${addDaysToKey(bounds.maxKey, -LONGEST_DAYS).slice(0, 7)}-01`;
+                    const rows = await getMonthlyPriceRollup(commodity, { district }, fromMonth);
+                    if (cancelled) return;
+                    setMonthlyData({ loaded: true, entries: rows.map(r => entryFromRollup(r)).filter(Boolean) });
+                } else {
+                    // Only the days older than what's already loaded
+                    const rows = await getTimeSeriesWindow(commodity, { district }, cutoff, rawData.fromKey);
+                    if (cancelled) return;
+                    const older = rows.map(entryFromRow).filter(Boolean);
+                    setRawData(prev => ({ fromKey: cutoff, entries: [...older, ...prev.entries] }));
+                }
+                setError(null);
+            } catch (err) {
+                if (cancelled) return;
+                console.error('usePriceTimeSeries: fetch error', err);
+                setError(err);
+            } finally {
+                if (!cancelled) setLoading(false);
             }
-        }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, [commodity, district, bounds.resolved, bounds.maxKey, isMonthly, cutoff, rawData.fromKey, monthlyData.loaded]);
 
-        for (const row of filtered) {
-            const type = classifyMarketType(row.market_type);
-            if (type) result[type].push(row);
+    // ── Entries in the selected range, per market (organic applied) ──
+    const byMarket = useMemo(() => {
+        const out = { retail: [], terminal: [], shipping: [] };
+        if (!cutoff) return out;
+        // Months count only if they start after the cutoff, so a 1Y range is
+        // 12 whole months (the latest one may be partial).
+        const source = isMonthly
+            ? monthlyData.entries.filter(e => e.date > cutoff)
+            : rawData.entries.filter(e => e.date >= cutoff);
+        for (const e of source) {
+            if (organicOnly && e.organic !== 'yes') continue;
+            out[e.market].push(e);
         }
-        return result;
-    }, [rawData, organicOnly, selectedRange, dateSpan.max]);
+        return out;
+    }, [isMonthly, monthlyData.entries, rawData.entries, cutoff, organicOnly]);
 
-    // ── Partition recent data for filter options ──
-    const filterPartitioned = useMemo(() => {
-        const result = { retail: [], terminal: [], shipping: [] };
-        let data = filterData;
-        if (organicOnly) data = data.filter(d => d.organic === 'yes');
-        for (const row of data) {
-            const type = classifyMarketType(row.market_type);
-            if (type) result[type].push(row);
+    // Origins only exist on raw rows; a user's origin pick is kept for when
+    // they return to 3M / 6M.
+    const origins = isMonthly ? EMPTY_TYPE_STATE : selectedOrigins;
+
+    // Entries matching each market's variety + origin picks (not package)
+    const matchingByMarket = useMemo(() => {
+        const out = {};
+        for (const m of MARKET_TYPES) {
+            out[m] = byMarket[m].filter(e =>
+                (!selectedVarieties[m] || e.variety === selectedVarieties[m]) &&
+                (!origins[m] || e.origin === origins[m]));
         }
-        return result;
-    }, [filterData, organicOnly]);
+        return out;
+    }, [byMarket, selectedVarieties, origins]);
+
+    // ── Unit: the user's pick if it has data, else the most common ──
+    const unitTally = useMemo(() => {
+        const tally = { lb: 0, unit: 0, pkg: 0 };
+        for (const m of MARKET_TYPES) {
+            for (const e of matchingByMarket[m]) if (e.count && e.basis in tally) tally[e.basis] += e.count;
+        }
+        return tally;
+    }, [matchingByMarket]);
+    const unitOptions = PRICE_UNITS.filter(u => unitTally[u.key] > 0);
+    const unit = unitTally[selectedUnit] > 0
+        ? selectedUnit
+        : (unitOptions.slice().sort((a, b) => unitTally[b.key] - unitTally[a.key])[0]?.key || 'lb');
+
+    // ── Package per market: "All" only in $/lb; otherwise one package ──
+    const effectivePackages = useMemo(() => {
+        const out = {};
+        for (const m of MARKET_TYPES) {
+            const inUnit = matchingByMarket[m].filter(e => e.basis === unit && e.count);
+            const pick = selectedPackages[m];
+            if (pick && inUnit.some(e => e.package === pick)) out[m] = pick;
+            else out[m] = unit === 'lb' ? '' : mostReportedPackage(inUnit);
+        }
+        return out;
+    }, [matchingByMarket, unit, selectedPackages]);
 
     // ── Per-type filter options (cascading within each market type) ──
     const filterOptions = useMemo(() => {
         const opts = {};
-        for (const type of MARKET_TYPES) {
-            const typeData = filterPartitioned[type];
-            const pkg  = selectedPackages[type];
-            const org  = selectedOrigins[type];
-            const vrty = selectedVarieties[type];
+        for (const m of MARKET_TYPES) {
+            const typeData = byMarket[m];
+            const pkg  = effectivePackages[m];
+            const org  = origins[m];
+            const vrty = selectedVarieties[m];
+            const inUnit = typeData.filter(d => d.basis === unit && d.count);
 
-            // For each dimension, filter by the OTHER two selections to determine
+            // For each dimension, filter by the OTHER selections to determine
             // which values would still yield data (used to grey out unavailable options)
-            const forVarieties = typeData.filter(d =>
-                (!pkg  || d.package === pkg) &&
-                (!org  || d.origin  === org)
-            );
-            const forPackages = typeData.filter(d =>
-                (!vrty || d.variety === vrty) &&
-                (!org  || d.origin  === org)
-            );
-            const forOrigins = typeData.filter(d =>
-                (!vrty || d.variety === vrty) &&
-                (!pkg  || d.package === pkg)
-            );
+            const forVarieties = typeData.filter(d => (!pkg || d.package === pkg) && (!org || d.origin === org));
+            const forPackages = inUnit.filter(d => (!vrty || d.variety === vrty) && (!org || d.origin === org));
+            const forOrigins = typeData.filter(d => (!vrty || d.variety === vrty) && (!pkg || d.package === pkg));
 
-            opts[type] = {
+            opts[m] = {
                 varieties: getUnique(typeData, 'variety'),
-                packages:  getUnique(typeData, 'package'),
-                origins:   getUnique(typeData, 'origin'),
+                packages:  getUnique(inUnit, 'package'),
+                origins:   isMonthly ? [] : getUnique(typeData, 'origin'),
                 varietiesWithData: new Set(getUnique(forVarieties, 'variety')),
                 packagesWithData:  new Set(getUnique(forPackages,  'package')),
                 originsWithData:   new Set(getUnique(forOrigins,   'origin')),
+                // $/each and $/package prices differ per package, so those
+                // units always show one package rather than "All".
+                allowAllPackages: unit === 'lb',
             };
         }
         return opts;
-    }, [filterPartitioned, selectedVarieties, selectedPackages, selectedOrigins]);
+    }, [byMarket, effectivePackages, origins, selectedVarieties, unit, isMonthly]);
 
-    // ── Available range presets ──
-    const availableRanges = useMemo(() =>
-        RANGE_PRESETS.filter(p => dateSpan.spanDays >= p.days),
-    [dateSpan.spanDays]);
-
-    useEffect(() => {
-        const keys = availableRanges.map(r => r.key);
-        if (!keys.includes(selectedRange)) setSelectedRange(keys[0] || '3M');
-    }, [availableRanges]); // intentionally omit selectedRange — only reset when available ranges change
-
-    // ── Series: apply per-type package/origin filters after partitioning ──
+    // ── Series ──
+    const cpiActive = cpiAdjusted && isMonthly;
     const series = useMemo(() => {
-        const longRange = selectedRange === '1Y' || selectedRange === '2Y';
-        const shouldApplyCpi = cpiAdjusted && longRange;
-
-        const applyCpi = (points) => shouldApplyCpi
-            ? points.map(p => ({ ...p, price: adjustToCurrent(p.price, p.date) }))
-            : points;
-
-        const filterType = (rows, type) => rows
-            .filter(d => !selectedVarieties[type] || d.variety === selectedVarieties[type])
-            .filter(d => !selectedPackages[type]  || d.package === selectedPackages[type])
-            .filter(d => !selectedOrigins[type]   || d.origin  === selectedOrigins[type]);
-
-        const retailResult   = aggregateDailyAverages(filterType(timePartitioned.retail,   'retail'));
-        const terminalResult = aggregateDailyAverages(filterType(timePartitioned.terminal, 'terminal'));
-        const shippingResult = aggregateDailyAverages(filterType(timePartitioned.shipping, 'shipping'));
-
-        return {
-            retail:   applyCpi(retailResult.points),
-            terminal: applyCpi(terminalResult.points),
-            shipping: applyCpi(shippingResult.points),
-            _cpiActive: shouldApplyCpi,
-            _units: {
-                retail:   retailResult.seriesUnit,
-                terminal: terminalResult.seriesUnit,
-                shipping: shippingResult.seriesUnit,
-            },
-        };
-    }, [timePartitioned, selectedVarieties, selectedPackages, selectedOrigins, selectedRange, cpiAdjusted]);
+        const out = {};
+        for (const m of MARKET_TYPES) {
+            const pkg = effectivePackages[m];
+            const points = aggregatePoints(matchingByMarket[m].filter(e =>
+                e.basis === unit && e.count && (!pkg || e.package === pkg)));
+            out[m] = cpiActive
+                ? points.map(p => ({ ...p, price: adjustToCurrent(p.price, p.date) }))
+                : points;
+        }
+        return out;
+    }, [matchingByMarket, effectivePackages, unit, cpiActive]);
 
     // ── Actions ──
     const actions = {
@@ -334,22 +296,25 @@ export default function usePriceTimeSeries(filters, options = {}) {
         setSelectedOrigin: useCallback(
             (type, val) => setSelectedOrigins(prev => ({ ...prev, [type]: val })), []),
         setSelectedRange: useCallback((val) => setSelectedRange(val), []),
+        setSelectedUnit: useCallback((val) => setSelectedUnit(val), []),
     };
 
     return {
         series,
-        cpiActive: series._cpiActive ?? false,
-        seriesUnit: series._units ?? { retail: 'package', terminal: 'package', shipping: 'package' },
+        cpiActive,
+        unit,              // 'lb' | 'unit' | 'pkg' — shared by all three lines
+        unitOptions,       // PRICE_UNITS entries that have data
+        granularity: isMonthly ? 'month' : 'day',
         loading,
         error,
-        rawData,
 
         filterOptions,     // { retail, terminal, shipping } each with varieties/packages/origins/…WithData
         selectedVarieties,
-        selectedPackages,
-        selectedOrigins,
+        selectedPackages,  // the user's picks ('' = none)
+        effectivePackages, // what each line actually shows
+        selectedOrigins: origins,
 
-        selectedRange,
+        selectedRange: preset.key,
         availableRanges,
         dateSpan,
 

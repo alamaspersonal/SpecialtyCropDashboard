@@ -101,11 +101,13 @@ function PriceBlock({
         return `$${Number(val).toFixed(2)}`;
     };
 
+    // Report dates are calendar days stored at midnight UTC — format in UTC, or
+    // US time zones show the previous day.
     const formatDate = (dateStr) => {
         if (!dateStr) return '';
         const d = new Date(dateStr);
         if (isNaN(d)) return dateStr;
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
     };
 
     const priceValue = avgPrice != null && !isNaN(avgPrice) ? Number(avgPrice) : null;

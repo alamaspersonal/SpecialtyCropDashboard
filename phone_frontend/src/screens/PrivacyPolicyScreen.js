@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 
-const LAST_UPDATED = 'June 3, 2025';
+const LAST_UPDATED = 'October 30, 2026';
 
 const sections = [
     {
@@ -22,10 +22,6 @@ const sections = [
     {
         title: 'USDA Market Data',
         body: 'Crop pricing data is sourced from the USDA Agricultural Marketing Service (AMS) public API and stored in our Supabase database. This data is entirely public and contains no personal information.',
-    },
-    {
-        title: 'AI Market Insights (Cerebras)',
-        body: 'When you request an AI-generated market summary, anonymized crop market notes from the USDA report are sent to the Cerebras AI inference API. No personal information is ever included in these requests.',
     },
     {
         title: 'Analytics and Tracking',

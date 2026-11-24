@@ -88,16 +88,3 @@ export const setOnboardingComplete = async () => {
         return false;
     }
 };
-
-/**
- * Clear all user data (for testing/logout)
- */
-export const clearUserData = async () => {
-    try {
-        await AsyncStorage.multiRemove([KEYS.USER_NAME, KEYS.ONBOARDING_COMPLETE, KEYS.PROFILE_IMAGE]);
-        return true;
-    } catch (e) {
-        console.error('Error clearing user data:', e);
-        return false;
-    }
-};

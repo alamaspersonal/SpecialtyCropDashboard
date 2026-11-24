@@ -27,6 +27,7 @@ import { useFont } from '@shopify/react-native-skia';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import usePriceTimeSeries from '../hooks/usePriceTimeSeries';
+import { unitInfo } from '../shared/priceEntries';
 import ExpandableBottomSheet from './ExpandableBottomSheet';
 import { ScrollView as GestureHandlerScrollView } from 'react-native-gesture-handler'; // Optional if needed, but we can stick to react-native's ScrollView
 
@@ -81,7 +82,7 @@ function splitByGap(pts, data) {
  * using the real plot bounds from CartesianChart's onChartBoundsChange.
  * Shows nothing when the visible range contains no year boundaries (e.g. 3M view).
  */
-function XAxisYearRow({ chartData, plotLeft, plotRight }) {
+function XAxisYearRow({ chartData, plotLeft, plotRight, color }) {
     if (!chartData.length || plotRight <= plotLeft) return null;
 
     const minTs = chartData[0].timestamp;
@@ -114,7 +115,7 @@ function XAxisYearRow({ chartData, plotLeft, plotRight }) {
                         width: 40,
                         textAlign: 'center',
                         fontSize: 11,
-                        color: '#94a3b8',
+                        color,
                         fontWeight: '600',
                     }}
                 >
@@ -213,6 +214,10 @@ function FilterChipRow({ options, selectedValue, onSelect, label, colors, enable
 // ── Main Component ──────────────────────────────────────────────
 export default function PriceOverTimeChart({ filters, organicOnly }) {
     const { colors, isDark } = useTheme();
+    // The plot follows the app theme: navy in dark mode, white in light mode.
+    const chartTheme = isDark
+        ? { bg: '#0f172a', label: '#94a3b8', grid: '#334155', border: 'transparent', badge: 'rgba(15,23,42,0.85)' }
+        : { bg: colors.surface, label: colors.textSecondary, grid: colors.border, border: colors.border, badge: 'rgba(255,255,255,0.9)' };
     const robotoFont = useFont(require('../../assets/fonts/Roboto-Regular.ttf'), 11);
 
     // ── Hook: data + filters + time range ──
@@ -223,27 +228,20 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
         filterOptions,
         selectedVarieties,
         selectedPackages,
+        effectivePackages,
         selectedOrigins,
         selectedRange,
         availableRanges,
         dateSpan,
         actions,
         cpiActive,
-        seriesUnit,
+        unit,
+        unitOptions,
+        granularity,
     } = usePriceTimeSeries(filters, { organicOnly, cpiAdjusted: true });
 
-    // Dominant unit across all visible series (for chart-wide label)
-    const dominantUnit = useMemo(() => {
-        const counts = { lb: 0, unit: 0, package: 0 };
-        for (const key of ['retail', 'terminal', 'shipping']) {
-            if (series[key].length > 0) counts[seriesUnit[key]]++;
-        }
-        if (counts.lb >= counts.unit && counts.lb > 0) return 'lb';
-        if (counts.unit > 0) return 'unit';
-        return 'package';
-    }, [series, seriesUnit]);
-
-    const unitLabel = dominantUnit === 'lb' ? '/lb' : dominantUnit === 'unit' ? '/unit' : '/pkg';
+    // All three lines share one unit, so one label covers the chart.
+    const unitLabel = unitInfo(unit).suffix;
 
     // ── Filter modal state ──
     const [showFiltersModal, setShowFiltersModal] = useState(false);
@@ -362,15 +360,16 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
         const pctChange = firstPrice > 0 ? (netChange / firstPrice) * 100 : 0;
         
         const isPositive = netChange >= 0;
-        const color = isPositive ? '#22c55e' : '#ef4444'; // Green or Red
-        const sign = isPositive ? '+' : '';
+        const color = isPositive ? colors.priceGreen : colors.priceRed;
+        // Explicit minus too — color alone doesn't convey direction.
+        const sign = isPositive ? '+' : '−';
 
         return {
             net: `${sign}$${Math.abs(netChange).toFixed(2)}`,
             pct: `${sign}${Math.abs(pctChange).toFixed(1)}%`,
             color: color,
         };
-    }, [chartData, seriesVisibility, series]);
+    }, [chartData, seriesVisibility, series, colors]);
 
     // ── Dynamic x-axis tick count based on selected range ──
     const xTickCount = useMemo(() => {
@@ -386,12 +385,15 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
         return 10;
     }, [selectedRange, dateSpan.spanDays]);
 
-    // ── Format day label for display (YYYY-MM-DD → 'Mar 15, 2024') ──
+    // ── Format a point's date for display: 'Mar 15, 2024', or 'Mar 2024'
+    // for monthly points (1Y / 2Y) ──
     const formatMonthLabel = (dateStr) => {
         if (dateStr == null) return '';
         const d = new Date(dateStr + 'T00:00:00Z');
         if (isNaN(d.getTime())) return String(dateStr);
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+        return granularity === 'month'
+            ? d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+            : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     };
 
     // ── X-axis label formatter (receives numeric timestamp from Victory Native) ──
@@ -530,7 +532,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                             </Text>
                         ) : dateSpan.min && dateSpan.max ? (
                             <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
-                                {new Date(dateSpan.min).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} — {new Date(dateSpan.max).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                                {new Date(dateSpan.min).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })} — {new Date(dateSpan.max).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })}
                             </Text>
                         ) : null}
                     </View>
@@ -559,14 +561,38 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                 ))}
             </View>
 
-            <Text style={{ fontSize: 10, color: colors.textMuted, textAlign: 'center', marginBottom: 6, opacity: 0.8 }}>
-                {`Price${unitLabel}`}{cpiActive ? ' · Inflation-adjusted' : ''}
+            {/* Unit selector — lines never mix $/lb, $/each and $/package */}
+            {unitOptions.length > 1 && (
+                <View style={[styles.rangeRow, { backgroundColor: isDark ? colors.background : '#f1f5f9' }]}>
+                    {unitOptions.map(u => (
+                        <TouchableOpacity
+                            key={u.key}
+                            style={[styles.unitBtn, unit === u.key && { backgroundColor: colors.accent }]}
+                            onPress={() => actions.setSelectedUnit(u.key)}
+                        >
+                            <Text style={[
+                                styles.unitBtnText,
+                                { color: colors.textSecondary },
+                                unit === u.key && { color: '#0f172a', fontWeight: '700' },
+                            ]}>
+                                {u.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            )}
+
+            <Text style={{ fontSize: 10, color: colors.textSecondary, textAlign: 'center', marginBottom: 6 }}>
+                {`Price${unitLabel}`}
+                {granularity === 'month' ? ' · Monthly averages' : ''}
+                {cpiActive ? ' · Inflation-adjusted' : ''}
+                {unit !== 'lb' ? ' · One package per line' : ''}
             </Text>
 
             {/* Chart with touch overlay for tooltip */}
             {activeYKeys.length > 0 ? (
                 <View
-                    style={[styles.chartWrapper, { backgroundColor: '#0f172a', borderRadius: 16 }]}
+                    style={[styles.chartWrapper, { backgroundColor: chartTheme.bg, borderColor: chartTheme.border, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16 }]}
                     onLayout={(e) => {
                         const w = e.nativeEvent.layout.width;
                         chartLayoutRef.current = { x: e.nativeEvent.layout.x, width: w };
@@ -583,8 +609,8 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                             formatXLabel: () => '',
                             formatYLabel: (v) => `$${Number(v).toFixed(2)}`,
                             tickCount: { x: xTickCount, y: 5 },
-                            labelColor: '#94a3b8',
-                            lineColor: '#334155',
+                            labelColor: chartTheme.label,
+                            lineColor: chartTheme.grid,
                         }}
                         domainPadding={{ top: 20, bottom: 0, left: 15, right: 15 }}
                     >
@@ -665,9 +691,9 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                                                 paddingHorizontal: 5,
                                                 paddingVertical: 2,
                                                 borderRadius: 4,
-                                                backgroundColor: 'rgba(15,23,42,0.85)',
+                                                backgroundColor: chartTheme.badge,
                                             }}>
-                                                <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600' }}>
+                                                <Text style={{ fontSize: 10, color: chartTheme.label, fontWeight: '600' }}>
                                                     {monthLabel}
                                                 </Text>
                                             </View>
@@ -684,7 +710,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                                                     position: 'absolute', left: p.x + 3, top: p.y - 4.5,
                                                     width: 9, height: 9, borderRadius: 4.5,
                                                     backgroundColor: SERIES_CONFIG[key].color,
-                                                    borderWidth: 2, borderColor: colors.surfaceElevated
+                                                    borderWidth: 2, borderColor: chartTheme.bg
                                                 }} />
                                             );
                                         })}
@@ -752,6 +778,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                     chartData={chartData}
                     plotLeft={8 + plotBounds.left}
                     plotRight={8 + plotBounds.right}
+                    color={colors.textSecondary}
                 />
             )}
 
@@ -838,7 +865,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                         {activePicker ? (
                             /* Picker view — list of selectable options */
                             <FlatList
-                                data={['', ...activePicker.options]}
+                                data={activePicker.allowAll === false ? activePicker.options : ['', ...activePicker.options]}
                                 keyExtractor={item => item || '__all__'}
                                 renderItem={({ item }) => {
                                     const isSelected = item === activePicker.current || (!item && !activePicker.current);
@@ -901,11 +928,11 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                                     const hasOrg = typeOpts.origins?.length > 0;
                                     if (!hasVar && !hasPkg && !hasOrg) return null;
 
-                                    const makeRow = (label, current, options, enabledOptions, onSelect) => (
+                                    const makeRow = (label, current, options, enabledOptions, onSelect, allowAll = true) => (
                                         <TouchableOpacity
                                             key={label}
                                             style={[styles.filterOptionRow, { borderBottomColor: colors.border }]}
-                                            onPress={() => setActivePicker({ label: `${config.label} · ${label}`, options, current, enabledOptions, onSelect })}
+                                            onPress={() => setActivePicker({ label: `${config.label} · ${label}`, options, current, enabledOptions, onSelect, allowAll })}
                                         >
                                             <Text style={[styles.filterOptionLabel, { color: colors.textSecondary }]}>{label}</Text>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -924,7 +951,7 @@ export default function PriceOverTimeChart({ filters, organicOnly }) {
                                                 <Text style={[styles.filterSeriesTitle, { color: config.color }]}>{config.label}</Text>
                                             </View>
                                             {hasVar && makeRow('Variety', selectedVarieties[key], typeOpts.varieties, typeOpts.varietiesWithData, (val) => actions.setSelectedVariety(key, val))}
-                                            {hasPkg && makeRow('Package', selectedPackages[key], typeOpts.packages, typeOpts.packagesWithData, (val) => actions.setSelectedPackage(key, val))}
+                                            {hasPkg && makeRow('Package', effectivePackages[key], typeOpts.packages, typeOpts.packagesWithData, (val) => actions.setSelectedPackage(key, val), typeOpts.allowAllPackages)}
                                             {hasOrg && makeRow('Origin',  selectedOrigins[key],  typeOpts.origins,  typeOpts.originsWithData,  (val) => actions.setSelectedOrigin(key, val))}
                                         </View>
                                     );
@@ -1026,6 +1053,15 @@ const styles = StyleSheet.create({
     },
     rangeBtnText: {
         fontSize: 13,
+        fontWeight: '600',
+    },
+    unitBtn: {
+        paddingVertical: 5,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+    },
+    unitBtnText: {
+        fontSize: 12,
         fontWeight: '600',
     },
 

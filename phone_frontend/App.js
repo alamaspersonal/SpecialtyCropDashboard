@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { hasCompletedOnboarding } from './src/services/userStorage';
@@ -17,19 +16,6 @@ import AccountScreen from './src/screens/AccountScreen';
 import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
 
 const Stack = createNativeStackNavigator();
-
-// Configure React Query client with offline-friendly defaults
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 30 * 60 * 1000, // 30 minutes (formerly cacheTime)
-      retry: 2,
-      refetchOnWindowFocus: false,
-      networkMode: 'offlineFirst', // Use cached data when offline
-    },
-  },
-});
 
 // Custom navigation themes
 const CustomLightTheme = {
@@ -94,11 +80,9 @@ function AppNavigator() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <AppNavigator />
-        </ThemeProvider>
-      </QueryClientProvider>
+      <ThemeProvider>
+        <AppNavigator />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

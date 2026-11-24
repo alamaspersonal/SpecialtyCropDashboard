@@ -8,7 +8,6 @@
 const KEYS = {
     USER_NAME: '@user_name',
     ONBOARDING_COMPLETE: '@onboarding_complete',
-    PROFILE_IMAGE: '@profile_image',
     THEME_PREFERENCE: '@theme_preference',
 };
 
@@ -33,29 +32,9 @@ function setItem(key, value) {
     }
 }
 
-function removeItem(key) {
-    try {
-        if (typeof window === 'undefined') return false;
-        localStorage.removeItem(key);
-        return true;
-    } catch (e) {
-        console.error(`Error removing ${key}:`, e);
-        return false;
-    }
-}
-
 // --- User Name ---
 export const getUserName = () => getItem(KEYS.USER_NAME);
 export const setUserName = (name) => setItem(KEYS.USER_NAME, name);
-
-// --- Profile Image ---
-export const getProfileImage = () => getItem(KEYS.PROFILE_IMAGE);
-export const setProfileImage = (uri) => {
-    if (uri) {
-        return setItem(KEYS.PROFILE_IMAGE, uri);
-    }
-    return removeItem(KEYS.PROFILE_IMAGE);
-};
 
 // --- Onboarding ---
 export const hasCompletedOnboarding = () => getItem(KEYS.ONBOARDING_COMPLETE) === 'true';

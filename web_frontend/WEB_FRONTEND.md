@@ -1,6 +1,6 @@
 # Web Frontend — Architecture & Developer Guide
 
-Next.js 16 app that mirrors the phone frontend's feature set in a browser. Reads from Supabase directly, uses Tailwind v4 for styling, Recharts for charts, and proxies AI market-insight calls server-side.
+Next.js 16 app that mirrors the phone frontend's feature set in a browser. Reads from Supabase directly, uses Tailwind v4 for styling and Recharts for charts.
 
 ---
 
@@ -10,7 +10,7 @@ Next.js 16 app that mirrors the phone frontend's feature set in a browser. Reads
 |---|---|---|
 | Framework | Next.js (App Router, Turbopack) | 16.1.6 |
 | UI runtime | React | 19.2.3 |
-| Data fetching | TanStack React Query | 5.90 |
+| Data fetching | TanStack React Query (price-over-time chart) | 5.90 |
 | Database | Supabase JS SDK | 2.98 |
 | Charts | Recharts | 3.8 |
 | Animation | Framer Motion | 12.35 |
@@ -23,7 +23,7 @@ Next.js 16 app that mirrors the phone frontend's feature set in a browser. Reads
 
 ```
 src/
-├── app/                     # Next.js App Router pages + API routes
+├── app/                     # Next.js App Router pages
 │   ├── layout.js            # Root HTML shell, fonts, metadata
 │   ├── page.js              # Home: search + watchlist
 │   ├── globals.css          # Tailwind v4 @theme tokens + base styles
@@ -32,12 +32,12 @@ src/
 │   ├── filters/page.js      # Cascading filter selection wizard
 │   ├── dashboard/page.js    # Core analytics view
 │   ├── account/page.js      # Profile, dark mode, data clear
-│   └── api/insights/route.js # Server-side Cerebras AI proxy
+│   └── privacy-policy/page.js
 ├── components/              # All UI components (see below)
 ├── context/ThemeContext.js  # Dark/light mode via data-theme attribute
 ├── hooks/usePriceBridge.js  # Period A vs B comparison hook
 ├── hooks/usePriceTimeSeries.js # Price-over-time data (raw windows / monthly rollup)
-├── services/                # Data access + external APIs
+├── services/                # Supabase queries + localStorage
 ├── shared/priceBridge.js    # Platform-agnostic price decomposition engine
 ├── utils/exportUtils.js     # CSV generation + browser download
 └── constants/staticFilters.js  # Hard-coded category↔commodity maps
@@ -76,7 +76,7 @@ All navigation state is URL-encoded. `/dashboard` reads commodity, category, var
 
 - Cascading select: **Category → Commodity → Variety → District**.
 - Category change clears Commodity; Commodity change clears Variety.
-- "Complete Data Only" and "Organic Only" toggles filter commodities using `getCommoditiesWithCompleteData()` / `getCommoditiesWithOrganicData()`.
+- "Complete Data Only" and "Organic Only" toggles filter commodities using the precomputed `COMMODITIES_WITH_COMPLETE_DATA` / `COMMODITIES_WITH_ORGANIC_DATA` lists in `staticFilters.js`.
 - "Apply Filters" pushes to `/dashboard` with all selected params.
 
 ### `/dashboard` (`dashboard/page.js`)
@@ -93,14 +93,6 @@ All navigation state is URL-encoded. `/dashboard` reads commodity, category, var
 - Inline name editing (save/cancel without page reload).
 - Dark mode toggle syncs to `ThemeContext` + localStorage.
 - "Clear All Data" calls `userStorage.clearUserData()` + `favorites` clear.
-
-### `/api/insights` (`route.js`)
-
-- Server-only POST endpoint — the `CEREBRAS_API_KEY` never reaches the browser.
-- Accepts `{ commodity, shippingData, terminalData, dateInfo, filterContext }`.
-- Builds a structured prompt with Shipping Point and Terminal Market sections.
-- Calls Cerebras (`gemma-4-31b`, max 400 tokens, temp 0.5).
-- Returns `{ insight: "..." }` or a graceful fallback string.
 
 ---
 
@@ -119,17 +111,6 @@ Three `PriceBlock` sub-components side-by-side (Terminal | Shipping Point | Reta
 - Date range and report count
 - Sub-filter dropdowns: **Package**, **Origin**, **District** (populated from data)
 - Horizontal summary bar comparing the three market averages at the bottom
-
-### `PriceBridge/PriceBridge.js`
-Recharts `BarChart` that renders the waterfall decomposition from `priceBridge.js`:
-- Period A base (blue anchor bar)
-- Price Level Effect (green/red floating bar)
-- Package Mix Effect
-- Origin Mix Effect
-- Residual / Other
-- Period B total (blue anchor bar)
-
-Each bar has a custom tooltip. Positive deltas are green, negative are red.
 
 ### `ComparisonContainer/ComparisonContainer.js`
 Houses the compare-mode UI:
@@ -179,9 +160,6 @@ All database access. Key functions:
 | `getFilters(filters)` | Returns distinct options for commodity/variety/package/district; uses CATEGORY_COMMODITIES for fast client-side category filtering |
 | `getPricesByDateRange(filters, start, end)` | Paginates UnifiedCropPrice in 1000-row pages up to a 20k-row safety cap |
 | `getDateRange(filters)` | Two single-row queries (min + max `report_date`) for the picker bounds |
-| `getStats(filters, cutoff)` | Computes current-week vs prior-week averages and % delta per market type |
-| `getCommoditiesWithCompleteData()` | Queries `commodity_metadata` for `has_complete_data = true` |
-| `getCommoditiesWithOrganicData()` | Queries `commodity_metadata` for `has_organic_data = true` |
 | `getTimeSeriesBounds(commodity, filters)` | First and last `report_date` for the chart's range buttons |
 | `getTimeSeriesWindow(commodity, filters, start)` | Raw rows from `start` on (3M/6M); first page returns the count, the rest load in parallel |
 | `getMonthlyPriceRollup(commodity, filters)` | All `UnifiedCropPriceMonthly` rows for a commodity (1Y/2Y/All, export row counts) |
@@ -189,22 +167,11 @@ All database access. Key functions:
 
 All paginating functions use a `while (true)` loop fetching 1000 rows at a time until Supabase returns fewer than 1000 (end of data) or the safety cap is hit.
 
-### `useQueries.js`
-Thin React Query wrappers around supabaseApi functions. All hooks share:
-- `staleTime: 5 minutes`
-- `gcTime: 30 minutes`
-- `retry: 2`
-- `refetchOnWindowFocus: false`
-- `networkMode: 'offlineFirst'`
-
 ### `favorites.js`
 localStorage CRUD for the watchlist. Key: `@market_intel_favorites`. Stores an array of filter objects `{ commodity, category, variety, ... }`.
 
 ### `userStorage.js`
 localStorage CRUD for user profile. Keys: `USER_NAME`, `ONBOARDING_COMPLETE`, `THEME_PREFERENCE`. All wrapped in try/catch. `clearUserData()` removes all keys atomically.
-
-### `cerebrasApi.js`
-Client-side wrapper that POSTs to `/api/insights`. Returns the AI-generated insight string or a fallback error message. Never touches the API key directly.
 
 ---
 
@@ -212,7 +179,7 @@ Client-side wrapper that POSTs to `/api/insights`. Returns the AI-generated insi
 
 ### `shared/priceBridge.js`
 
-Zero-dependency price decomposition engine (shared with `phone_frontend`). Given two arrays of rows (Period A and Period B from `UnifiedCropPrice`):
+Zero-dependency price decomposition engine (web only; the phone app has no compare view). Given two arrays of rows (Period A and Period B from `UnifiedCropPrice`):
 
 1. **`buildSegmentMap(rows)`** — groups rows by `(package, origin)` pair, computes weighted average price for each segment.
 2. **`buildDimensionMap(rows, field)`** — groups by a single field (`package` or `origin`), computes share weights.
@@ -280,15 +247,13 @@ dashboard/page.js reads params → calls getPricesByDateRange()
         ↓
 supabaseApi.js paginates UnifiedCropPrice table
         ↓
-React Query caches result (5min stale, 30min gc)
-        ↓
 PriceWaterfall renders 3 market-type price blocks
         ↓ (optional)
 ComparisonContainer calls usePriceBridge
         ↓
 priceBridge.js decomposes delta into Price Level + Mix effects
         ↓
-PriceBridge chart renders waterfall bars
+ComparisonContainer renders summary chips + Period A vs B bar chart
 ```
 
 ---
@@ -299,9 +264,6 @@ PriceBridge chart renders waterfall bars
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Client + Server | `supabase.js` |
 | `NEXT_PUBLIC_SUPABASE_KEY` | Client + Server | `supabase.js` (anon/public key) |
-| `CEREBRAS_API_KEY` | **Server only** | `app/api/insights/route.js` |
-
-The Cerebras key must NOT have a `NEXT_PUBLIC_` prefix — it would be bundled into client JS if it did.
 
 ---
 
@@ -315,7 +277,7 @@ npm run build      # Production build
 npm run lint       # ESLint
 ```
 
-The app expects a `.env.local` in `web_frontend/` with the three variables above. Copy `.env.local.example` if available, or ask the project owner for credentials.
+The app expects a `.env.local` in `web_frontend/` with the two variables above. Copy `.env.local.example` if available, or ask the project owner for credentials.
 
 ---
 

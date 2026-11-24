@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { formatReportDate } from '../shared/dates';
+import { unitInfo } from '../shared/priceEntries';
 
 const DropdownSelector = ({ label, options, selectedValue, onValueChange, isCardDark }) => {
     const { colors, isDark } = useTheme();
@@ -83,11 +85,27 @@ const DropdownSelector = ({ label, options, selectedValue, onValueChange, isCard
     );
 };
 
+// Change vs the prior period in the same unit, or null when there is nothing
+// to compare (no prior price, or no change to the cent).
+function priceChange(avg, priorAvg, isCardDark) {
+    if (avg == null || priorAvg == null || !(priorAvg > 0)) return null;
+    if (avg.toFixed(2) === priorAvg.toFixed(2)) return null;
+    const isUp = avg > priorAvg;
+    return {
+        arrow: isUp ? '▲' : '▼',
+        percent: ((Math.abs(avg - priorAvg) / priorAvg) * 100).toFixed(0),
+        color: isUp ? (isCardDark ? '#065f46' : '#a7f3d0') : (isCardDark ? '#991b1b' : '#fecaca'),
+    };
+}
+
+// Packages priced per each / per package listed under the headline price
+// before collapsing into "+N more".
+const MAX_OTHER_PRICES = 5;
+
 const PriceBlock = ({
     label,
-    avgPrice,
-    priorAvgPrice,
     bg,
+    market,
     packageOptions,
     selectedPackage,
     onPackageChange,
@@ -100,83 +118,60 @@ const PriceBlock = ({
     varietyOptions,
     selectedVariety,
     onVarietyChange,
-    weightLbs,
-    units,
-    dateRange,
-    priorDateRange,
     timeRange,
-    reportCount,
     cpiAdjusted,
 }) => {
     const isCardDark = bg === '#facc15' || bg === '#fdba74';
     const textColor = isCardDark ? 'black' : 'white';
     const subTextColor = isCardDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.8)';
+    const dividerColor = isCardDark ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.2)';
 
-    // Check if we have valid price data
-    const priceValue = parseFloat(avgPrice) || 0;
-    const hasData = priceValue > 0;
+    // groups[0] is the headline: the $/lb average across every package with a
+    // known weight, or — when nothing is sold by weight — the most-reported
+    // package. The rest are packages priced per each / per package, which
+    // can't be averaged with other sizes, so each is listed on its own.
+    const groups = market?.groups || [];
+    const [headline, ...others] = groups;
+    const dateRange = market?.dateRange;
+    const priorDateRange = market?.priorDateRange;
+    const reportCount = market?.reportCount;
+    const showChange = timeRange !== 'custom';
 
-    // Calculate price per lb or per unit
-    const pricePerUnit = (() => {
-        if (!hasData) return null;
-        if (weightLbs && weightLbs > 0) {
-            return { value: (priceValue / weightLbs).toFixed(2), unit: 'lb' };
-        }
-        if (units && units > 0) {
-            return { value: (priceValue / units).toFixed(2), unit: 'unit' };
-        }
-        return null;
-    })();
-
-    // Format date for display
-    const formatDate = (dateStr) => {
-        if (!dateStr) return '';
-        const d = new Date(dateStr);
-        if (isNaN(d)) return dateStr;
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    };
+    // Format date for display (in UTC — report dates are midnight-UTC days).
+    // An edge from monthly data is only known to the month ("Oct 2026").
+    const formatDate = (dateStr, isMonth = false) => (isMonth
+        ? formatReportDate(dateStr, { month: 'short', year: 'numeric' })
+        : formatReportDate(dateStr));
 
     const dateLabel = (() => {
         if (!dateRange) return null;
-        if (dateRange.start === dateRange.end) {
-            return formatDate(dateRange.start);
-        }
-        return `${formatDate(dateRange.start)} – ${formatDate(dateRange.end)}`;
+        const start = formatDate(dateRange.start, dateRange.startIsMonth);
+        const end = formatDate(dateRange.end, dateRange.endIsMonth);
+        return start === end ? start : `${start} – ${end}`;
     })();
 
-    const priorPriceValue = parseFloat(priorAvgPrice) || 0;
-    const diffNode = (() => {
-        if (timeRange === 'custom' || !pricePerUnit || priorPriceValue <= 0) return null;
-        let priorUnitValue = 0;
-        if (weightLbs && weightLbs > 0) {
-            priorUnitValue = priorPriceValue / weightLbs;
-        } else if (units && units > 0) {
-            priorUnitValue = priorPriceValue / units;
+    // Which packages the headline covers
+    const headlineCaption = (() => {
+        if (!headline) return null;
+        if (headline.basis === 'lb' && headline.packages.length > 1) {
+            return `Avg of ${headline.packages.length} packages`;
         }
-        if (priorUnitValue <= 0) return null;
-        
-        const diff = parseFloat(pricePerUnit.value) - priorUnitValue;
-        if (diff === 0 || isNaN(diff)) return null;
-        
-        const diffAbs = Math.abs(diff);
-        const percent = ((diffAbs / priorUnitValue) * 100).toFixed(0);
-        const isPos = diff > 0;
-        const color = isPos ? (isCardDark ? '#065f46' : '#a7f3d0') : (isCardDark ? '#991b1b' : '#fecaca');
-        const arrow = isPos ? '▲' : '▼';
-        
+        return selectedPackage ? null : headline.packages[0] || null;
+    })();
+
+    const headlineChange = (() => {
+        const change = showChange && headline ? priceChange(headline.avg, headline.priorAvg, isCardDark) : null;
+        if (!change) return null;
         const isPeriod = timeRange === '7day' || timeRange === '30day';
         const dateStr = (() => {
-            if (!priorDateRange || !priorDateRange.end) return null;
+            if (!priorDateRange || !priorDateRange.end) return '';
             if (isPeriod && priorDateRange.start && priorDateRange.start !== priorDateRange.end) {
                 return ` on ${formatDate(priorDateRange.start)} to ${formatDate(priorDateRange.end)}`;
             }
             return ` on ${formatDate(priorDateRange.end)}`;
         })();
-
         const observationWord = isPeriod ? 'observations' : 'observation';
-        const dateText = dateStr || '';
-        
-        return { text: `${arrow} ${percent}% from last ${observationWord}${dateText}`, color };
+        return { text: `${change.arrow} ${change.percent}% from last ${observationWord}${dateStr}`, color: change.color };
     })();
 
     return (
@@ -193,14 +188,19 @@ const PriceBlock = ({
 
                 {/* Price Display */}
                 <View style={styles.priceContainer}>
-                    {hasData ? (
+                    {headline ? (
                         <>
                             <Text style={[styles.priceSubLabel, { color: subTextColor }]}>
-                                {pricePerUnit ? `Price / ${pricePerUnit.unit}` : 'Avg Price'}
+                                {unitInfo(headline.basis).title}
                             </Text>
                             <Text style={[styles.blockPrice, { color: textColor }]}>
-                                ${pricePerUnit ? pricePerUnit.value : avgPrice}
+                                ${headline.avg.toFixed(2)}
                             </Text>
+                            {headlineCaption && (
+                                <Text style={[styles.priceCaption, { color: subTextColor }]} numberOfLines={2}>
+                                    {headlineCaption}
+                                </Text>
+                            )}
                             {cpiAdjusted && (
                                 <Text style={{ fontSize: 9, color: subTextColor, textAlign: 'center', marginTop: 2, opacity: 0.75 }}>
                                     Adjusted for inflation
@@ -213,17 +213,47 @@ const PriceBlock = ({
                 </View>
 
                 {/* Timeline Differential Ticker */}
-                {diffNode && (
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: diffNode.color, marginBottom: 4, textAlign: 'center' }}>
-                        {diffNode.text}
+                {headlineChange && (
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: headlineChange.color, marginBottom: 4, textAlign: 'center' }}>
+                        {headlineChange.text}
                     </Text>
                 )}
 
-                {/* Price per package (former main price) */}
-                {pricePerUnit && hasData && (
+                {/* Package price, for a single package priced by weight */}
+                {headline?.basis === 'lb' && headline.packages.length === 1 && headline.packageAvg != null && (
                     <Text style={[styles.pricePerUnit, { color: subTextColor }]}>
-                        ${avgPrice} per package
+                        ${headline.packageAvg.toFixed(2)} per package
                     </Text>
+                )}
+
+                {/* Packages priced per each / per package, kept separate */}
+                {others.length > 0 && (
+                    <View style={[styles.otherPrices, { borderTopColor: dividerColor }]}>
+                        <Text style={[styles.otherPricesTitle, { color: subTextColor }]}>
+                            {headline.basis === 'lb' ? 'Not sold by weight' : 'Other packages'}
+                        </Text>
+                        {others.slice(0, MAX_OTHER_PRICES).map(g => {
+                            const change = showChange ? priceChange(g.avg, g.priorAvg, isCardDark) : null;
+                            return (
+                                <View key={g.key} style={styles.otherPriceRow}>
+                                    <Text style={[styles.otherPriceLabel, { color: subTextColor }]} numberOfLines={2}>
+                                        {g.packages[0] || 'Package not listed'}
+                                    </Text>
+                                    <Text style={[styles.otherPriceValue, { color: textColor }]}>
+                                        ${g.avg.toFixed(2)}{unitInfo(g.basis).suffix}
+                                        {change && (
+                                            <Text style={{ color: change.color }}>{` ${change.arrow}${change.percent}%`}</Text>
+                                        )}
+                                    </Text>
+                                </View>
+                            );
+                        })}
+                        {others.length > MAX_OTHER_PRICES && (
+                            <Text style={[styles.otherPricesMore, { color: subTextColor }]}>
+                                +{others.length - MAX_OTHER_PRICES} more · pick a package to see it
+                            </Text>
+                        )}
+                    </View>
                 )}
 
                 {/* Date Range & Report Count */}
@@ -289,94 +319,41 @@ const PriceBlock = ({
     );
 };
 
-export default function PriceWaterfallMobile({ stats, packageData, actions, weightData, originData, districtData, varietyData, dateRanges, reportCounts, cpiAdjusted }) {
-    if (!stats) return null;
+const BLOCKS = [
+    { type: 'retail', label: 'National Retail', bg: '#d946ef' },
+    { type: 'terminal', label: 'Terminal Market', bg: '#0ea5e9' },
+    { type: 'shipping', label: 'Shipping Point', bg: '#fdba74' },
+];
 
-    // Helper to safely format numbers
-    const formatPrice = (val) => (val ?? 0).toFixed(2);
+export default function PriceWaterfallMobile({ stats, packageData, actions, originData, districtData, varietyData, cpiAdjusted }) {
+    if (!stats) return null;
 
     return (
         <View style={styles.container}>
             <View style={styles.timelineLine} />
 
-            <PriceBlock
-                label="National Retail"
-                avgPrice={formatPrice(stats.retail_avg)}
-                priorAvgPrice={stats.prior_retail_avg}
-                bg="#d946ef"
-                packageOptions={packageData?.retail}
-                selectedPackage={actions?.selectedPackages?.retail}
-                onPackageChange={(v) => actions?.setPackage('retail', v)}
-                originOptions={originData?.retail}
-                selectedOrigin={actions?.selectedOrigins?.retail}
-                onOriginChange={(v) => actions?.setOrigin('retail', v)}
-                districtOptions={districtData?.retail}
-                selectedDistrict={actions?.selectedDistricts?.retail}
-                onDistrictChange={(v) => actions?.setDistrict('retail', v)}
-                varietyOptions={varietyData?.retail}
-                selectedVariety={actions?.selectedVarieties?.retail}
-                onVarietyChange={(v) => actions?.setVariety('retail', v)}
-                weightLbs={weightData?.retail?.weight_lbs}
-                units={weightData?.retail?.units}
-                dateRange={dateRanges?.retail}
-                priorDateRange={stats?.priorDateRanges?.retail}
-                timeRange={stats?.timeRange}
-                reportCount={reportCounts?.retail}
-                cpiAdjusted={cpiAdjusted}
-            />
-
-            <PriceBlock
-                label="Terminal Market"
-                avgPrice={formatPrice(stats.terminal_avg)}
-                priorAvgPrice={stats.prior_terminal_avg}
-                bg="#0ea5e9"
-                packageOptions={packageData?.terminal}
-                selectedPackage={actions?.selectedPackages?.terminal}
-                onPackageChange={(v) => actions?.setPackage('terminal', v)}
-                originOptions={originData?.terminal}
-                selectedOrigin={actions?.selectedOrigins?.terminal}
-                onOriginChange={(v) => actions?.setOrigin('terminal', v)}
-                districtOptions={districtData?.terminal}
-                selectedDistrict={actions?.selectedDistricts?.terminal}
-                onDistrictChange={(v) => actions?.setDistrict('terminal', v)}
-                varietyOptions={varietyData?.terminal}
-                selectedVariety={actions?.selectedVarieties?.terminal}
-                onVarietyChange={(v) => actions?.setVariety('terminal', v)}
-                weightLbs={weightData?.terminal?.weight_lbs}
-                units={weightData?.terminal?.units}
-                dateRange={dateRanges?.terminal}
-                priorDateRange={stats?.priorDateRanges?.terminal}
-                timeRange={stats?.timeRange}
-                reportCount={reportCounts?.terminal}
-                cpiAdjusted={cpiAdjusted}
-            />
-
-            <PriceBlock
-                label="Shipping Point"
-                avgPrice={formatPrice(stats.shipping_avg)}
-                priorAvgPrice={stats.prior_shipping_avg}
-                bg="#fdba74"
-                packageOptions={packageData?.shipping}
-                selectedPackage={actions?.selectedPackages?.shipping}
-                onPackageChange={(v) => actions?.setPackage('shipping', v)}
-                originOptions={originData?.shipping}
-                selectedOrigin={actions?.selectedOrigins?.shipping}
-                onOriginChange={(v) => actions?.setOrigin('shipping', v)}
-                districtOptions={districtData?.shipping}
-                selectedDistrict={actions?.selectedDistricts?.shipping}
-                onDistrictChange={(v) => actions?.setDistrict('shipping', v)}
-                varietyOptions={varietyData?.shipping}
-                selectedVariety={actions?.selectedVarieties?.shipping}
-                onVarietyChange={(v) => actions?.setVariety('shipping', v)}
-                weightLbs={weightData?.shipping?.weight_lbs}
-                units={weightData?.shipping?.units}
-                dateRange={dateRanges?.shipping}
-                priorDateRange={stats?.priorDateRanges?.shipping}
-                timeRange={stats?.timeRange}
-                reportCount={reportCounts?.shipping}
-                cpiAdjusted={cpiAdjusted}
-            />
-
+            {BLOCKS.map(({ type, label, bg }) => (
+                <PriceBlock
+                    key={type}
+                    label={label}
+                    bg={bg}
+                    market={stats.markets?.[type]}
+                    packageOptions={packageData?.[type]}
+                    selectedPackage={actions?.selectedPackages?.[type]}
+                    onPackageChange={(v) => actions?.setPackage(type, v)}
+                    originOptions={originData?.[type]}
+                    selectedOrigin={actions?.selectedOrigins?.[type]}
+                    onOriginChange={(v) => actions?.setOrigin(type, v)}
+                    districtOptions={districtData?.[type]}
+                    selectedDistrict={actions?.selectedDistricts?.[type]}
+                    onDistrictChange={(v) => actions?.setDistrict(type, v)}
+                    varietyOptions={varietyData?.[type]}
+                    selectedVariety={actions?.selectedVarieties?.[type]}
+                    onVarietyChange={(v) => actions?.setVariety(type, v)}
+                    timeRange={stats.timeRange}
+                    cpiAdjusted={cpiAdjusted}
+                />
+            ))}
         </View>
     );
 }
@@ -439,6 +416,47 @@ const styles = StyleSheet.create({
         marginTop: 4,
         marginBottom: 4,
         textAlign: 'center',
+    },
+    priceCaption: {
+        fontSize: 10,
+        fontWeight: '500',
+        marginTop: 2,
+        textAlign: 'center',
+    },
+    otherPrices: {
+        width: '100%',
+        borderTopWidth: 1,
+        paddingTop: 6,
+        marginBottom: 6,
+    },
+    otherPricesTitle: {
+        fontSize: 9,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
+        textAlign: 'center',
+        marginBottom: 4,
+    },
+    otherPriceRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 2,
+    },
+    otherPriceLabel: {
+        flex: 1,
+        fontSize: 11,
+    },
+    otherPriceValue: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    otherPricesMore: {
+        fontSize: 10,
+        textAlign: 'center',
+        marginTop: 2,
+        fontStyle: 'italic',
     },
     metadataContainer: {
         alignItems: 'center',

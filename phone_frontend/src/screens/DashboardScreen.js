@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -17,13 +17,9 @@ import PriceWaterfallMobile from '../components/PriceWaterfallMobile';
 import PriceOverTimeChart from '../components/PriceOverTimeChart';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { saveFavorite, removeFavorite, checkIsFavorite } from '../services/favorites';
-import { generateMarketInsights } from '../services/cerebrasApi';
 import { useTheme } from '../context/ThemeContext';
 import useWaterfallData from '../hooks/useWaterfallData';
-
-// Temporarily disabled — flip back to true to re-enable AI Market Insights
-// (both the Cerebras fetch and its UI card) without touching the rest of the code.
-const AI_INSIGHTS_ENABLED = false;
+import { formatReportDate } from '../shared/dates';
 
 export default function DashboardScreen({ route, navigation }) {
     const { colors, isDark } = useTheme();
@@ -32,12 +28,6 @@ export default function DashboardScreen({ route, navigation }) {
     // ── UI-level state (not data-engine) ──
     const [isFavorite, setIsFavorite] = useState(false);
     const [viewMode, setViewMode] = useState('waterfall'); // 'waterfall' | 'chart'
-
-    // AI Insights State
-    const [aiInsights, setAiInsights] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
-    const cachedDailyInsights = useRef('');
-    const aiGeneratedForKey = useRef('');
 
     // Time Range Selection
     const [timeRange, setTimeRange] = useState('daily');
@@ -69,19 +59,11 @@ export default function DashboardScreen({ route, navigation }) {
     const {
         stats,
         loading,
-        priceData,
-        marketNotes,
-        terminalData,
-        shippingData,
-        retailData,
         packageOptions,
-        selectedPackages,
         originOptions,
-        selectedOrigins,
         districtOptions,
         selectedDistricts,
         marketVarietyOptions,
-        weightData,
         varietyOptions,
         hasOrganicData,
         serverDateBounds,
@@ -107,81 +89,9 @@ export default function DashboardScreen({ route, navigation }) {
         }
     };
 
-    // ── AI Insights ──
-    const aiCacheKey = `${filters.commodity}|${selectedVariety}|${organicOnly}|${JSON.stringify(selectedOrigins)}|${JSON.stringify(selectedPackages)}`;
-    useEffect(() => {
-        if (!AI_INSIGHTS_ENABLED) return;
-        if (timeRange !== 'daily') {
-            if (cachedDailyInsights.current) setAiInsights(cachedDailyInsights.current);
-            return;
-        }
-        if (aiGeneratedForKey.current === aiCacheKey && cachedDailyInsights.current) {
-            setAiInsights(cachedDailyInsights.current);
-            return;
-        }
-
-        const fetchAIInsights = async () => {
-            if (!priceData.length || !filters.commodity) return;
-
-            const shippingComments = {
-                supply: shippingData.map(d => d.supply_tone_comments).filter(Boolean),
-                demand: shippingData.map(d => d.demand_tone_comments).filter(Boolean),
-                market: shippingData.map(d => d.market_tone_comments).filter(Boolean),
-                commodity: shippingData.map(d => d.commodity_comments).filter(Boolean),
-            };
-            const terminalComments = {
-                offerings: terminalData.map(d => d.offerings_comments).filter(Boolean),
-                reporter: terminalData.map(d => d.reporter_comment).filter(Boolean),
-                market: terminalData.map(d => d.market_tone_comments).filter(Boolean),
-                commodity: terminalData.map(d => d.commodity_comments).filter(Boolean),
-            };
-
-            const hasShippingComments = Object.values(shippingComments).some(arr => arr.length > 0);
-            const hasTerminalComments = Object.values(terminalComments).some(arr => arr.length > 0);
-
-            if (!hasShippingComments && !hasTerminalComments) {
-                setAiInsights('No market notes available for this selection.');
-                return;
-            }
-
-            const getDateRange = (data) => {
-                const dates = data.map(d => d.report_date).filter(Boolean).sort();
-                if (dates.length === 0) return null;
-                return { start: dates[0], end: dates[dates.length - 1], reportCount: data.length };
-            };
-
-            const dateInfo = { shipping: getDateRange(shippingData), terminal: getDateRange(terminalData) };
-            const filterContext = {
-                variety: selectedVariety || null,
-                organic: organicOnly || false,
-                origin: selectedOrigins.terminal || selectedOrigins.shipping || null,
-                package: selectedPackages.terminal || selectedPackages.shipping || null,
-            };
-
-            setAiLoading(true);
-            try {
-                const insights = await generateMarketInsights(filters.commodity, shippingComments, terminalComments, dateInfo, filterContext);
-                setAiInsights(insights);
-                cachedDailyInsights.current = insights;
-                aiGeneratedForKey.current = aiCacheKey;
-            } catch (error) {
-                console.error('Error generating AI insights:', error);
-                setAiInsights('');
-            } finally {
-                setAiLoading(false);
-            }
-        };
-
-        fetchAIInsights();
-    }, [priceData, filters.commodity, terminalData, shippingData, retailData, timeRange, selectedVariety, organicOnly, selectedOrigins, selectedPackages]);
-
-    // ── Helper: format a date string ──
-    const formatDateShort = (dateStr) => {
-        if (!dateStr) return '';
-        const d = new Date(dateStr);
-        if (isNaN(d)) return dateStr;
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    };
+    // Report dates are calendar days stored at midnight UTC — format in UTC so
+    // US devices don't show the previous day.
+    const formatDateShort = (dateStr) => formatReportDate(dateStr);
 
     const ScrollOrView = viewMode === 'chart' ? View : ScrollView;
     const scrollProps = viewMode === 'chart'
@@ -310,7 +220,11 @@ export default function DashboardScreen({ route, navigation }) {
                                         { color: timeRange === 'custom' ? colors.accent : colors.textSecondary }
                                     ]}>
                                         {timeRange === 'custom'
-                                            ? `${customStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — ${customEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                            // Show the start year when it differs, or a 1-year range reads "Nov 3 — Nov 3, 2026".
+                                            ? `${customStartDate.toLocaleDateString('en-US', {
+                                                month: 'short', day: 'numeric',
+                                                ...(customStartDate.getFullYear() !== customEndDate.getFullYear() && { year: 'numeric' }),
+                                            })} — ${customEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
                                             : 'Custom Range'
                                         }
                                     </Text>
@@ -341,18 +255,20 @@ export default function DashboardScreen({ route, navigation }) {
                                         {timeRange === '7day' ? '7 days' : '30 days'} before most recent report
                                     </Text>
                                 )}
+                                {timeRange === 'custom' && stats.usesMonthly && (
+                                    <Text style={[styles.dateRangeSubtext, { color: colors.textMuted }]}>
+                                        Long range: averaged from monthly data, so the Origin filter isn't available
+                                    </Text>
+                                )}
 
                                 {/* Waterfall Component */}
                                 <ErrorBoundary>
                                     <PriceWaterfallMobile
                                         stats={stats}
                                         packageData={packageOptions}
-                                        weightData={weightData}
                                         originData={originOptions}
                                         districtData={districtOptions}
                                         varietyData={marketVarietyOptions}
-                                        dateRanges={stats.dateRanges}
-                                        reportCounts={stats.reportCounts}
                                         actions={actions}
                                         cpiAdjusted={timeRange === 'custom'}
                                     />
@@ -368,26 +284,6 @@ export default function DashboardScreen({ route, navigation }) {
                                     organicOnly={organicOnly}
                                 />
                             </ErrorBoundary>
-                        )}
-
-                        {/* AI Market Insights — shown in waterfall mode (temporarily disabled, see AI_INSIGHTS_ENABLED) */}
-                        {viewMode === 'waterfall' && AI_INSIGHTS_ENABLED && (
-                            <View style={[styles.notesContainer, { backgroundColor: isDark ? colors.surfaceElevated : '#dcfce7', borderColor: isDark ? colors.border : '#bbf7d0' }]}>
-                                <View style={styles.notesTitleRow}>
-                                    <Ionicons name="sparkles" size={18} color={isDark ? colors.accent : '#166534'} />
-                                    <Text style={[styles.notesTitle, { color: isDark ? colors.accent : '#166534' }]}>AI Market Insights</Text>
-                                </View>
-                                {aiLoading ? (
-                                    <View style={styles.aiLoadingContainer}>
-                                        <ActivityIndicator size="small" color={colors.accent} />
-                                        <Text style={[styles.aiLoadingText, { color: isDark ? colors.textSecondary : '#166534' }]}>Analyzing market data...</Text>
-                                    </View>
-                                ) : (
-                                    <Text style={[styles.noteItem, { color: isDark ? colors.text : '#14532d' }]}>
-                                        {aiInsights || marketNotes || 'Market analysis loading...'}
-                                    </Text>
-                                )}
-                            </View>
                         )}
                     </>
                 ) : (
@@ -648,12 +544,6 @@ const styles = StyleSheet.create({
     dateRangeText: { fontSize: 13, fontWeight: '500' },
     dateRangeSubtext: { fontSize: 11, fontStyle: 'italic', textAlign: 'center', marginBottom: 16 },
     subtitle: { fontSize: 24, fontWeight: 'bold', color: '#1e293b', textAlign: 'center', marginBottom: 20 },
-    notesContainer: { backgroundColor: '#dcfce7', padding: 16, borderRadius: 16, marginTop: 24, borderWidth: 1, borderColor: '#bbf7d0' },
-    notesTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 },
-    notesTitle: { fontWeight: 'bold', color: '#166534', fontSize: 16 },
-    noteItem: { color: '#14532d', marginBottom: 4, fontSize: 14, lineHeight: 20 },
-    aiLoadingContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    aiLoadingText: { color: '#166534', fontSize: 14, fontStyle: 'italic' },
     noDataText: { textAlign: 'center', color: '#64748b', marginTop: 40, fontSize: 16 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
     modalContent: { backgroundColor: 'white', borderRadius: 20, padding: 24 },

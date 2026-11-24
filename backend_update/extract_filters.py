@@ -10,7 +10,7 @@ from collections import defaultdict
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend_update.format_data import load_and_format_all_data
-from backend_update.overwrite_supabse import get_supabase_client
+from backend_update.overwrite_supabase import get_supabase_client
 
 # Both frontends share the same generated file
 OUTPUT_FILES = [

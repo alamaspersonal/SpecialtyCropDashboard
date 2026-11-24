@@ -1,71 +1,103 @@
 /**
  * useWaterfallData — Custom Hook
  *
- * Encapsulates the entire data-fetching, partitioning, cascading sub-filter,
- * and stat calculation pipeline that was previously inline in DashboardScreen.
+ * Data fetching, per-market-type cascading sub-filters, and price stats for
+ * the DashboardScreen waterfall.
  *
- * Each instance of this hook runs independently — enabling dual-waterfall
- * comparison by calling it twice with different timeRange parameters.
+ * Daily / 7 Days / 30 Days use the raw rows from the 90 days ending on the
+ * commodity's latest report. A custom range uses raw rows too, unless it is
+ * too large for them; then whole months come from the monthly rollup (no
+ * origin column, so the Origin filter is unavailable) and only the partial
+ * months at either end are fetched raw.
  *
- * @param {Object} filters       - Top-level filters { commodity, category, ... }
+ * Prices never mix units (see shared/priceEntries): each bar shows one $/lb
+ * average across every package with a known weight, plus a separate price for
+ * each package sold per each or per package.
+ *
+ * Each instance of this hook runs independently.
+ *
+ * @param {Object} filters       - Top-level filters { commodity, district, ... }
  * @param {string} timeRange     - 'daily' | '7day' | '30day' | 'custom'
- * @param {Object} options       - { customStartDate, customEndDate, organicOnly, selectedVariety }
- * @returns {Object} - { stats, loading, priceData, packageOptions, ... actions }
+ * @param {Object} options       - { customStartDate, customEndDate, organicOnly, selectedVariety, cpiAdjusted }
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { getDateRange, getPricesByDateRange } from '../services/api';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { getDateRange, getPricesByDateRange, countPricesByDateRange, getMonthlyPriceRollup } from '../services/api';
 import { adjustToCurrent } from '../shared/cpiAdjust';
+import { addDaysToKey, keyToLocalDate, localDateToKey, toDateKey } from '../shared/dates';
+import { entryFromRow, entryFromRollup, groupPrices, nextMonthStartKey } from '../shared/priceEntries';
 
-// Package weight lookup
-const PACKAGE_WEIGHTS = {
-    "25 lb cartons": { weight_lbs: 25, units: null },
-    "50 lb cartons": { weight_lbs: 50, units: null },
-    "40 lb cartons": { weight_lbs: 40, units: null },
-    "30 lb cartons": { weight_lbs: 30, units: null },
-    "cartons": { weight_lbs: 25, units: null },
-    "bushel cartons": { weight_lbs: 30, units: null },
-    "1 1/9 bushel cartons": { weight_lbs: 30, units: null },
-    "flats 12 1-pint baskets": { weight_lbs: 12, units: null },
-    "flats 8 1-lb containers": { weight_lbs: 8, units: null },
-    "cartons 2 layer": { weight_lbs: 25, units: null },
-    "4 count mesh bags": { weight_lbs: null, units: 4 },
-    "5 count mesh bags": { weight_lbs: null, units: 5 },
-    "3 count mesh bags": { weight_lbs: null, units: 3 },
-    "3 count filmbag": { weight_lbs: null, units: 3 },
-    "6 ct trays filmwrapped": { weight_lbs: null, units: 6 },
-    "each": { weight_lbs: null, units: 1 },
-    "per each": { weight_lbs: null, units: 1 },
-    "per lb": { weight_lbs: 1, units: null },
-};
+const MARKET_TYPES = ['terminal', 'shipping', 'retail'];
+const EMPTY_BY_TYPE = { terminal: '', shipping: '', retail: '' };
 
-function lookupWeight(pkg, rows = null) {
-    if (!pkg) return null;
-    // Prefer the weight_lbs / weight_kgs / units columns computed by the backend
-    // pipeline; fall back to the legacy map only when the DB has no value.
-    if (rows && rows.length) {
-        const match = rows.find(d => d.package === pkg &&
-            (d.weight_lbs != null || d.weight_kgs != null || d.units != null));
-        if (match) return {
-            weight_lbs: match.weight_lbs ?? null,
-            weight_kgs: match.weight_kgs ?? null,
-            units: match.units ?? null,
-        };
-    }
-    if (PACKAGE_WEIGHTS[pkg]) return PACKAGE_WEIGHTS[pkg];
-    for (const [key, val] of Object.entries(PACKAGE_WEIGHTS)) {
-        if (pkg.toLowerCase().includes(key.toLowerCase()) ||
-            key.toLowerCase().includes(pkg.toLowerCase())) {
-            return val;
-        }
-    }
-    const match = pkg.match(/(\d+)\s*(?:lb|lbs)/i);
-    if (match) return { weight_lbs: parseInt(match[1]), units: null };
-    return null;
-}
+// Days of history fetched for the Daily / 7 Days / 30 Days presets. 30 Days
+// compares against the 30 days before it, so this needs to cover at least 60.
+const PRESET_WINDOW_DAYS = 90;
+
+// A custom range with more raw rows than this is built from the monthly
+// rollup instead (raw paging past ~20k rows is slow on a phone).
+const RAW_ROW_LIMIT = 20000;
 
 function getUnique(arr, field) {
     return [...new Set(arr.map(d => d[field]).filter(Boolean))].sort();
+}
+
+const rowsToEntries = (rows) => rows.map(entryFromRow).filter(Boolean);
+
+/**
+ * Price entries for [startKey, endKey]: raw rows when they fit under
+ * RAW_ROW_LIMIT, otherwise the monthly rollup for every whole month in the
+ * range plus raw rows for the partial months at either end (so the average
+ * still covers exactly the chosen days).
+ *
+ * @returns {{ entries: Array, rows: Array, usesMonthly: boolean }} rows = the raw rows fetched, newest first
+ */
+export async function fetchRangeEntries(apiFilters, startKey, endKey) {
+    const firstWholeMonth = startKey.endsWith('-01') ? startKey : nextMonthStartKey(startKey);
+    const dayAfterEnd = addDaysToKey(endKey, 1);
+    const afterWholeMonths = dayAfterEnd.endsWith('-01') ? dayAfterEnd : `${endKey.slice(0, 7)}-01`;
+
+    const total = await countPricesByDateRange(apiFilters, startKey, endKey);
+    if (total <= RAW_ROW_LIMIT || firstWholeMonth >= afterWholeMonths) {
+        const rows = await getPricesByDateRange(apiFilters, startKey, endKey);
+        return { rows, entries: rowsToEntries(rows), usesMonthly: false };
+    }
+
+    const [head, tail, monthly] = await Promise.all([
+        firstWholeMonth > startKey
+            ? getPricesByDateRange(apiFilters, startKey, addDaysToKey(firstWholeMonth, -1))
+            : [],
+        afterWholeMonths <= endKey
+            ? getPricesByDateRange(apiFilters, afterWholeMonths, endKey)
+            : [],
+        getMonthlyPriceRollup(apiFilters.commodity, { district: apiFilters.district }, firstWholeMonth, afterWholeMonths),
+    ]);
+    const rows = [...tail, ...head];
+    const monthEntries = monthly.map(r => entryFromRollup(r)).filter(Boolean);
+    return { rows, entries: [...rowsToEntries(rows), ...monthEntries], usesMonthly: true };
+}
+
+// Keep a selection while it matches data; otherwise "All". Never auto-pick a
+// lone option: rows with a blank value (e.g. no district) aren't listed as an
+// option, so selecting the only named value silently hid them — Cucumbers'
+// Terminal card showed 4 of Nov 3's 9 reports with "Baja District" auto-picked.
+function validate(options, current) {
+    return current && options.includes(current) ? current : '';
+}
+
+// Earliest start / latest end across entries, as 'YYYY-MM-DD'. startIsMonth /
+// endIsMonth flag an edge that comes from a monthly rollup: its day is only the
+// month boundary, not a real report date, so it should be shown as a month.
+function spanOf(entries) {
+    if (!entries.length) return null;
+    let { start, end } = entries[0];
+    let startIsMonth = entries[0].isMonth;
+    let endIsMonth = entries[0].isMonth;
+    for (const e of entries) {
+        if (e.start < start) { start = e.start; startIsMonth = e.isMonth; }
+        if (e.end > end) { end = e.end; endIsMonth = e.isMonth; }
+    }
+    return { start, end, startIsMonth, endIsMonth };
 }
 
 export default function useWaterfallData(filters, timeRange, options = {}) {
@@ -78,55 +110,47 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
     } = options;
 
     // ── Data State ──
-    const [priceData, setPriceData] = useState([]);
+    const [entries, setEntries] = useState([]);
+    const [usesMonthly, setUsesMonthly] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-
-    // Partitioned data
-    const [terminalData, setTerminalData] = useState([]);
-    const [shippingData, setShippingData] = useState([]);
-    const [retailData, setRetailData] = useState([]);
-
-    // Variety options extracted from data
-    const [varietyOptions, setVarietyOptions] = useState([]);
-    const [hasOrganicData, setHasOrganicData] = useState(false);
-
-    // Sub-filter state (per market type)
-    const [packageOptions, setPackageOptions] = useState({ terminal: [], shipping: [], retail: [] });
-    const [selectedPackages, setSelectedPackages] = useState({ terminal: '', shipping: '', retail: '' });
-    const [originOptions, setOriginOptions] = useState({ terminal: [], shipping: [], retail: [] });
-    const [selectedOrigins, setSelectedOrigins] = useState({ terminal: '', shipping: '', retail: '' });
-    const [districtOptions, setDistrictOptions] = useState({ terminal: [], shipping: [], retail: [] });
-    const [selectedDistricts, setSelectedDistricts] = useState({ terminal: '', shipping: '', retail: '' });
-    const [marketVarietyOptions, setMarketVarietyOptions] = useState({ terminal: [], shipping: [], retail: [] });
-    const [selectedVarieties, setSelectedVarieties] = useState({ terminal: '', shipping: '', retail: '' });
-    const [weightData, setWeightData] = useState({ terminal: null, shipping: null, retail: null });
-
-    // Server-side date bounds
-    const [serverDateBounds, setServerDateBounds] = useState({ min: null, max: null });
-
-    // Market notes
     const [marketNotes, setMarketNotes] = useState('');
+
+    // Sub-filter selections (per market type). '' = All.
+    const [selectedPackages, setSelectedPackages] = useState(EMPTY_BY_TYPE);
+    const [selectedOrigins, setSelectedOrigins] = useState(EMPTY_BY_TYPE);
+    const [selectedDistricts, setSelectedDistricts] = useState(EMPTY_BY_TYPE);
+    const [selectedVarieties, setSelectedVarieties] = useState(EMPTY_BY_TYPE);
+
+    // Server-side date bounds. min/max are local-midnight Dates of the
+    // calendar day (for the date picker); minKey/maxKey are 'YYYY-MM-DD'.
+    const [serverDateBounds, setServerDateBounds] = useState({ min: null, max: null, minKey: null, maxKey: null });
+
+    const isCustom = timeRange === 'custom';
+    const customStartKey = customStartDate ? localDateToKey(customStartDate) : null;
+    const customEndKey = customEndDate ? localDateToKey(customEndDate) : null;
+    // Only the custom range's dates affect the query, and only in custom mode —
+    // switching Daily / 7 Days / 30 Days reuses the same fetched window.
+    const fetchRangeKey = isCustom ? `${customStartKey}|${customEndKey}` : 'preset';
 
     // ── Fetch date bounds ──
     useEffect(() => {
         // Clear stale bounds immediately so the price-fetch effect below (which
         // waits on serverDateBounds.resolved) doesn't fire a query window anchored
         // on the *previous* commodity's max date while this one is in flight.
-        setServerDateBounds({ min: null, max: null, resolved: false });
+        setServerDateBounds({ min: null, max: null, minKey: null, maxKey: null, resolved: false });
         let cancelled = false;
         const fetchDateBounds = async () => {
             try {
-                const apiFilters = { ...filters };
-                delete apiFilters.date;
-                delete apiFilters.package;
-                delete apiFilters.variety;
-                delete apiFilters.category;
-                const bounds = await getDateRange(apiFilters);
+                const bounds = await getDateRange({ commodity: filters.commodity, district: filters.district });
                 if (cancelled) return;
+                const minKey = toDateKey(bounds.minDate);
+                const maxKey = toDateKey(bounds.maxDate);
                 setServerDateBounds({
-                    min: bounds.minDate ? new Date(bounds.minDate) : null,
-                    max: bounds.maxDate ? new Date(bounds.maxDate) : null,
+                    min: minKey ? keyToLocalDate(minKey) : null,
+                    max: maxKey ? keyToLocalDate(maxKey) : null,
+                    minKey,
+                    maxKey,
                     resolved: true,
                 });
             } catch (err) {
@@ -136,7 +160,8 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
                 // below isn't blocked forever waiting on bounds that failed to
                 // load (a transient network/timeout error here must not leave the
                 // dashboard spinner stuck indefinitely with no error shown).
-                setServerDateBounds({ min: null, max: new Date(), resolved: true });
+                const today = new Date();
+                setServerDateBounds({ min: null, max: today, minKey: null, maxKey: localDateToKey(today), resolved: true });
             }
         };
         fetchDateBounds();
@@ -145,388 +170,191 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
 
     // ── Fetch price data ──
     useEffect(() => {
-        // For the default (non-custom) window, anchor the 90-day lookback on the
-        // commodity's actual latest report date rather than the device's current
-        // date — many commodities (almonds, cranberries, seasonal squash/melons)
-        // report infrequently, so a device-date anchor would show "No data" for
-        // them indefinitely even though history exists. Wait for serverDateBounds
-        // to resolve (cleared above on every commodity/district change) before
-        // fetching so we never query a stale prior commodity's window. Gating on
-        // `resolved` rather than `max` truthiness also ensures a commodity with
-        // genuinely zero rows (max stays null) still fetches — and correctly
-        // lands on "No data available" — instead of spinning forever.
-        if (timeRange !== 'custom' && !serverDateBounds.resolved) return;
+        // For the presets, anchor the lookback on the commodity's latest report
+        // rather than the device's date — many commodities report infrequently.
+        // Wait for serverDateBounds to resolve (cleared above on every
+        // commodity/district change) so we never query a stale prior
+        // commodity's window. `resolved` (not `max`) also lets a commodity with
+        // zero rows fetch and land on "No data available" instead of spinning.
+        if (!isCustom && !serverDateBounds.resolved) return;
+        let cancelled = false;
 
         const fetchPrices = async () => {
             setLoading(true);
             setError(null);
             try {
-                const apiFilters = { ...filters };
-                delete apiFilters.date;
-                delete apiFilters.package;
-                delete apiFilters.variety;
-                delete apiFilters.category;
-
-                let data;
-
-                if (timeRange === 'custom' && customStartDate && customEndDate) {
-                    const startISO = customStartDate.toISOString().split('T')[0];
-                    const endISO = customEndDate.toISOString().split('T')[0];
-                    data = await getPricesByDateRange(apiFilters, startISO, endISO);
+                const apiFilters = { commodity: filters.commodity, district: filters.district };
+                let result;
+                if (isCustom && customStartKey && customEndKey) {
+                    result = await fetchRangeEntries(apiFilters, customStartKey, customEndKey);
                 } else {
-                    // max is null when bounds resolved successfully but found zero
-                    // rows for this commodity/district — fall back to today so the
-                    // query below still runs (and correctly returns empty) instead
-                    // of constructing an Invalid Date.
-                    const endDate = serverDateBounds.max || new Date();
-                    const startDate = new Date(endDate);
-                    startDate.setDate(startDate.getDate() - 90);
-                    const startISO = startDate.toISOString().split('T')[0];
-                    const endISO = endDate.toISOString().split('T')[0];
-                    data = await getPricesByDateRange(apiFilters, startISO, endISO);
+                    // maxKey is null when bounds resolved but found zero rows —
+                    // fall back to today so the query runs (and returns empty).
+                    const endKey = serverDateBounds.maxKey || localDateToKey(new Date());
+                    const startKey = addDaysToKey(endKey, -PRESET_WINDOW_DAYS);
+                    const rows = await getPricesByDateRange(apiFilters, startKey, endKey);
+                    result = { rows, entries: rowsToEntries(rows), usesMonthly: false };
                 }
+                // A newer range/commodity was requested while this one was in
+                // flight — don't let the slower, stale response overwrite it.
+                if (cancelled) return;
 
-                setPriceData(data);
-
-                // Partition by market type
-                const tData = data.filter(d => d.market_type === 'Terminal' || !d.market_type);
-                const sData = data.filter(d => d.market_type === 'Shipping' || d.market_type === 'Shipping Point');
-                const rData = data.filter(d => d.market_type === 'Retail' || d.market_type === 'Retail - Specialty Crops');
-
-                setTerminalData(tData);
-                setShippingData(sData);
-                setRetailData(rData);
-
-                // Extract varieties
-                const allVarieties = [...new Set(data.map(d => d.variety).filter(Boolean))].sort();
-                setVarietyOptions(allVarieties);
-                setHasOrganicData(data.some(d => d.organic === 'yes'));
-
-                // Extract initial package options
-                setPackageOptions({
-                    terminal: getUnique(tData, 'package'),
-                    shipping: getUnique(sData, 'package'),
-                    retail: getUnique(rData, 'package'),
-                });
-
-                setOriginOptions({
-                    terminal: getUnique(tData, 'origin'),
-                    shipping: getUnique(sData, 'origin'),
-                    retail: getUnique(rData, 'origin'),
-                });
-
-                setDistrictOptions({
-                    terminal: getUnique(tData, 'district'),
-                    shipping: getUnique(sData, 'district'),
-                    retail: getUnique(rData, 'district'),
-                });
-
-                // Preserve or default packages
-                setSelectedPackages(prev => ({
-                    terminal: getUnique(tData, 'package').includes(prev.terminal) ? prev.terminal : (getUnique(tData, 'package')[0] || ''),
-                    shipping: getUnique(sData, 'package').includes(prev.shipping) ? prev.shipping : (getUnique(sData, 'package')[0] || ''),
-                    retail: getUnique(rData, 'package').includes(prev.retail) ? prev.retail : (getUnique(rData, 'package')[0] || ''),
-                }));
-
-                if (data.length > 0 && data[0].market_tone_comments) {
-                    setMarketNotes(data[0].market_tone_comments);
-                } else {
-                    setMarketNotes('');
-                }
+                setEntries(result.entries);
+                setUsesMonthly(result.usesMonthly);
+                const latestNote = result.rows.find(d => d.market_tone_comments && d.market_tone_comments.trim());
+                setMarketNotes(latestNote ? latestNote.market_tone_comments : '');
             } catch (err) {
+                if (cancelled) return;
                 console.error('useWaterfallData: Error fetching prices:', err);
                 setError(err);
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
         fetchPrices();
-    }, [filters.commodity, filters.district, timeRange, customStartDate?.toISOString(), customEndDate?.toISOString(), serverDateBounds.resolved]);
+        return () => { cancelled = true; };
+    }, [filters.commodity, filters.district, fetchRangeKey, serverDateBounds.resolved]);
 
-    // ── Cascading filter logic ──
+    // ── Entries per market type, then organic / top-level variety applied ──
+    const baseByMarket = useMemo(() => {
+        const out = { terminal: [], shipping: [], retail: [] };
+        for (const e of entries) {
+            if (organicOnly && e.organic !== 'yes') continue;
+            if (selectedVariety && e.variety !== selectedVariety) continue;
+            out[e.market].push(e);
+        }
+        return out;
+    }, [entries, organicOnly, selectedVariety]);
+
+    // ── Cascading sub-filter options ──
+    // Each dimension's options come from rows matching the *other* selections.
+    const subFilterOptions = useMemo(() => {
+        const out = {};
+        for (const m of MARKET_TYPES) {
+            const base = baseByMarket[m];
+            const pkg = selectedPackages[m];
+            const org = selectedOrigins[m];
+            const dist = selectedDistricts[m];
+            const vrty = selectedVarieties[m];
+            const matching = (skip) => base.filter(d =>
+                (skip === 'package' || !pkg || d.package === pkg) &&
+                (skip === 'origin' || !org || d.origin === org) &&
+                (skip === 'district' || !dist || d.district === dist) &&
+                (skip === 'variety' || !vrty || d.variety === vrty));
+            out[m] = {
+                packages: getUnique(matching('package'), 'package'),
+                // The monthly rollup has no origin, so neither does a range built from it.
+                origins: usesMonthly ? [] : getUnique(matching('origin'), 'origin'),
+                districts: getUnique(matching('district'), 'district'),
+                varieties: getUnique(matching('variety'), 'variety'),
+            };
+        }
+        return out;
+    }, [baseByMarket, usesMonthly, selectedPackages, selectedOrigins, selectedDistricts, selectedVarieties]);
+
+    // Drop selections that no longer match any data. Packages default to "All".
     useEffect(() => {
-        if (!terminalData.length && !shippingData.length && !retailData.length) return;
-
-        const getBaseData = (data) => {
-            let filtered = data;
-            if (organicOnly) {
-                filtered = filtered.filter(d => d.organic === 'yes');
-            }
-            if (selectedVariety) {
-                filtered = filtered.filter(d => d.variety === selectedVariety);
-            }
-            return filtered;
-        };
-
-        const tBase = getBaseData(terminalData);
-        const sBase = getBaseData(shippingData);
-        const rBase = getBaseData(retailData);
-
-        const getOptionsForType = (baseData, currentPkg, currentOrg, currentDist, currentVar) => {
-            const pkgData = baseData.filter(d =>
-                (!currentOrg || d.origin === currentOrg) &&
-                (!currentDist || d.district === currentDist) &&
-                (!currentVar || d.variety === currentVar)
-            );
-            const orgData = baseData.filter(d =>
-                (!currentPkg || d.package === currentPkg) &&
-                (!currentDist || d.district === currentDist) &&
-                (!currentVar || d.variety === currentVar)
-            );
-            const distData = baseData.filter(d =>
-                (!currentPkg || d.package === currentPkg) &&
-                (!currentOrg || d.origin === currentOrg) &&
-                (!currentVar || d.variety === currentVar)
-            );
-            const varData = baseData.filter(d =>
-                (!currentPkg || d.package === currentPkg) &&
-                (!currentOrg || d.origin === currentOrg) &&
-                (!currentDist || d.district === currentDist)
-            );
-            return {
-                packages: getUnique(pkgData, 'package'),
-                origins: getUnique(orgData, 'origin'),
-                districts: getUnique(distData, 'district'),
-                varieties: getUnique(varData, 'variety'),
-            };
-        };
-
-        const tOpts = getOptionsForType(tBase, selectedPackages.terminal, selectedOrigins.terminal, selectedDistricts.terminal, selectedVarieties.terminal);
-        const sOpts = getOptionsForType(sBase, selectedPackages.shipping, selectedOrigins.shipping, selectedDistricts.shipping, selectedVarieties.shipping);
-        const rOpts = getOptionsForType(rBase, selectedPackages.retail, selectedOrigins.retail, selectedDistricts.retail, selectedVarieties.retail);
-
-        const newPkgOpts = { terminal: tOpts.packages, shipping: sOpts.packages, retail: rOpts.packages };
-        setPackageOptions(prev => JSON.stringify(prev) === JSON.stringify(newPkgOpts) ? prev : newPkgOpts);
-
-        const newOrgOpts = { terminal: tOpts.origins, shipping: sOpts.origins, retail: rOpts.origins };
-        setOriginOptions(prev => JSON.stringify(prev) === JSON.stringify(newOrgOpts) ? prev : newOrgOpts);
-
-        const newDistOpts = { terminal: tOpts.districts, shipping: sOpts.districts, retail: rOpts.districts };
-        setDistrictOptions(prev => JSON.stringify(prev) === JSON.stringify(newDistOpts) ? prev : newDistOpts);
-
-        const newVarOpts = { terminal: tOpts.varieties, shipping: sOpts.varieties, retail: rOpts.varieties };
-        setMarketVarietyOptions(prev => JSON.stringify(prev) === JSON.stringify(newVarOpts) ? prev : newVarOpts);
-
-        const validate = (options, currentVal) => {
-            if (options.length === 0) return '';
-            if (options.length === 1) return options[0];
-            if (options.includes(currentVal)) return currentVal;
-            return '';
-        };
-
-        setSelectedPackages(prev => {
-            const next = {
-                terminal: validate(tOpts.packages, prev.terminal),
-                shipping: validate(sOpts.packages, prev.shipping),
-                retail: validate(rOpts.packages, prev.retail),
-            };
-            return (prev.terminal === next.terminal && prev.shipping === next.shipping && prev.retail === next.retail) ? prev : next;
+        const sync = (setter, key) => setter(prev => {
+            const next = {};
+            for (const m of MARKET_TYPES) next[m] = validate(subFilterOptions[m][key], prev[m]);
+            return MARKET_TYPES.every(m => next[m] === prev[m]) ? prev : next;
         });
+        sync(setSelectedPackages, 'packages');
+        sync(setSelectedOrigins, 'origins');
+        sync(setSelectedDistricts, 'districts');
+        sync(setSelectedVarieties, 'varieties');
+    }, [subFilterOptions]);
 
-        setSelectedOrigins(prev => {
-            const next = {
-                terminal: validate(tOpts.origins, prev.terminal),
-                shipping: validate(sOpts.origins, prev.shipping),
-                retail: validate(rOpts.origins, prev.retail),
-            };
-            return (prev.terminal === next.terminal && prev.shipping === next.shipping && prev.retail === next.retail) ? prev : next;
-        });
+    // ── Stats ──
+    const stats = useMemo(() => {
+        if (!entries.length) return null;
 
-        setSelectedDistricts(prev => {
-            const next = {
-                terminal: validate(tOpts.districts, prev.terminal),
-                shipping: validate(sOpts.districts, prev.shipping),
-                retail: validate(rOpts.districts, prev.retail),
-            };
-            return (prev.terminal === next.terminal && prev.shipping === next.shipping && prev.retail === next.retail) ? prev : next;
-        });
-
-        setSelectedVarieties(prev => {
-            const next = {
-                terminal: validate(tOpts.varieties, prev.terminal),
-                shipping: validate(sOpts.varieties, prev.shipping),
-                retail: validate(rOpts.varieties, prev.retail),
-            };
-            return (prev.terminal === next.terminal && prev.shipping === next.shipping && prev.retail === next.retail) ? prev : next;
-        });
-    }, [
-        selectedVariety, organicOnly,
-        terminalData, shippingData, retailData,
-        selectedPackages, selectedOrigins, selectedDistricts, selectedVarieties,
-    ]);
-
-    // ── Update weight data ──
-    useEffect(() => {
-        setWeightData({
-            terminal: lookupWeight(selectedPackages.terminal, terminalData),
-            shipping: lookupWeight(selectedPackages.shipping, shippingData),
-            retail: lookupWeight(selectedPackages.retail, retailData),
-        });
-    }, [selectedPackages, terminalData, shippingData, retailData]);
-
-    // ── Calculate stats ──
-    const calculateStats = useCallback(() => {
-        if (!priceData.length) return null;
-
-        // 1. Initial Filtering (Market Type + Variety + Organic)
-        const getBaseData = (data) => {
-            let filtered = data;
-            if (organicOnly) filtered = filtered.filter(d => d.organic === 'yes');
-            if (selectedVariety) filtered = filtered.filter(d => d.variety === selectedVariety);
-            return filtered;
-        };
-
-        const tBase = getBaseData(terminalData);
-        const sBase = getBaseData(shippingData);
-        const rBase = getBaseData(retailData);
-
-        // 2. Sub-filtering (Package + Origin + District + per-market Variety)
-        const filterBySelections = (data, type) => {
-            let filtered = data;
-            if (selectedPackages[type]) filtered = filtered.filter(d => d.package === selectedPackages[type]);
-            if (selectedOrigins[type]) filtered = filtered.filter(d => d.origin === selectedOrigins[type]);
-            if (selectedDistricts[type]) filtered = filtered.filter(d => d.district === selectedDistricts[type]);
-            if (selectedVarieties[type]) filtered = filtered.filter(d => d.variety === selectedVarieties[type]);
-            return filtered;
-        };
-
-        const tFull = filterBySelections(tBase, 'terminal');
-        const sFull = filterBySelections(sBase, 'shipping');
-        const rFull = filterBySelections(rBase, 'retail');
-
-        // 3. Helper to partition Current and Prior data based on timeRange
-        const partitionData = (data) => {
+        // Current vs prior period. All comparisons use 'YYYY-MM-DD' keys.
+        const partition = (data) => {
             if (!data.length) return { current: [], prior: [] };
+            // The fetch already covers exactly the chosen custom range, so
+            // average all of it. (There is no prior period to compare against.)
+            if (timeRange === 'custom') return { current: data, prior: [] };
 
-            // Get unique sorted dates (descending)
-            const uniqueDates = [...new Set(data.map(d => {
-                const dt = new Date(d.report_date);
-                return isNaN(dt) ? null : dt.toISOString().split('T')[0];
-            }).filter(Boolean))].sort().reverse();
+            const between = (from, to) => data.filter(e => e.date >= from && e.date <= to);
+            const uniqueDates = [...new Set(data.map(e => e.date))].sort().reverse();
 
-            if (uniqueDates.length === 0) return { current: [], prior: [] };
-
-            if (timeRange === 'daily' || timeRange === 'custom') {
-                // For daily/custom, we compare the most recent day vs the second most recent day
-                const currentDay = uniqueDates[0];
-                const current = data.filter(d => new Date(d.report_date).toISOString().split('T')[0] === currentDay);
-                
-                const priorDay = uniqueDates[1];
-                const prior = priorDay ? data.filter(d => new Date(d.report_date).toISOString().split('T')[0] === priorDay) : [];
-                
-                return { current, prior };
-            } else {
-                // For 7day/30day, we compare periods
-                const daysOffset = (timeRange === '7day' ? 7 : 30) - 1;
-                
-                // Current period: maxDate to maxDate - (days - 1)
-                const maxDateStr = uniqueDates[0];
-                const maxDate = new Date(maxDateStr);
-                const currentStart = new Date(maxDate);
-                currentStart.setDate(currentStart.getDate() - daysOffset);
-                currentStart.setHours(0, 0, 0, 0);
-                
-                const current = data.filter(d => {
-                    const dt = new Date(d.report_date);
-                    return dt >= currentStart && dt <= maxDate;
-                });
-
-                // Prior period: find the last date strictly before currentStart
-                const priorDates = uniqueDates.filter(dStr => {
-                    const dt = new Date(dStr);
-                    dt.setHours(0, 0, 0, 0);
-                    return dt < currentStart;
-                });
-                
-                if (priorDates.length === 0) return { current, prior: [] };
-
-                const priorMaxDateStr = priorDates[0];
-                const priorMaxDate = new Date(priorMaxDateStr);
-                const priorStart = new Date(priorMaxDate);
-                priorStart.setDate(priorStart.getDate() - daysOffset);
-                priorStart.setHours(0, 0, 0, 0);
-
-                const prior = data.filter(d => {
-                    const dt = new Date(d.report_date);
-                    return dt >= priorStart && dt <= priorMaxDate;
-                });
-
-                return { current, prior };
+            if (timeRange === 'daily') {
+                // Most recent report day vs the report day before it
+                const [currentDay, priorDay] = uniqueDates;
+                return {
+                    current: between(currentDay, currentDay),
+                    prior: priorDay ? between(priorDay, priorDay) : [],
+                };
             }
+
+            // 7day/30day: the N days ending on the latest report day, vs the
+            // N days ending on the last report day before that period.
+            const daysOffset = (timeRange === '7day' ? 7 : 30) - 1;
+            const maxKey = uniqueDates[0];
+            const currentStartKey = addDaysToKey(maxKey, -daysOffset);
+            const current = between(currentStartKey, maxKey);
+            const priorMaxKey = uniqueDates.find(k => k < currentStartKey);
+            if (!priorMaxKey) return { current, prior: [] };
+            return { current, prior: between(addDaysToKey(priorMaxKey, -daysOffset), priorMaxKey) };
         };
 
-        const tParts = partitionData(tFull);
-        const sParts = partitionData(sFull);
-        const rParts = partitionData(rFull);
+        // CPI-adjust each price to current dollars (custom ranges only)
+        const factorFor = cpiAdjusted ? (e => adjustToCurrent(1, e.date)) : null;
 
-        const calcAvgPrice = (data) => {
-            if (!data.length) return 0;
-            const validValues = data
-                .map(d => {
-                    const nominal = parseFloat(d.price_avg);
-                    if (isNaN(nominal)) return NaN;
-                    return cpiAdjusted ? adjustToCurrent(nominal, d.report_date) : nominal;
-                })
-                .filter(v => !isNaN(v));
-            if (validValues.length === 0) return 0;
-            return validValues.reduce((a, b) => a + b, 0) / validValues.length;
-        };
-
-        const getDateRangeFromData = (data) => {
-            const dates = data.map(d => d.report_date).filter(Boolean).sort();
-            if (dates.length === 0) return null;
-            return { start: dates[0], end: dates[dates.length - 1] };
-        };
+        const markets = {};
+        const allCurrent = [];
+        for (const m of MARKET_TYPES) {
+            const filtered = baseByMarket[m].filter(d =>
+                (!selectedPackages[m] || d.package === selectedPackages[m]) &&
+                (!selectedOrigins[m] || d.origin === selectedOrigins[m]) &&
+                (!selectedDistricts[m] || d.district === selectedDistricts[m]) &&
+                (!selectedVarieties[m] || d.variety === selectedVarieties[m]));
+            const { current, prior } = partition(filtered);
+            const priorByKey = new Map(groupPrices(prior, factorFor).map(g => [g.key, g]));
+            markets[m] = {
+                // Each price compares with the same unit (and package, for
+                // $/each and $/package) in the prior period.
+                groups: groupPrices(current, factorFor).map(g => ({
+                    ...g,
+                    priorAvg: priorByKey.get(g.key)?.avg ?? null,
+                })),
+                dateRange: spanOf(current),
+                priorDateRange: spanOf(prior),
+                reportCount: current.reduce((s, e) => s + e.rows, 0),
+            };
+            allCurrent.push(...current);
+        }
 
         return {
-            terminal_avg: calcAvgPrice(tParts.current),
-            shipping_avg: calcAvgPrice(sParts.current),
-            retail_avg: calcAvgPrice(rParts.current),
-            prior_terminal_avg: calcAvgPrice(tParts.prior),
-            prior_shipping_avg: calcAvgPrice(sParts.prior),
-            prior_retail_avg: calcAvgPrice(rParts.prior),
-            is_shipping_estimated: false,
-            is_retail_estimated: false,
             timeRange,
-            dateRanges: {
-                terminal: getDateRangeFromData(tParts.current),
-                shipping: getDateRangeFromData(sParts.current),
-                retail: getDateRangeFromData(rParts.current),
-            },
-            priorDateRanges: {
-                terminal: getDateRangeFromData(tParts.prior),
-                shipping: getDateRangeFromData(sParts.prior),
-                retail: getDateRangeFromData(rParts.prior),
-            },
-            reportCounts: {
-                terminal: tParts.current.length,
-                shipping: sParts.current.length,
-                retail: rParts.current.length,
-            },
-            overallDateRange: getDateRangeFromData([...tParts.current, ...sParts.current, ...rParts.current]),
+            markets,
+            usesMonthly,
+            overallDateRange: spanOf(allCurrent),
         };
     }, [
-        priceData, terminalData, shippingData, retailData,
-        timeRange, customStartDate, customEndDate,
-        organicOnly, selectedVariety, cpiAdjusted,
+        entries, baseByMarket, usesMonthly, timeRange, cpiAdjusted,
         selectedPackages, selectedOrigins, selectedDistricts, selectedVarieties,
     ]);
 
-    const stats = calculateStats();
+    const varietyOptions = useMemo(() => getUnique(entries, 'variety'), [entries]);
+    const hasOrganicData = useMemo(() => entries.some(e => e.organic === 'yes'), [entries]);
+    const optionsFor = (key) => ({
+        terminal: subFilterOptions.terminal[key],
+        shipping: subFilterOptions.shipping[key],
+        retail: subFilterOptions.retail[key],
+    });
 
     // ── Actions (stable references for prop passing) ──
     const setPackage = useCallback((type, val) => {
         setSelectedPackages(prev => ({ ...prev, [type]: val }));
     }, []);
-
     const setOrigin = useCallback((type, val) => {
         setSelectedOrigins(prev => ({ ...prev, [type]: val }));
     }, []);
-
     const setDistrict = useCallback((type, val) => {
         setSelectedDistricts(prev => ({ ...prev, [type]: val }));
     }, []);
-
     const setVariety = useCallback((type, val) => {
         setSelectedVarieties(prev => ({ ...prev, [type]: val }));
     }, []);
@@ -536,24 +364,19 @@ export default function useWaterfallData(filters, timeRange, options = {}) {
         stats,
         loading,
         error,
-        priceData,
+        entries,
         marketNotes,
-
-        // Partitioned data (for AI insights)
-        terminalData,
-        shippingData,
-        retailData,
+        usesMonthly,
 
         // Sub-filter options & selections
-        packageOptions,
+        packageOptions: optionsFor('packages'),
         selectedPackages,
-        originOptions,
+        originOptions: optionsFor('origins'),
         selectedOrigins,
-        districtOptions,
+        districtOptions: optionsFor('districts'),
         selectedDistricts,
-        marketVarietyOptions,
+        marketVarietyOptions: optionsFor('varieties'),
         selectedVarieties,
-        weightData,
 
         // Top-level filter options
         varietyOptions,
