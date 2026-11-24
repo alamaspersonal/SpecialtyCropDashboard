@@ -2,6 +2,8 @@
 
 USDA reports prices per package ("40 lb cartons", "cartons tray pack", "flats 12 1-pint baskets"). To compare prices across packages, the pipeline converts a package price to **$/lb**, but only when the package's net weight is known. When it isn't, the app shows the price per package and never guesses.
 
+> A public copy of everything above "Changing the table" is published at <https://alamaspersonal.github.io/SpecialtyCropDashboard/package-weights>, from `docs/package-weights.md`. Update both when the rules or the table change.
+
 The code lives in `backend_update/format_data.py`. The reference weights live in `backend_update/package_units.json`.
 
 ## How a row gets its weight
