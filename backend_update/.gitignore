@@ -11,6 +11,8 @@ __pycache__/
 
 # Data files
 *.csv
+# ...except this reference table, linked from PACKAGE_WEIGHTS.md
+!package_weight_conflicts.csv
 *.db
 
 # OS files
